@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections import Counter
 
 from gapforge.models import ExperimentPlan, Gap, Hypothesis, NoveltyAssessment, PaperNote, Provenance, ResearchRunState
+from gapforge.review.audit import approved_object_ids, is_rejected, locked_object_ids
 from gapforge.skills.base import Skill
 from gapforge.state import utc_now_iso
 
@@ -21,6 +22,7 @@ class ExperimentDesigner(Skill):
         *,
         gap_id: str | None = None,
         allow_rejected: bool = False,
+        force: bool = False,
     ) -> ResearchRunState:
         gaps = [gap for gap in state.gaps if gap_id is None or gap.id == gap_id]
         novelty_by_target = {assessment.target_gap_or_hypothesis_id: assessment for assessment in state.novelty_assessments}
@@ -29,7 +31,9 @@ class ExperimentDesigner(Skill):
             hypotheses_by_gap.setdefault(hypothesis.gap_id, []).append(hypothesis)
 
         experiments: list[ExperimentPlan] = []
-        for gap in _prioritize_gaps(gaps):
+        for gap in _prioritize_gaps(gaps, approved_object_ids(state, "gap")):
+            if is_rejected(state, "gap", gap.id) and not allow_rejected:
+                continue
             assessment = novelty_by_target.get(gap.id)
             if assessment is None:
                 assessment = _hypothesis_assessment(novelty_by_target, hypotheses_by_gap.get(gap.id, []))
@@ -47,7 +51,12 @@ class ExperimentDesigner(Skill):
                 )
             )
 
-        state.experiments = _replace_experiments(state.experiments, experiments, gap_id=gap_id)
+        state.experiments = _replace_experiments(
+            state.experiments,
+            experiments,
+            gap_id=gap_id,
+            locked_ids=locked_object_ids(state, "experiment") if not force else set(),
+        )
         self.mark_complete(state)
         return state
 
@@ -110,12 +119,14 @@ class ExperimentDesigner(Skill):
         )
 
 
-def _prioritize_gaps(gaps: list[Gap]) -> list[Gap]:
+def _prioritize_gaps(gaps: list[Gap], approved_gap_ids: set[str] | None = None) -> list[Gap]:
+    approved = approved_gap_ids or set()
     confidence_rank = {"high": 0, "medium": 1, "low": 2}
     novelty_rank = {"strong": 0, "medium": 1, "weak": 2, "unchecked": 3, "likely_not_new": 4}
     return sorted(
         gaps,
         key=lambda gap: (
+            0 if gap.id in approved else 1,
             novelty_rank.get(gap.novelty_status, 3),
             confidence_rank.get(gap.confidence, 2),
             gap.id,
@@ -349,7 +360,14 @@ def _dedupe(values: list[str]) -> list[str]:
     return output
 
 
-def _replace_experiments(existing: list[ExperimentPlan], new_items: list[ExperimentPlan], *, gap_id: str | None) -> list[ExperimentPlan]:
+def _replace_experiments(
+    existing: list[ExperimentPlan],
+    new_items: list[ExperimentPlan],
+    *,
+    gap_id: str | None,
+    locked_ids: set[str],
+) -> list[ExperimentPlan]:
+    locked = [experiment for experiment in existing if experiment.id in locked_ids]
     if gap_id is None:
-        return new_items
-    return new_items
+        return locked + [experiment for experiment in new_items if experiment.id not in locked_ids]
+    return locked + [experiment for experiment in new_items if experiment.id not in locked_ids]

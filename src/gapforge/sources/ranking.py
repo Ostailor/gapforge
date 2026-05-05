@@ -102,6 +102,7 @@ def _merge_into(target: Paper, source: Paper) -> None:
     target.semantic_scholar_id = target.semantic_scholar_id or source.semantic_scholar_id
     target.citation_count = max(target.citation_count, source.citation_count)
     target.keywords = sorted(set(target.keywords + source.keywords))
+    target.roles = sorted(set(target.roles + source.roles))
     target.raw_metadata.setdefault("merged_from", [])
     target.raw_metadata["merged_from"].append({"source": source.source, "id": source.id})
     target.provenance.source_ids = sorted(set(target.provenance.source_ids + source.provenance.source_ids))

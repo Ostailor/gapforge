@@ -16,17 +16,22 @@ class GapForgeConfig:
     data_dir: Path
     skills_dir: Path
     cache_dir: Path
+    llm_mode: str = "off"
 
     @classmethod
     def from_cwd(cls, cwd: Path | None = None) -> GapForgeConfig:
         root = (cwd or Path.cwd()).resolve()
         cache_dir = Path(os.environ.get("GAPFORGE_CACHE_DIR", root / ".gapforge_cache")).resolve()
+        llm_mode = os.environ.get("GAPFORGE_LLM_MODE", "off").strip().lower() or "off"
+        if llm_mode not in {"off", "prompt-pack", "fake"}:
+            llm_mode = "off"
         return cls(
             root=root,
             runs_dir=root / "runs",
             data_dir=root / "data",
             skills_dir=root / "skills",
             cache_dir=cache_dir,
+            llm_mode=llm_mode,
         )
 
     @classmethod

@@ -40,6 +40,7 @@ def test_init_topic_creates_run_directory(tmp_path: Path) -> None:
     assert run_dir.parent == tmp_path / "runs"
     assert (run_dir / "topic.md").exists()
     assert "low false positive collusion detection" in (run_dir / "topic.md").read_text(encoding="utf-8")
+    assert json.loads((run_dir / "config.json").read_text(encoding="utf-8"))["schema_version"] == 2
 
 
 def test_run_writes_end_to_end_artifacts(tmp_path: Path) -> None:
@@ -51,17 +52,34 @@ def test_run_writes_end_to_end_artifacts(tmp_path: Path) -> None:
         "config.json",
         "state.json",
         "papers.json",
+        "paper_artifacts.json",
+        "paper_sections.json",
+        "evidence_spans.json",
+        "evidence_spans.md",
+        "search_queries.json",
+        "source_coverage.json",
+        "source_coverage.md",
+        "full_text_coverage.md",
+        "citation_graph.json",
+        "citation_graph.md",
+        "related_work_expansion.md",
         "paper_notes.json",
         "paper_notes.md",
+        "paper_ranking.json",
+        "paper_ranking.md",
         "paper_triage.json",
         "paper_triage.md",
         "field_map.json",
         "field_map.md",
         "gaps.json",
         "gaps.md",
+        "gap_evidence_matrix.json",
+        "gap_evidence_matrix.md",
         "hypotheses.json",
         "cross_domain_analogies.json",
         "cross_domain_analogies.md",
+        "cross_domain_transfers.json",
+        "cross_domain_transfers.md",
         "novelty_gate.json",
         "novelty_gate.md",
         "claims.json",
@@ -72,6 +90,8 @@ def test_run_writes_end_to_end_artifacts(tmp_path: Path) -> None:
         "reviewer_summaries.json",
         "reviewer_simulation.md",
         "revised_experiment_recommendations.md",
+        "human_reviews.json",
+        "human_reviews.md",
         "orchestrator_plan.json",
         "orchestrator_result.json",
         "run_log.json",
@@ -130,6 +150,42 @@ def test_dry_run_and_resume_cli(tmp_path: Path) -> None:
     assert resumed.returncode == 0, resumed.stderr
     result = json.loads((run_dir / "orchestrator_result.json").read_text(encoding="utf-8"))
     assert result["status"] == "complete"
+
+
+def test_v2_dry_run_cli(tmp_path: Path) -> None:
+    dry = run_cli(tmp_path, "run", "low false positive collusion detection", "--v2", "--dry-run")
+    assert dry.returncode == 0, dry.stderr
+    run_dir = sorted((tmp_path / "runs").iterdir())[-1]
+    plan = json.loads((run_dir / "orchestrator_plan.json").read_text(encoding="utf-8"))
+
+    assert plan["dry_run"] is True
+    assert [step["name"] for step in plan["steps"]][:6] == [
+        "initialize-topic",
+        "search-papers",
+        "source-coverage",
+        "map-literature",
+        "triage-papers",
+        "download-pdfs",
+    ]
+    assert any(step["name"] == "novelty-dossiers" for step in plan["steps"])
+
+
+def test_v2_offline_smoke_cli(tmp_path: Path) -> None:
+    result = run_cli(tmp_path, "run", "low false positive collusion detection", "--v2", "--max-papers", "8")
+
+    assert result.returncode == 0, result.stderr
+    run_dir = sorted((tmp_path / "runs").iterdir())[-1]
+    outcome = json.loads((run_dir / "orchestrator_result.json").read_text(encoding="utf-8"))
+    coverage = json.loads((run_dir / "source_coverage.json").read_text(encoding="utf-8"))
+
+    assert outcome["status"] == "complete"
+    assert any("Network disabled" in warning for warning in coverage["coverage_warnings"])
+
+    coverage_latest = run_cli(tmp_path, "coverage")
+    assert coverage_latest.returncode == 0, coverage_latest.stderr
+    assert "source_coverage.md" in coverage_latest.stdout
+    refreshed_coverage = json.loads((run_dir / "source_coverage.json").read_text(encoding="utf-8"))
+    assert any("Network disabled" in warning for warning in refreshed_coverage["coverage_warnings"])
 
 
 def test_cache_info_cli(tmp_path: Path) -> None:

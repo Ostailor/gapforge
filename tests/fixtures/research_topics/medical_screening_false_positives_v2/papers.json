@@ -1,0 +1,77 @@
+[
+  {
+    "id": "p-msf-1",
+    "title": "Fixed-threshold benchmark for medical screening",
+    "authors": [
+      "Synthetic Fixture Author"
+    ],
+    "abstract": "Synthetic fixture paper. We evaluate medical screening with calibrated screening classifier under fixed specificity at fixed recall budgets on a synthetic screening cohort. This fixture is not real research.",
+    "year": 2025,
+    "venue": "Synthetic FixtureConf",
+    "source": "fixture",
+    "url": "https://example.test/msf/1",
+    "pdf_url": "https://example.test/msf/1.pdf",
+    "keywords": [
+      "medical screening",
+      "specificity at fixed recall",
+      "calibrated screening classifier",
+      "benchmark"
+    ],
+    "citation_count": 32,
+    "roles": [
+      "benchmark"
+    ],
+    "raw_metadata": {
+      "fixture_notice": "synthetic, not real research"
+    }
+  },
+  {
+    "id": "p-msf-2",
+    "title": "Deployment limitations in medical screening",
+    "authors": [
+      "Synthetic Fixture Author"
+    ],
+    "abstract": "Synthetic fixture paper. The study reports that medical screening systems often rely on synthetic screening cohort and do not validate deployment shift. This fixture is not real research.",
+    "year": 2024,
+    "venue": "Synthetic Fixture Workshop",
+    "source": "fixture",
+    "url": "https://example.test/msf/2",
+    "pdf_url": "https://example.test/msf/2.pdf",
+    "keywords": [
+      "medical screening",
+      "deployment",
+      "limitation"
+    ],
+    "citation_count": 18,
+    "roles": [
+      "method"
+    ],
+    "raw_metadata": {
+      "fixture_notice": "synthetic, not real research"
+    }
+  },
+  {
+    "id": "p-msf-3",
+    "title": "Industrial Quality Control tools for low false alarms",
+    "authors": [
+      "Synthetic Fixture Author"
+    ],
+    "abstract": "Synthetic fixture paper. Adjacent field work in industrial quality control studies low false alarms but does not solve medical screening. This fixture is not real research.",
+    "year": 2023,
+    "venue": "Synthetic Adjacent Fields",
+    "source": "fixture",
+    "url": "https://example.test/msf/3",
+    "keywords": [
+      "industrial quality control",
+      "false alarms",
+      "transfer"
+    ],
+    "citation_count": 41,
+    "roles": [
+      "adjacent_field"
+    ],
+    "raw_metadata": {
+      "fixture_notice": "synthetic, not real research"
+    }
+  }
+]

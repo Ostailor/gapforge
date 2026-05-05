@@ -17,6 +17,7 @@ from gapforge.models import (
     ResearchRunState,
 )
 from gapforge.skills.base import Skill
+from gapforge.sources.ranking_v2 import infer_paper_role, rank_papers_v2
 from gapforge.state import utc_now_iso
 
 AUTHORITATIVE_VENUE_TERMS = {
@@ -52,17 +53,30 @@ class PaperTriage(Skill):
         self.max_tier1 = max_tier1
 
     def run(self, state: ResearchRunState) -> ResearchRunState:
-        triage = self.triage(state.topic.text, state.papers, max_tier1=self.max_tier1)
+        ranking = rank_papers_v2(state.topic.text, state.papers, state=state)
+        state.paper_ranking = ranking
+        triage = self.triage(state.topic.text, state.papers, max_tier1=self.max_tier1, state=state)
         state.paper_triage = triage
         state.paper_notes = self._notes_for_selected_papers(state, triage)
         state.claims = self._add_triage_claims(state, triage).claims
         self.mark_complete(state)
         return state
 
-    def triage(self, topic: str, papers: list[Paper], *, max_tier1: int | None = None) -> PaperTriageResult:
+    def triage(
+        self,
+        topic: str,
+        papers: list[Paper],
+        *,
+        max_tier1: int | None = None,
+        state: ResearchRunState | None = None,
+    ) -> PaperTriageResult:
         max_tier1 = max_tier1 if max_tier1 is not None else self.max_tier1
-        scored = [self.score_paper(topic, paper) for paper in papers]
-        scored.sort(key=lambda decision: decision.score, reverse=True)
+        ranking = (
+            state.paper_ranking if state is not None and state.paper_ranking is not None else rank_papers_v2(topic, papers, state=state)
+        )
+        ranking_by_id = {decision.paper_id: decision for decision in ranking.decisions}
+        scored = [self.score_paper(topic, paper, state=state, ranking_decision=ranking_by_id.get(paper.id)) for paper in papers]
+        scored.sort(key=lambda decision: (decision.score, _role_priority(decision.paper_role)), reverse=True)
         decisions = _assign_tiers_with_diversity(scored, papers, max_tier1=max_tier1)
         tier_counts = Counter(decision.tier for decision in decisions)
         return PaperTriageResult(
@@ -71,8 +85,9 @@ class PaperTriage(Skill):
             tier_counts={tier: tier_counts.get(tier, 0) for tier in ["Tier 1", "Tier 2", "Tier 3", "Tier 4"]},
             max_tier1=max_tier1,
             scoring_summary=(
-                "Deterministic triage scored papers by topic relevance, recency, venue authority, citation importance, "
-                "benchmark signals, method novelty, directness to topic, limitation/open-problem signals, and source diversity."
+                "Deterministic triage scored papers by topic relevance, v0.2 ranking score, paper role, recency, venue authority, "
+                "citation importance, benchmark/survey/canonical signals, full-text availability, source diversity, novelty-checking "
+                "importance, and cross-domain transfer importance."
             ),
             limitations=[
                 "Heuristic scoring cannot replace expert judgment.",
@@ -87,10 +102,23 @@ class PaperTriage(Skill):
             ),
         )
 
-    def score_paper(self, topic: str, paper: Paper) -> PaperTriageDecision:
+    def score_paper(
+        self,
+        topic: str,
+        paper: Paper,
+        *,
+        state: ResearchRunState | None = None,
+        ranking_decision=None,
+    ) -> PaperTriageDecision:
         reasons: list[str] = []
         concerns: list[str] = []
         score = 0.0
+        role, role_reasons = infer_paper_role(topic, paper, state=state)
+        if ranking_decision is not None:
+            role = ranking_decision.paper_role
+            role_reasons = ranking_decision.role_reasons
+            score += ranking_decision.score * 0.35
+            reasons.append(f"ranking-v2 score {ranking_decision.score:.2f}")
 
         relevance = _topic_relevance(topic, paper)
         score += relevance * 28
@@ -138,6 +166,37 @@ class PaperTriage(Skill):
         if limitation_score:
             reasons.append("mentions limitations, future work, open problems, or challenges")
 
+        if role in {"seminal", "survey"}:
+            score += 10
+            reasons.append(f"{role} paper should anchor literature context")
+        elif role in {"benchmark", "dataset"}:
+            score += 8
+            reasons.append(f"{role} paper is important for evaluation design")
+        elif role == "frontier":
+            score += 7
+            reasons.append("frontier paper captures current direction")
+        elif role == "adjacent_field":
+            score += 5
+            reasons.append("adjacent-field paper may support transfer candidate")
+        elif role == "negative_result":
+            score += 5
+            reasons.append("negative-result paper can prevent overclaiming")
+
+        important_for_novelty = _important_for_novelty(paper.id, state) or role in {"seminal", "survey"}
+        important_for_transfer = _important_for_transfer(paper.id, state) or role == "adjacent_field"
+        should_download = bool(paper.pdf_url or paper.arxiv_id or paper.openreview_id) and (
+            relevance >= 0.35 or role in {"seminal", "survey", "benchmark", "dataset", "adjacent_field"} or important_for_novelty
+        )
+        if important_for_novelty:
+            score += 6
+            reasons.append("important for novelty checking or closest-prior-work positioning")
+        if important_for_transfer:
+            score += 5
+            reasons.append("important for cross-domain transfer validation")
+        if _has_full_text(paper.id, state):
+            score += 4
+            reasons.append("parsed full text is available")
+
         if not paper.abstract:
             concerns.append("missing abstract limits triage confidence")
         if not paper.venue:
@@ -152,6 +211,12 @@ class PaperTriage(Skill):
             reasons=_dedupe(reasons),
             concerns=_dedupe(concerns),
             recommended_reading_depth="pending tier assignment",
+            paper_role=role,
+            why_this_role="; ".join(role_reasons),
+            source_coverage_reason=_source_coverage_reason(paper, state),
+            should_download_full_text=should_download,
+            important_for_novelty_checking=important_for_novelty,
+            important_for_cross_domain_transfer=important_for_transfer,
         )
 
     def _notes_for_selected_papers(self, state: ResearchRunState, triage: PaperTriageResult) -> list[PaperNote]:
@@ -297,6 +362,10 @@ def _best_diverse_candidate(
 def _set_tier(decision: PaperTriageDecision, tier: str, depth: str) -> None:
     decision.tier = tier
     decision.recommended_reading_depth = depth
+    if decision.paper_role == "adjacent_field" and tier in {"Tier 1", "Tier 2"}:
+        decision.recommended_reading_depth = f"{depth}; read as adjacent-field transfer evidence"
+    if decision.important_for_novelty_checking and tier != "Tier 4":
+        decision.recommended_reading_depth = f"{decision.recommended_reading_depth}; inspect closest-prior-work positioning"
 
 
 def _topic_relevance(topic: str, paper: Paper) -> float:
@@ -337,6 +406,56 @@ def _recency_score(year: int) -> float:
 def _venue_score(venue: str) -> float:
     venue_norm = venue.lower()
     return 1.0 if any(term in venue_norm for term in AUTHORITATIVE_VENUE_TERMS) else 0.0
+
+
+def _role_priority(role: str) -> int:
+    return {
+        "frontier": 9,
+        "seminal": 9,
+        "survey": 8,
+        "benchmark": 8,
+        "dataset": 7,
+        "method": 6,
+        "theory": 5,
+        "negative_result": 5,
+        "adjacent_field": 4,
+        "unclear": 0,
+    }.get(role, 0)
+
+
+def _important_for_novelty(paper_id: str, state: ResearchRunState | None) -> bool:
+    if state is None:
+        return False
+    return any(paper_id in item for assessment in state.novelty_assessments for item in assessment.closest_prior_work) or any(
+        paper_id in item for dossier in state.novelty_dossiers for item in dossier.top_prior_work
+    )
+
+
+def _important_for_transfer(paper_id: str, state: ResearchRunState | None) -> bool:
+    if state is None:
+        return False
+    return any(paper_id in transfer.source_paper_ids for transfer in state.cross_domain_transfers) or any(
+        paper_id in analogy.source_paper_ids for analogy in state.cross_domain_analogies
+    )
+
+
+def _has_full_text(paper_id: str, state: ResearchRunState | None) -> bool:
+    if state is None:
+        return False
+    return any(section.paper_id == paper_id and section.text.strip() for section in state.paper_sections)
+
+
+def _source_coverage_reason(paper: Paper, state: ResearchRunState | None) -> str:
+    if state is None or state.source_coverage is None:
+        return f"source={paper.source or 'unknown'}; no source coverage report available"
+    coverage = state.source_coverage
+    if paper.id in coverage.papers_with_full_text:
+        return f"source={paper.source or 'unknown'}; parsed full text available"
+    if paper.id in coverage.papers_with_pdf:
+        return f"source={paper.source or 'unknown'}; PDF available but may need parsing"
+    if paper.id in coverage.papers_abstract_only:
+        return f"source={paper.source or 'unknown'}; abstract-only evidence"
+    return f"source={paper.source or 'unknown'}; coverage status not classified"
 
 
 def _term_presence(paper: Paper, terms: set[str]) -> float:

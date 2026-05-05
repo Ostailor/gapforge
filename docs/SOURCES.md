@@ -50,6 +50,51 @@ Set `GAPFORGE_CACHE_DIR=/path/to/cache` to override the cache location. Set `GAP
 
 Tests must mock HTTP responses or disable network access. Do not write tests that depend on live public APIs.
 
+## Source Coverage
+
+Every search should create a `SearchQueryRecord` with:
+
+- query text
+- source names
+- purpose, such as `initial_topic`, `analogy`, `novelty`, `citation_expansion`, or `manual`
+- max results and date filters
+- result paper IDs
+- failure messages
+
+Run coverage reporting with:
+
+```bash
+gapforge coverage
+gapforge coverage --run-id <run-id>
+```
+
+Coverage artifacts:
+
+- `source_coverage.json`
+- `source_coverage.md`
+- `full_text_coverage.md`
+
+In offline mode, coverage must clearly label fallback records and missing full text. A report produced from fallback metadata is a smoke test, not a literature conclusion.
+
+## PDF and Full-Text Sources
+
+PDF handling is intentionally conservative:
+
+- arXiv PDF URLs may be inferred from `arxiv_id`.
+- OpenReview and generic sources use explicit `pdf_url` when present.
+- CrossRef and DBLP do not invent PDF URLs unless metadata provides a reliable one.
+- `GAPFORGE_DISABLE_NETWORK=1` skips downloads and records a warning.
+
+Commands:
+
+```bash
+gapforge download-pdfs --run-id <run-id> --max-papers 10 --skip-existing
+gapforge parse-fulltext --run-id <run-id>
+gapforge add-pdf --run-id <run-id> /path/to/paper.pdf --title "Paper Title" --parse
+```
+
+Downloaded or manually added PDFs are stored under the run directory, hashed, and represented as `PaperArtifact` objects. Parsed text becomes `PaperSection` objects and may produce `EvidenceSpan` locators for downstream reading and gap mining.
+
 ## Paper Normalization
 
 Connectors must populate as many fields as possible:
@@ -77,13 +122,15 @@ Connectors must populate as many fields as possible:
 
 ## Ranking and Deduplication
 
-`sources/ranking.py` handles:
+`sources/ranking.py` and `sources/ranking_v2.py` handle:
 
 - newer-paper boost
 - exact title/topic match boost
 - authoritative venue boost
 - citation-count boost
 - source diversity controls
+- role diversity controls for frontier, survey, benchmark, dataset, method, theory, negative-result, and adjacent-field papers
+- full-text availability signals
 - deduplication by DOI, arXiv ID, and high title similarity
 
 Ranking is deliberately separate from connectors. Connectors fetch and normalize; ranking decides cross-source ordering.

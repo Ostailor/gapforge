@@ -1,0 +1,31 @@
+[
+  {
+    "id": "good-msf-1",
+    "title": "Deployment-shift specificity at fixed recall audit for medical screening",
+    "type": "evaluation gap",
+    "description": "Synthetic fixture gap: medical screening needs evaluation under deployment shift while preserving specificity at fixed recall constraints.",
+    "supporting_paper_ids": [
+      "p-msf-1",
+      "p-msf-2"
+    ],
+    "why_existing_work_does_not_solve_it": "Fixture papers test calibrated screening classifier and discuss limitations, but do not jointly resolve deployment shift.",
+    "minimum_experiment_needed": "Run calibrated screening classifier and a simple baseline on shifted synthetic screening cohort slices at fixed specificity at fixed recall.",
+    "risk_that_gap_is_fake": "Synthetic fixture risk: real prior work may already include this exact audit.",
+    "confidence": "medium",
+    "novelty_status": "unchecked"
+  },
+  {
+    "id": "good-msf-2",
+    "title": "Adjacent industrial quality control transfer requires mechanism evidence",
+    "type": "cross-domain gap",
+    "description": "Synthetic fixture gap: industrial quality control offers low-false-alarm tools, but transfer to medical screening needs evidence-backed adaptation.",
+    "supporting_paper_ids": [
+      "p-msf-3"
+    ],
+    "why_existing_work_does_not_solve_it": "Adjacent evidence is technical but not directly validated in the target domain.",
+    "minimum_experiment_needed": "Adapt one industrial quality control mechanism and compare against calibrated screening classifier at fixed specificity at fixed recall.",
+    "risk_that_gap_is_fake": "Synthetic fixture risk: the analogy may be shallow without additional adjacent-field papers.",
+    "confidence": "low",
+    "novelty_status": "unchecked"
+  }
+]

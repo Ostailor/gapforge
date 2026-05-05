@@ -7,8 +7,9 @@ import sys
 from pathlib import Path
 
 from gapforge.config import GapForgeConfig
-from gapforge.models import Cluster, FieldMap, Gap, PaperNote
+from gapforge.models import Cluster, EvidenceSpan, FieldMap, Gap, Paper, PaperNote, PaperSection
 from gapforge.orchestrator import Orchestrator
+from gapforge.reporting import write_final_report
 from gapforge.skills.cross_domain_analogy import CrossDomainAnalogy
 
 
@@ -113,11 +114,119 @@ def test_cross_domain_analogy_writes_artifacts_and_hypotheses(tmp_path: Path) ->
 
     assert (run_dir / "cross_domain_analogies.json").exists()
     assert (run_dir / "cross_domain_analogies.md").exists()
+    assert (run_dir / "cross_domain_transfers.json").exists()
+    assert (run_dir / "cross_domain_transfers.md").exists()
     payload = json.loads((run_dir / "cross_domain_analogies.json").read_text(encoding="utf-8"))
     markdown = (run_dir / "cross_domain_analogies.md").read_text(encoding="utf-8")
     assert payload[0]["what_breaks_in_the_mapping"]
-    assert "What Breaks In The Mapping" in markdown
-    assert analogized.hypotheses
+    assert "Query-Only Analogies" in markdown
+    assert all(item["status"] == "query_only" for item in payload)
+    assert not analogized.hypotheses
+
+
+def test_adjacent_source_fixture_promotes_transfer_candidate(tmp_path: Path) -> None:
+    orchestrator, state = analogy_fixture_state(tmp_path)
+    source = FixtureAdjacentSource(
+        [
+            Paper(
+                id="med-screening-1",
+                title="Specificity calibrated screening with confirmatory diagnosis",
+                authors=["A"],
+                abstract=(
+                    "Medicine screening uses specificity, sensitivity, threshold triage, "
+                    "and confirmatory diagnosis to reduce false positives."
+                ),
+                year=2024,
+                source="medicine",
+                keywords=["screening", "specificity", "confirmatory"],
+            )
+        ]
+    )
+    orchestrator = Orchestrator(GapForgeConfig.from_cwd(tmp_path), sources=[source])
+
+    analogized = orchestrator.analogies(run_id=state.run_id, search=True)
+
+    promoted = [transfer for transfer in analogized.cross_domain_transfers if transfer.status == "promoted"]
+    assert promoted
+    assert promoted[0].source_paper_ids == ["med-screening-1"]
+    assert promoted[0].technical_mechanism
+    assert any(analogy.status == "promoted" for analogy in analogized.cross_domain_analogies)
+    assert any(note.paper_id == "med-screening-1" for note in analogized.paper_notes)
+    assert any(record.purpose == "analogy" for record in analogized.search_queries)
+
+
+def test_fake_analogy_without_mechanism_is_not_promoted(tmp_path: Path) -> None:
+    orchestrator, state = analogy_fixture_state(tmp_path)
+    source = FixtureAdjacentSource(
+        [
+            Paper(
+                id="medicine-editorial",
+                title="Medicine history editorial",
+                authors=["A"],
+                abstract="A broad editorial about institutions and history without a transferable technical mechanism.",
+                year=2024,
+                source="medicine",
+            )
+        ]
+    )
+    orchestrator = Orchestrator(GapForgeConfig.from_cwd(tmp_path), sources=[source])
+
+    analogized = orchestrator.analogies(run_id=state.run_id, search=True)
+
+    medicine_transfers = [transfer for transfer in analogized.cross_domain_transfers if transfer.source_field == "medicine"]
+    assert medicine_transfers
+    assert all(transfer.status in {"query_only", "rejected"} for transfer in medicine_transfers)
+    assert not any(transfer.status == "promoted" for transfer in medicine_transfers)
+
+
+def test_transfer_candidate_links_existing_evidence_spans(tmp_path: Path) -> None:
+    orchestrator, state = analogy_fixture_state(tmp_path)
+    state.papers.append(
+        Paper(
+            id="med-span-paper",
+            title="Medicine screening threshold triage",
+            authors=["A"],
+            abstract="Screening threshold triage reduces false positives.",
+            year=2024,
+            source="medicine",
+        )
+    )
+    state.paper_sections.append(
+        PaperSection(
+            id="med-section",
+            paper_id="med-span-paper",
+            title="Methods",
+            section_type="method",
+            text="Specificity and confirmatory diagnosis are used as threshold triage mechanisms.",
+            page_start=3,
+            page_end=3,
+        )
+    )
+    state.evidence_spans.append(
+        EvidenceSpan(
+            id="span-med-mechanism",
+            paper_id="med-span-paper",
+            section_id="med-section",
+            quote="Specificity and confirmatory diagnosis are used as threshold triage mechanisms.",
+            locator="med-span-paper:Methods:p3",
+            evidence_type="method",
+        )
+    )
+    orchestrator.state_store.save_run(state)
+
+    analogized = orchestrator.analogies(run_id=state.run_id)
+
+    assert any("span-med-mechanism" in transfer.evidence_span_ids for transfer in analogized.cross_domain_transfers)
+
+
+def test_final_report_marks_query_only_analogies_as_not_conclusions(tmp_path: Path) -> None:
+    orchestrator, state = analogy_fixture_state(tmp_path)
+    analogized = orchestrator.analogies(run_id=state.run_id)
+
+    path = write_final_report(analogized)
+    markdown = path.read_text(encoding="utf-8")
+
+    assert "query-only seed, not an evidence-backed conclusion" in markdown
 
 
 def test_cross_domain_analogy_generate_directly(tmp_path: Path) -> None:
@@ -145,3 +254,21 @@ def test_analogies_cli(tmp_path: Path) -> None:
 
     assert result.returncode == 0, result.stderr
     assert "cross_domain_analogies.md" in result.stdout
+
+
+class FixtureAdjacentSource:
+    name = "FixtureAdjacent"
+
+    def __init__(self, papers: list[Paper]) -> None:
+        self.papers = papers
+
+    def search(
+        self,
+        query: str,
+        *,
+        max_results: int,
+        sort: str = "newest",
+        date_from: str | None = None,
+        date_to: str | None = None,
+    ) -> list[Paper]:
+        return self.papers[:max_results]

@@ -12,10 +12,12 @@ from typing import Any
 from gapforge.config import GapForgeConfig
 from gapforge.models import (
     Claim,
+    EvidenceSpan,
     ExperimentPlan,
     Gap,
     Paper,
     PaperNote,
+    PaperRankingResult,
     PaperTriageResult,
     ResearchRunState,
     ResearchTopic,
@@ -31,8 +33,21 @@ RUN_ARTIFACTS = [
     "config.json",
     "state.json",
     "papers.json",
+    "paper_artifacts.json",
+    "paper_sections.json",
+    "evidence_spans.json",
+    "evidence_spans.md",
+    "search_queries.json",
+    "source_coverage.json",
+    "source_coverage.md",
+    "full_text_coverage.md",
+    "citation_graph.json",
+    "citation_graph.md",
+    "related_work_expansion.md",
     "paper_notes.json",
     "paper_notes.md",
+    "paper_ranking.json",
+    "paper_ranking.md",
     "paper_triage.json",
     "paper_triage.md",
     "field_map.json",
@@ -40,11 +55,17 @@ RUN_ARTIFACTS = [
     "claims.json",
     "gaps.json",
     "gaps.md",
+    "gap_evidence_matrix.json",
+    "gap_evidence_matrix.md",
     "hypotheses.json",
     "cross_domain_analogies.json",
     "cross_domain_analogies.md",
+    "cross_domain_transfers.json",
+    "cross_domain_transfers.md",
     "novelty_gate.json",
     "novelty_gate.md",
+    "novelty_dossiers.json",
+    "novelty_dossiers.md",
     "experiments.json",
     "experiments.md",
     "implementation_tasks.md",
@@ -52,6 +73,8 @@ RUN_ARTIFACTS = [
     "reviewer_summaries.json",
     "reviewer_simulation.md",
     "revised_experiment_recommendations.md",
+    "human_reviews.json",
+    "human_reviews.md",
     "orchestrator_plan.json",
     "orchestrator_result.json",
     "run_log.json",
@@ -99,8 +122,9 @@ class ResearchStateManager:
             topic=topic_model,
             run_dir=str(run_dir),
             config={
-                "schema_version": 1,
+                "schema_version": 2,
                 "source_mode": "deterministic-fake",
+                "llm_mode": self.config.llm_mode,
                 "created_at": topic_model.created_at,
             },
         )
@@ -122,32 +146,53 @@ class ResearchStateManager:
         self._write_json(run_dir / "config.json", state.config)
         self._write_json(run_dir / "state.json", state.to_dict())
         self._write_json(run_dir / "papers.json", state.papers)
+        self._write_json(run_dir / "paper_artifacts.json", state.paper_artifacts)
+        self._write_json(run_dir / "paper_sections.json", state.paper_sections)
+        self._write_json(run_dir / "evidence_spans.json", state.evidence_spans)
+        self._write_json(run_dir / "search_queries.json", state.search_queries)
+        self._write_json(run_dir / "source_coverage.json", state.source_coverage)
+        self._write_json(run_dir / "citation_graph.json", state.citation_graph)
         self._write_json(run_dir / "paper_notes.json", state.paper_notes)
+        self._write_json(run_dir / "paper_ranking.json", state.paper_ranking)
         self._write_json(run_dir / "paper_triage.json", state.paper_triage)
         self._write_json(run_dir / "field_map.json", state.field_map)
         self._write_json(run_dir / "claims.json", state.claims)
         self._write_json(run_dir / "gaps.json", state.gaps)
+        self._write_json(run_dir / "gap_evidence_matrix.json", state.gap_evidence_matrices)
         self._write_json(run_dir / "hypotheses.json", state.hypotheses)
         self._write_json(run_dir / "cross_domain_analogies.json", state.cross_domain_analogies)
+        self._write_json(run_dir / "cross_domain_transfers.json", state.cross_domain_transfers)
         self._write_json(run_dir / "novelty_gate.json", state.novelty_assessments)
+        self._write_json(run_dir / "novelty_dossiers.json", state.novelty_dossiers)
         self._write_json(run_dir / "experiments.json", state.experiments)
         self._write_json(run_dir / "reviewer_objections.json", state.reviewer_objections)
         self._write_json(run_dir / "reviewer_summaries.json", state.reviewer_summaries)
+        self._write_json(run_dir / "human_reviews.json", state.human_reviews)
         self._write_json(run_dir / "orchestrator_plan.json", state.orchestrator_plan)
         self._write_json(run_dir / "orchestrator_result.json", state.orchestrator_result)
         self._write_json(run_dir / "run_log.json", state.run_log)
         self._write_json(run_dir / "rejected_ideas.json", state.rejected_ideas)
         self._write_json(run_dir / "provenance.json", self._provenance_records(state))
         self._write_paper_notes_markdown(state)
+        self._write_source_coverage_markdown(state)
+        self._write_full_text_coverage_markdown(state)
+        self._write_evidence_spans_markdown(state)
+        self._write_citation_graph_markdown(state)
+        self._write_related_work_expansion_markdown(state)
+        self._write_paper_ranking_markdown(state)
         self._write_paper_triage_markdown(state)
         self._write_field_map_markdown(state)
         self._write_gaps_markdown(state)
+        self._write_gap_evidence_matrix_markdown(state)
         self._write_cross_domain_analogies_markdown(state)
+        self._write_cross_domain_transfers_markdown(state)
         self._write_novelty_gate_markdown(state)
+        self._write_novelty_dossiers_markdown(state)
         self._write_experiments_markdown(state)
         self._write_implementation_tasks_markdown(state)
         self._write_reviewer_simulation_markdown(state)
         self._write_revised_experiment_recommendations_markdown(state)
+        self._write_human_reviews_markdown(state)
         self._write_report(state)
 
     def append_papers(self, state: ResearchRunState, papers: Iterable[Paper]) -> ResearchRunState:
@@ -162,6 +207,11 @@ class ResearchStateManager:
 
     def save_paper_triage(self, state: ResearchRunState, triage: PaperTriageResult) -> ResearchRunState:
         state.paper_triage = triage
+        self.save_run(state)
+        return state
+
+    def save_paper_ranking(self, state: ResearchRunState, ranking: PaperRankingResult) -> ResearchRunState:
+        state.paper_ranking = ranking
         self.save_run(state)
         return state
 
@@ -193,8 +243,24 @@ class ResearchStateManager:
     def validate_state(self, state: ResearchRunState) -> ValidationResult:
         issues: list[ValidationIssue] = []
         paper_ids = {paper.id for paper in state.papers}
+        section_ids = {section.id for section in state.paper_sections}
+        span_paper_ids = {span.paper_id for span in state.evidence_spans}
+        full_text_paper_ids = {section.paper_id for section in state.paper_sections if section.text.strip()} | {
+            artifact.paper_id
+            for artifact in state.paper_artifacts
+            if artifact.status == "available" and artifact.artifact_type in {"pdf", "html", "text"}
+        }
         hypothesis_ids = {hypothesis.id for hypothesis in state.hypotheses}
         novelty_targets = {assessment.target_gap_or_hypothesis_id for assessment in state.novelty_assessments}
+        matrix_by_gap = {matrix.gap_id: matrix for matrix in state.gap_evidence_matrices}
+        review_object_ids = {
+            "paper": paper_ids,
+            "claim": {claim.id for claim in state.claims},
+            "gap": {gap.id for gap in state.gaps},
+            "novelty_assessment": {assessment.target_gap_or_hypothesis_id for assessment in state.novelty_assessments},
+            "experiment": {experiment.id for experiment in state.experiments},
+            "reviewer_objection": {objection.id for objection in state.reviewer_objections},
+        }
 
         for claim in state.claims:
             if claim.status == "supported" and not claim.supporting_evidence:
@@ -221,6 +287,127 @@ class ResearchStateManager:
                         message=f"Novelty claim {claim.id} has no closest prior work.",
                     )
                 )
+            claim_source_ids = set(claim.source_paper_ids)
+            if (
+                claim.status == "supported"
+                and state.evidence_spans
+                and claim_source_ids & span_paper_ids
+                and not _claim_has_evidence_span(claim, state.evidence_spans)
+            ):
+                issues.append(
+                    ValidationIssue(
+                        code="supported-claim-without-evidence-span",
+                        object_id=claim.id,
+                        severity="warning",
+                        message=(
+                            f"Claim {claim.id} is supported and evidence spans are available for its source papers, "
+                            "but no EvidenceSpan links to the claim's source papers."
+                        ),
+                    )
+                )
+            if (
+                claim.status == "supported"
+                and claim.confidence == "high"
+                and claim_source_ids & full_text_paper_ids
+                and not _claim_has_evidence_span(claim, state.evidence_spans)
+            ):
+                issues.append(
+                    ValidationIssue(
+                        code="high-confidence-full-text-claim-without-evidence-span",
+                        object_id=claim.id,
+                        message=(
+                            f"Claim {claim.id} is high-confidence and source papers have full-text artifacts, "
+                            "but no EvidenceSpan supports it."
+                        ),
+                    )
+                )
+
+        for artifact in state.paper_artifacts:
+            if artifact.paper_id not in paper_ids:
+                issues.append(
+                    ValidationIssue(
+                        code="paper-artifact-unknown-paper",
+                        object_id=artifact.id,
+                        message=f"Paper artifact {artifact.id} references unknown paper {artifact.paper_id}.",
+                    )
+                )
+
+        for section in state.paper_sections:
+            if section.paper_id not in paper_ids:
+                issues.append(
+                    ValidationIssue(
+                        code="paper-section-unknown-paper",
+                        object_id=section.id,
+                        message=f"Paper section {section.id} references unknown paper {section.paper_id}.",
+                    )
+                )
+
+        for span in state.evidence_spans:
+            if span.paper_id not in paper_ids:
+                issues.append(
+                    ValidationIssue(
+                        code="evidence-span-unknown-paper",
+                        object_id=span.id,
+                        message=f"Evidence span {span.id} references unknown paper {span.paper_id}.",
+                    )
+                )
+            if span.section_id and span.section_id not in section_ids:
+                issues.append(
+                    ValidationIssue(
+                        code="evidence-span-unknown-section",
+                        object_id=span.id,
+                        message=f"Evidence span {span.id} references unknown section {span.section_id}.",
+                    )
+                )
+
+        if state.citation_graph is not None:
+            unknown_graph_papers = sorted(set(state.citation_graph.paper_ids) - paper_ids)
+            if unknown_graph_papers:
+                issues.append(
+                    ValidationIssue(
+                        code="citation-graph-unknown-paper",
+                        message=f"Citation graph references unknown papers: {', '.join(unknown_graph_papers)}.",
+                    )
+                )
+            for edge in state.citation_graph.edges:
+                if edge.edge_type in {"same_doi", "same_arxiv", "manual"}:
+                    continue
+                unknown_edge_ids = sorted({edge.source_paper_id, edge.target_paper_id} - paper_ids)
+                if unknown_edge_ids:
+                    issues.append(
+                        ValidationIssue(
+                            code="citation-edge-unknown-paper",
+                            object_id=f"{edge.source_paper_id}->{edge.target_paper_id}",
+                            message=f"Citation edge references unknown papers: {', '.join(unknown_edge_ids)}.",
+                        )
+                    )
+
+        for transfer in state.cross_domain_transfers:
+            if transfer.target_gap_id and transfer.target_gap_id not in {gap.id for gap in state.gaps}:
+                issues.append(
+                    ValidationIssue(
+                        code="cross-domain-transfer-unknown-gap",
+                        object_id=transfer.id,
+                        message=f"Cross-domain transfer {transfer.id} references unknown gap {transfer.target_gap_id}.",
+                    )
+                )
+            unknown_transfer_papers = sorted(set(transfer.source_paper_ids) - paper_ids)
+            if unknown_transfer_papers:
+                issues.append(
+                    ValidationIssue(
+                        code="cross-domain-transfer-unknown-paper",
+                        object_id=transfer.id,
+                        message=f"Cross-domain transfer {transfer.id} references unknown papers: {', '.join(unknown_transfer_papers)}.",
+                    )
+                )
+            if transfer.status == "promoted" and not transfer.source_paper_ids:
+                issues.append(
+                    ValidationIssue(
+                        code="promoted-transfer-without-source-paper",
+                        object_id=transfer.id,
+                        message=f"Promoted transfer {transfer.id} has no source paper evidence.",
+                    )
+                )
 
         for gap in state.gaps:
             linked_ids = set(gap.supporting_paper_ids or gap.linked_paper_ids)
@@ -240,6 +427,15 @@ class ResearchStateManager:
                         message=f"Gap {gap.id} does not explain the risk that the gap is fake.",
                     )
                 )
+            if gap.id not in matrix_by_gap and not gap.explicit_reason:
+                issues.append(
+                    ValidationIssue(
+                        code="gap-without-evidence-matrix",
+                        object_id=gap.id,
+                        severity="warning",
+                        message=f"Gap {gap.id} has no evidence matrix and no explicit reason for evidence absence.",
+                    )
+                )
             if gap.confidence == "high" and not linked_ids and not gap.supporting_claim_ids:
                 issues.append(
                     ValidationIssue(
@@ -257,6 +453,34 @@ class ResearchStateManager:
                         message=f"Gap {gap.id} links unknown papers: {', '.join(unknown_links)}.",
                     )
                 )
+
+        gap_ids = {gap.id for gap in state.gaps}
+        for matrix in state.gap_evidence_matrices:
+            if matrix.gap_id not in gap_ids:
+                issues.append(
+                    ValidationIssue(
+                        code="gap-evidence-matrix-unknown-gap",
+                        object_id=matrix.gap_id,
+                        message=f"Gap evidence matrix references unknown gap {matrix.gap_id}.",
+                    )
+                )
+            for row in matrix.evidence_rows:
+                if row.paper_id and row.paper_id not in paper_ids:
+                    issues.append(
+                        ValidationIssue(
+                            code="gap-evidence-row-unknown-paper",
+                            object_id=matrix.gap_id,
+                            message=f"Gap evidence row for {matrix.gap_id} references unknown paper {row.paper_id}.",
+                        )
+                    )
+                if row.evidence_span_id and row.evidence_span_id not in {span.id for span in state.evidence_spans}:
+                    issues.append(
+                        ValidationIssue(
+                            code="gap-evidence-row-unknown-span",
+                            object_id=matrix.gap_id,
+                            message=f"Gap evidence row for {matrix.gap_id} references unknown span {row.evidence_span_id}.",
+                        )
+                    )
 
         for experiment in state.experiments:
             has_known_hypothesis = bool(experiment.hypothesis_id and experiment.hypothesis_id in hypothesis_ids)
@@ -314,6 +538,25 @@ class ResearchStateManager:
                         code="strong-novelty-without-prior-work",
                         object_id=assessment.target_gap_or_hypothesis_id,
                         message=(f"Novelty assessment {assessment.target_gap_or_hypothesis_id} is strong without closest prior work."),
+                    )
+                )
+
+        for review in state.human_reviews:
+            known_ids = review_object_ids.get(review.object_type)
+            if known_ids is None:
+                issues.append(
+                    ValidationIssue(
+                        code="human-review-unknown-object-type",
+                        object_id=review.id,
+                        message=f"Human review {review.id} uses unknown object type {review.object_type}.",
+                    )
+                )
+            elif review.object_id not in known_ids:
+                issues.append(
+                    ValidationIssue(
+                        code="human-review-unknown-object",
+                        object_id=review.id,
+                        message=f"Human review {review.id} references unknown {review.object_type} {review.object_id}.",
                     )
                 )
 
@@ -422,6 +665,7 @@ class ResearchStateManager:
                 f"- Novelty assessments: {len(state.novelty_assessments)}",
                 f"- Experiments: {len(state.experiments)}",
                 f"- Reviewer objections: {len(state.reviewer_objections)}",
+                f"- Human review records: {len(state.human_reviews)}",
                 "",
                 "## Field Map",
                 "",
@@ -499,6 +743,17 @@ class ResearchStateManager:
         )
         uncertainty.extend(gap.risk_that_gap_is_fake for gap in state.gaps[:5] if gap.risk_that_gap_is_fake)
         lines.extend([f"- {item}" for item in uncertainty[:12]] or ["- No explicit uncertainty recorded."])
+        lines.extend(["", "## Human Review", ""])
+        if state.human_reviews:
+            lines.extend(
+                [
+                    f"- `{record.id}` {record.action} `{record.object_type}:{record.object_id}`"
+                    + (f": {record.note}" if record.note else "")
+                    for record in state.human_reviews[-8:]
+                ]
+            )
+        else:
+            lines.append("- none")
         report_path.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
 
     def _write_field_map_markdown(self, state: ResearchRunState) -> None:
@@ -575,7 +830,13 @@ class ResearchStateManager:
                     "",
                     f"- Paper ID: `{decision.paper_id}`",
                     f"- Score: {decision.score:.2f}",
+                    f"- Role: {decision.paper_role}",
+                    f"- Why this role: {decision.why_this_role or 'unclear'}",
                     f"- Recommended reading depth: {decision.recommended_reading_depth}",
+                    f"- Source coverage: {decision.source_coverage_reason or 'unknown'}",
+                    f"- Download full text: {str(decision.should_download_full_text).lower()}",
+                    f"- Important for novelty checking: {str(decision.important_for_novelty_checking).lower()}",
+                    f"- Important for cross-domain transfer: {str(decision.important_for_cross_domain_transfer).lower()}",
                     "",
                     "Reasons:",
                     "",
@@ -587,6 +848,51 @@ class ResearchStateManager:
             lines.append("")
         lines.extend(["## Limitations", ""])
         lines.extend([f"- {limitation}" for limitation in triage.limitations] or ["- none"])
+        path.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
+
+    def _write_paper_ranking_markdown(self, state: ResearchRunState) -> None:
+        path = Path(state.run_dir, "paper_ranking.md")
+        if state.paper_ranking is None:
+            path.write_text("# Paper Ranking\n\nNo paper ranking generated yet.\n", encoding="utf-8")
+            return
+        ranking = state.paper_ranking
+        lines = [
+            f"# Paper Ranking: {ranking.topic}",
+            "",
+            ranking.scoring_summary,
+            "",
+            f"- Query purpose: {ranking.query_purpose}",
+            f"- Recency preference: {ranking.recency_preference}",
+            f"- Source diversity target: {ranking.source_diversity_target}",
+            f"- Role diversity target: {ranking.role_diversity_target}",
+            "",
+            "## Ranked Papers",
+            "",
+        ]
+        for decision in ranking.decisions:
+            lines.extend(
+                [
+                    f"### {decision.rank}. {decision.title}",
+                    "",
+                    f"- Paper ID: `{decision.paper_id}`",
+                    f"- Score: {decision.score:.2f}",
+                    f"- Role: {decision.paper_role}",
+                    f"- Source: {decision.source or 'unknown'}",
+                    f"- Source diversity: {decision.source_diversity_reason}",
+                    f"- Role diversity: {decision.role_diversity_reason}",
+                    f"- Relevance: {decision.relevance_score:.3f}",
+                    f"- Recency: {decision.recency_score:.3f}",
+                    f"- Citation: {decision.citation_score:.3f}",
+                    f"- Full text: {decision.full_text_score:.1f}",
+                    f"- Novelty importance: {decision.novelty_score:.1f}",
+                    f"- Adjacent transfer importance: {decision.adjacent_transfer_score:.1f}",
+                    "",
+                    "Role reasons:",
+                    "",
+                ]
+            )
+            lines.extend([f"- {reason}" for reason in decision.role_reasons] or ["- none"])
+            lines.append("")
         path.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
 
     def _write_paper_notes_markdown(self, state: ResearchRunState) -> None:
@@ -604,6 +910,8 @@ class ResearchStateManager:
                     f"- Source basis: {note.source_basis}",
                     f"- Confidence: {note.confidence}",
                     f"- Relevance to topic: {note.relevance_to_topic or 'unknown'}",
+                    f"- Sections used: {', '.join(note.sections_used) if note.sections_used else 'none'}",
+                    f"- Missing sections: {', '.join(note.missing_sections) if note.missing_sections else 'none recorded'}",
                     "",
                     note.one_sentence_summary or note.summary,
                     "",
@@ -628,8 +936,155 @@ class ResearchStateManager:
                 lines.append("")
             lines.extend(["### Evidence Snippets", ""])
             snippets = note.quotes_or_evidence_snippets or note.evidence
-            lines.extend([f"- `{snippet.source_id}`: {snippet.quote}" for snippet in snippets] or ["- none"])
+            lines.extend([f"- `{snippet.locator}` (`{snippet.source_id}`): {snippet.quote}" for snippet in snippets] or ["- none"])
             lines.append("")
+        path.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
+
+    def _write_full_text_coverage_markdown(self, state: ResearchRunState) -> None:
+        path = Path(state.run_dir, "full_text_coverage.md")
+        coverage = state.source_coverage
+        if coverage is None:
+            papers_with_pdf = sorted(
+                {paper.id for paper in state.papers if paper.pdf_url}
+                | {
+                    artifact.paper_id
+                    for artifact in state.paper_artifacts
+                    if artifact.artifact_type == "pdf" and artifact.status == "available"
+                }
+            )
+            papers_with_full_text = sorted({section.paper_id for section in state.paper_sections if section.text.strip()})
+            abstract_only = sorted({note.paper_id for note in state.paper_notes if note.source_basis == "metadata/abstract only"})
+            lines = [
+                "# Full Text Coverage",
+                "",
+                "No source coverage report generated yet. Counts below are inferred from current state artifacts.",
+                "",
+                f"- Papers: {len(state.papers)}",
+                f"- Papers with PDF: {len(papers_with_pdf)}",
+                f"- Papers with full text sections: {len(papers_with_full_text)}",
+                f"- Abstract-only notes: {len(abstract_only)}",
+                f"- Failed downloads: {sum(1 for artifact in state.paper_artifacts if artifact.status == 'failed')}",
+                "",
+            ]
+            path.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
+            return
+
+        lines = [
+            f"# Full Text Coverage: {coverage.topic}",
+            "",
+            f"- Run ID: `{coverage.run_id}`",
+            f"- Confidence: {coverage.confidence}",
+            f"- Searched sources: {', '.join(coverage.searched_sources) if coverage.searched_sources else 'none'}",
+            f"- Papers with PDF: {len(coverage.papers_with_pdf)}",
+            f"- Papers with full text: {len(coverage.papers_with_full_text)}",
+            f"- Abstract-only papers: {len(coverage.papers_abstract_only)}",
+            f"- Failed downloads: {len(coverage.failed_downloads)}",
+            "",
+            "## Papers By Source",
+            "",
+        ]
+        lines.extend([f"- {source}: {count}" for source, count in sorted(coverage.papers_by_source.items())] or ["- none"])
+        lines.extend(["", "## Query Records", ""])
+        for record in coverage.query_records or state.search_queries:
+            lines.extend(
+                [
+                    f"- `{record.id}` {record.purpose}: {record.query}",
+                    f"  - Sources: {', '.join(record.source_names) if record.source_names else 'none'}",
+                    f"  - Results: {len(record.result_paper_ids)}",
+                    f"  - Failures: {len(record.failure_messages)}",
+                ]
+            )
+        if not coverage.query_records and not state.search_queries:
+            lines.append("- none")
+        lines.extend(["", "## Warnings", ""])
+        lines.extend([f"- {warning}" for warning in coverage.coverage_warnings] or ["- none"])
+        path.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
+
+    def _write_source_coverage_markdown(self, state: ResearchRunState) -> None:
+        from gapforge.sources.coverage import render_source_coverage_markdown
+
+        path = Path(state.run_dir, "source_coverage.md")
+        if state.source_coverage is None:
+            path.write_text("# Source Coverage\n\nNo source coverage report generated yet.\n", encoding="utf-8")
+            return
+        path.write_text(render_source_coverage_markdown(state.source_coverage), encoding="utf-8")
+
+    def _write_evidence_spans_markdown(self, state: ResearchRunState) -> None:
+        path = Path(state.run_dir, "evidence_spans.md")
+        if not state.evidence_spans:
+            path.write_text("# Evidence Spans\n\nNo evidence spans recorded yet.\n", encoding="utf-8")
+            return
+        lines = ["# Evidence Spans", ""]
+        for span in state.evidence_spans:
+            lines.extend(
+                [
+                    f"## {span.id}",
+                    "",
+                    f"- Paper ID: `{span.paper_id}`",
+                    f"- Section ID: `{span.section_id or 'metadata-only'}`",
+                    f"- Evidence type: {span.evidence_type}",
+                    f"- Locator: {span.locator or _span_locator(span)}",
+                    f"- Confidence: {span.confidence}",
+                    "",
+                    span.quote or "No quote recorded.",
+                    "",
+                ]
+            )
+        path.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
+
+    def _write_citation_graph_markdown(self, state: ResearchRunState) -> None:
+        path = Path(state.run_dir, "citation_graph.md")
+        graph = state.citation_graph
+        if graph is None:
+            path.write_text("# Citation Graph\n\nNo citation graph generated yet.\n", encoding="utf-8")
+            return
+        lines = [
+            "# Citation Graph",
+            "",
+            f"- Papers: {len(graph.paper_ids)}",
+            f"- Edges: {len(graph.edges)}",
+            f"- Unresolved references: {len(graph.unresolved_references)}",
+            "",
+            "## Edges",
+            "",
+        ]
+        lines.extend(
+            [
+                (
+                    f"- `{edge.source_paper_id}` --{edge.edge_type}/{edge.confidence}--> "
+                    f"`{edge.target_paper_id}` ({edge.source or 'unknown source'})"
+                )
+                for edge in graph.edges
+            ]
+            or ["- none"]
+        )
+        lines.extend(["", "## Unresolved References", ""])
+        lines.extend([f"- {reference}" for reference in graph.unresolved_references] or ["- none"])
+        path.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
+
+    def _write_related_work_expansion_markdown(self, state: ResearchRunState) -> None:
+        path = Path(state.run_dir, "related_work_expansion.md")
+        records = [record for record in state.search_queries if record.purpose == "citation_expansion"]
+        if not records:
+            path.write_text("# Related Work Expansion\n\nNo citation-expansion searches have been run yet.\n", encoding="utf-8")
+            return
+        result_ids = sorted({paper_id for record in records for paper_id in record.result_paper_ids})
+        failures = [failure for record in records for failure in record.failure_messages]
+        lines = [
+            f"# Related Work Expansion: {state.topic.text}",
+            "",
+            f"- Queries run: {len(records)}",
+            f"- Result paper IDs: {len(result_ids)}",
+            f"- Source failures: {len(failures)}",
+            "",
+            "## Queries",
+            "",
+        ]
+        lines.extend([f"- `{record.id}` {record.query} ({len(record.result_paper_ids)} results)" for record in records])
+        lines.extend(["", "## Result Paper IDs", ""])
+        lines.extend([f"- `{paper_id}`" for paper_id in result_ids] or ["- none"])
+        lines.extend(["", "## Failures", ""])
+        lines.extend([f"- {failure}" for failure in failures] or ["- none"])
         path.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
 
     def _write_gaps_markdown(self, state: ResearchRunState) -> None:
@@ -638,7 +1093,9 @@ class ResearchStateManager:
             path.write_text("# Research Gaps\n\nNo gaps mined yet.\n", encoding="utf-8")
             return
         lines = ["# Research Gaps", ""]
+        matrix_by_gap = {matrix.gap_id: matrix for matrix in state.gap_evidence_matrices}
         for gap in state.gaps:
+            matrix = matrix_by_gap.get(gap.id)
             lines.extend(
                 [
                     f"## {gap.title or gap.id}",
@@ -649,6 +1106,7 @@ class ResearchStateManager:
                     f"- Novelty status: {gap.novelty_status}",
                     f"- Supporting papers: {_linked_gap_papers(gap)}",
                     f"- Supporting claims: {', '.join(gap.supporting_claim_ids) if gap.supporting_claim_ids else 'none'}",
+                    f"- Counterevidence papers: {', '.join(matrix.papers_countering) if matrix and matrix.papers_countering else 'none'}",
                     "",
                     gap.description,
                     "",
@@ -678,6 +1136,57 @@ class ResearchStateManager:
                     "",
                 ]
             )
+            if matrix is not None:
+                lines.extend(
+                    [
+                        "### Evidence Matrix",
+                        "",
+                        f"- Supporting papers in matrix: {', '.join(matrix.papers_supporting) if matrix.papers_supporting else 'none'}",
+                        f"- Countering papers in matrix: {', '.join(matrix.papers_countering) if matrix.papers_countering else 'none'}",
+                        f"- Repeated limitations: {matrix.repeated_limitation_count}",
+                        f"- Missing metrics: {matrix.missing_metric_count}",
+                        f"- Missing datasets: {matrix.missing_dataset_count}",
+                        f"- Assumption patterns: {matrix.assumption_pattern_count}",
+                        "",
+                    ]
+                )
+                for row in matrix.evidence_rows[:8]:
+                    lines.append(
+                        f"- `{row.paper_id}` {row.supports_or_counters}/{row.evidence_type} "
+                        f"({row.section_type or 'unknown'}; {row.locator or row.evidence_span_id or 'no locator'}): {row.text[:220]}"
+                    )
+                if len(matrix.evidence_rows) > 8:
+                    lines.append(f"- ... {len(matrix.evidence_rows) - 8} more evidence rows")
+                lines.append("")
+        path.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
+
+    def _write_gap_evidence_matrix_markdown(self, state: ResearchRunState) -> None:
+        path = Path(state.run_dir, "gap_evidence_matrix.md")
+        if not state.gap_evidence_matrices:
+            path.write_text("# Gap Evidence Matrix\n\nNo gap evidence matrices generated yet.\n", encoding="utf-8")
+            return
+        lines = ["# Gap Evidence Matrix", ""]
+        for matrix in state.gap_evidence_matrices:
+            lines.extend(
+                [
+                    f"## {matrix.gap_id}",
+                    "",
+                    f"- Confidence: {matrix.confidence}",
+                    f"- Papers supporting: {', '.join(matrix.papers_supporting) if matrix.papers_supporting else 'none'}",
+                    f"- Papers countering: {', '.join(matrix.papers_countering) if matrix.papers_countering else 'none'}",
+                    f"- Repeated limitation count: {matrix.repeated_limitation_count}",
+                    f"- Missing metric count: {matrix.missing_metric_count}",
+                    f"- Missing dataset count: {matrix.missing_dataset_count}",
+                    f"- Assumption pattern count: {matrix.assumption_pattern_count}",
+                    "",
+                ]
+            )
+            for row in matrix.evidence_rows:
+                lines.append(
+                    f"- `{row.paper_id}` {row.supports_or_counters}/{row.evidence_type} "
+                    f"span=`{row.evidence_span_id or 'none'}` locator={row.locator or 'none'}: {row.text[:260]}"
+                )
+            lines.append("")
         path.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
 
     def _write_cross_domain_analogies_markdown(self, state: ResearchRunState) -> None:
@@ -686,41 +1195,112 @@ class ResearchStateManager:
             path.write_text("# Cross-Domain Analogies\n\nNo cross-domain analogies generated yet.\n", encoding="utf-8")
             return
         lines = ["# Cross-Domain Analogies", ""]
-        for analogy in state.cross_domain_analogies:
+        transfer_by_id = {transfer.id: transfer for transfer in state.cross_domain_transfers}
+        for title, status in [
+            ("Query-Only Analogies", "query_only"),
+            ("Evidence-Backed Transfer Candidates", "promoted"),
+            ("Rejected Analogies", "rejected"),
+        ]:
+            matching = [analogy for analogy in state.cross_domain_analogies if analogy.status == status]
+            if not matching:
+                continue
+            lines.extend([f"## {title}", ""])
+            for analogy in matching:
+                transfer = transfer_by_id.get(analogy.transfer_candidate_id)
+                lines.extend(
+                    [
+                        f"### {analogy.source_field}: {analogy.source_concept}",
+                        "",
+                        f"- Target gap: `{analogy.target_gap_id}`",
+                        f"- Status: {analogy.status}",
+                        f"- Confidence: {analogy.confidence}",
+                        f"- Source papers: {', '.join(analogy.source_paper_ids) if analogy.source_paper_ids else 'none'}",
+                        "",
+                        "#### Why It Maps",
+                        "",
+                        analogy.why_it_maps,
+                        "",
+                        "#### What Breaks In The Mapping",
+                        "",
+                        analogy.what_breaks_in_the_mapping,
+                        "",
+                        "#### Technical Transfer Candidate",
+                        "",
+                        analogy.technical_transfer_candidate,
+                        "",
+                    ]
+                )
+                if transfer is not None:
+                    lines.extend(
+                        [
+                            "#### Required Adaptation",
+                            "",
+                            transfer.required_adaptation or "Not specified.",
+                            "",
+                            "#### Evidence Span IDs",
+                            "",
+                        ]
+                    )
+                    lines.extend([f"- `{span_id}`" for span_id in transfer.evidence_span_ids] or ["- none"])
+                    lines.append("")
+                lines.extend(["#### Papers Or Sources To Search", ""])
+                lines.extend([f"- {query}" for query in analogy.papers_or_sources_to_search] or ["- none"])
+                lines.extend(
+                    [
+                        "",
+                        "#### Possible Experiment",
+                        "",
+                        analogy.possible_experiment,
+                        "",
+                        "#### Risk Of Fake Analogy",
+                        "",
+                        analogy.risk_of_fake_analogy,
+                        "",
+                    ]
+                )
+        path.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
+
+    def _write_cross_domain_transfers_markdown(self, state: ResearchRunState) -> None:
+        path = Path(state.run_dir, "cross_domain_transfers.md")
+        if not state.cross_domain_transfers:
+            path.write_text("# Cross-Domain Transfer Candidates\n\nNo transfer candidates generated yet.\n", encoding="utf-8")
+            return
+        lines = ["# Cross-Domain Transfer Candidates", ""]
+        for transfer in state.cross_domain_transfers:
             lines.extend(
                 [
-                    f"## {analogy.source_field}: {analogy.source_concept}",
+                    f"## {transfer.source_field}: {transfer.source_concept}",
                     "",
-                    f"- Target gap: `{analogy.target_gap_id}`",
-                    f"- Confidence: {analogy.confidence}",
+                    f"- ID: `{transfer.id}`",
+                    f"- Target gap: `{transfer.target_gap_id}`",
+                    f"- Status: {transfer.status}",
+                    f"- Confidence: {transfer.confidence}",
+                    f"- Source papers: {', '.join(transfer.source_paper_ids) if transfer.source_paper_ids else 'none'}",
+                    f"- Evidence spans: {', '.join(transfer.evidence_span_ids) if transfer.evidence_span_ids else 'none'}",
+                    "",
+                    "### Technical Mechanism",
+                    "",
+                    transfer.technical_mechanism or "No transferable mechanism found.",
                     "",
                     "### Why It Maps",
                     "",
-                    analogy.why_it_maps,
+                    transfer.why_it_maps,
                     "",
-                    "### What Breaks In The Mapping",
+                    "### What Breaks",
                     "",
-                    analogy.what_breaks_in_the_mapping,
+                    transfer.what_breaks,
                     "",
-                    "### Technical Transfer Candidate",
+                    "### Required Adaptation",
                     "",
-                    analogy.technical_transfer_candidate,
+                    transfer.required_adaptation or "Not specified.",
                     "",
-                    "### Papers Or Sources To Search",
+                    "### Proposed Experiment",
                     "",
-                ]
-            )
-            lines.extend([f"- {query}" for query in analogy.papers_or_sources_to_search] or ["- none"])
-            lines.extend(
-                [
-                    "",
-                    "### Possible Experiment",
-                    "",
-                    analogy.possible_experiment,
+                    transfer.proposed_experiment or "Not specified.",
                     "",
                     "### Risk Of Fake Analogy",
                     "",
-                    analogy.risk_of_fake_analogy,
+                    transfer.risk_of_fake_analogy,
                     "",
                 ]
             )
@@ -929,21 +1509,100 @@ class ResearchStateManager:
             lines.append("")
         path.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
 
+    def _write_novelty_dossiers_markdown(self, state: ResearchRunState) -> None:
+        path = Path(state.run_dir, "novelty_dossiers.md")
+        if not state.novelty_dossiers:
+            path.write_text("# Novelty Dossiers\n\nNo novelty dossiers generated yet.\n", encoding="utf-8")
+            return
+        lines = ["# Novelty Dossiers", ""]
+        for dossier in state.novelty_dossiers:
+            lines.extend(
+                [
+                    f"## {dossier.target_id}",
+                    "",
+                    f"- Verdict: {dossier.verdict}",
+                    f"- Novelty strength: {dossier.novelty_strength}",
+                    f"- Confidence: {dossier.confidence}",
+                    f"- Candidates considered: {len(dossier.candidates_considered)}",
+                    "",
+                    "### Idea Summary",
+                    "",
+                    dossier.idea_summary,
+                    "",
+                    "### Top Prior Work",
+                    "",
+                ]
+            )
+            lines.extend([f"- {item}" for item in dossier.top_prior_work] or ["- none"])
+            lines.extend(["", "### Comparison Table", ""])
+            for row in dossier.comparison_table[:10]:
+                overall = float(row.get("overall_similarity") or 0.0)
+                problem = float(row.get("problem_overlap") or 0.0)
+                method = float(row.get("method_overlap") or 0.0)
+                evaluation = float(row.get("evaluation_overlap") or 0.0)
+                lines.append(
+                    f"- `{row.get('paper_id', 'unknown')}` score={overall:.2f}; "
+                    f"problem={problem:.2f}; method={method:.2f}; "
+                    f"evaluation={evaluation:.2f}: {row.get('title', '')}"
+                )
+            if not dossier.comparison_table:
+                lines.append("- none")
+            lines.extend(
+                [
+                    "",
+                    "### Decisive Difference Needed",
+                    "",
+                    dossier.decisive_difference_needed or "Not specified.",
+                    "",
+                    "### Reviewer Objection",
+                    "",
+                    dossier.reviewer_objection or "No objection generated.",
+                    "",
+                    "### Recommended Action",
+                    "",
+                    dossier.recommended_action or "Not specified.",
+                    "",
+                    "### Query Plan",
+                    "",
+                ]
+            )
+            lines.extend([f"- {query}" for query in dossier.query_plan] or ["- none"])
+            lines.extend(["", "### Missing Searches", ""])
+            lines.extend([f"- {query}" for query in dossier.missing_searches] or ["- none"])
+            lines.append("")
+        path.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
+
+    def _write_human_reviews_markdown(self, state: ResearchRunState) -> None:
+        from gapforge.review.audit import render_human_reviews_markdown
+
+        Path(state.run_dir, "human_reviews.md").write_text(render_human_reviews_markdown(state), encoding="utf-8")
+
     def _provenance_records(self, state: ResearchRunState) -> list[dict[str, Any]]:
         records: list[dict[str, Any]] = []
         for collection_name in [
             "paper_notes",
+            "paper_artifacts",
+            "paper_sections",
+            "evidence_spans",
+            "search_queries",
+            "source_coverage",
+            "citation_graph",
+            "paper_ranking",
             "paper_triage",
             "field_map",
             "claims",
             "gaps",
+            "gap_evidence_matrices",
             "hypotheses",
             "cross_domain_analogies",
+            "cross_domain_transfers",
             "novelty_assessments",
+            "novelty_dossiers",
             "experiments",
             "reviewer_objections",
             "reviewer_summaries",
             "rejected_ideas",
+            "human_reviews",
         ]:
             value = getattr(state, collection_name)
             items = value if isinstance(value, list) else ([value] if value is not None else [])
@@ -970,6 +1629,27 @@ def _append_unique(existing: list[Any], new_items: Iterable[Any], key: str = "id
 def _linked_gap_papers(gap: Gap) -> str:
     linked_ids = gap.supporting_paper_ids or gap.linked_paper_ids
     return ", ".join(linked_ids) if linked_ids else "indirect evidence only"
+
+
+def _claim_has_evidence_span(claim: Claim, spans: list[EvidenceSpan]) -> bool:
+    claim_source_ids = set(claim.source_paper_ids)
+    if not claim_source_ids:
+        return False
+    return any(span.paper_id in claim_source_ids for span in spans)
+
+
+def _span_locator(span: EvidenceSpan) -> str:
+    parts = []
+    if span.page_start:
+        page = (
+            f"page {span.page_start}"
+            if span.page_start == span.page_end or not span.page_end
+            else f"pages {span.page_start}-{span.page_end}"
+        )
+        parts.append(page)
+    if span.char_start or span.char_end:
+        parts.append(f"chars {span.char_start}-{span.char_end}")
+    return ", ".join(parts) or "unlocated"
 
 
 # Backward-compatible name for the initial scaffold.

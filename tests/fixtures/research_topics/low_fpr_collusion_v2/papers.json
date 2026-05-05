@@ -1,0 +1,77 @@
+[
+  {
+    "id": "p-lfc-1",
+    "title": "Fixed-threshold benchmark for collusion detection",
+    "authors": [
+      "Synthetic Fixture Author"
+    ],
+    "abstract": "Synthetic fixture paper. We evaluate collusion detection with graph detector under fixed false-positive rate budgets on a synthetic collusion graph. This fixture is not real research.",
+    "year": 2025,
+    "venue": "Synthetic FixtureConf",
+    "source": "fixture",
+    "url": "https://example.test/lfc/1",
+    "pdf_url": "https://example.test/lfc/1.pdf",
+    "keywords": [
+      "collusion detection",
+      "false-positive rate",
+      "graph detector",
+      "benchmark"
+    ],
+    "citation_count": 32,
+    "roles": [
+      "benchmark"
+    ],
+    "raw_metadata": {
+      "fixture_notice": "synthetic, not real research"
+    }
+  },
+  {
+    "id": "p-lfc-2",
+    "title": "Deployment limitations in collusion detection",
+    "authors": [
+      "Synthetic Fixture Author"
+    ],
+    "abstract": "Synthetic fixture paper. The study reports that collusion detection systems often rely on synthetic collusion graph and do not validate deployment shift. This fixture is not real research.",
+    "year": 2024,
+    "venue": "Synthetic Fixture Workshop",
+    "source": "fixture",
+    "url": "https://example.test/lfc/2",
+    "pdf_url": "https://example.test/lfc/2.pdf",
+    "keywords": [
+      "collusion detection",
+      "deployment",
+      "limitation"
+    ],
+    "citation_count": 18,
+    "roles": [
+      "method"
+    ],
+    "raw_metadata": {
+      "fixture_notice": "synthetic, not real research"
+    }
+  },
+  {
+    "id": "p-lfc-3",
+    "title": "Fraud Screening tools for low false alarms",
+    "authors": [
+      "Synthetic Fixture Author"
+    ],
+    "abstract": "Synthetic fixture paper. Adjacent field work in fraud screening studies low false alarms but does not solve collusion detection. This fixture is not real research.",
+    "year": 2023,
+    "venue": "Synthetic Adjacent Fields",
+    "source": "fixture",
+    "url": "https://example.test/lfc/3",
+    "keywords": [
+      "fraud screening",
+      "false alarms",
+      "transfer"
+    ],
+    "citation_count": 41,
+    "roles": [
+      "adjacent_field"
+    ],
+    "raw_metadata": {
+      "fixture_notice": "synthetic, not real research"
+    }
+  }
+]

@@ -1,0 +1,113 @@
+[
+  {
+    "target_id": "dup-cde-1",
+    "idea_summary": "Fixed-threshold benchmark for cartel detection",
+    "query_plan": [
+      "\"Fixed-threshold benchmark\" cartel detection",
+      "cartel detection false accusation rate benchmark"
+    ],
+    "candidates_considered": [
+      "p-cde-1",
+      "p-cde-2",
+      "p-cde-3"
+    ],
+    "top_prior_work": [
+      "p-cde-1: Fixed-threshold benchmark for cartel detection (similarity 0.91)"
+    ],
+    "comparison_table": [
+      {
+        "paper_id": "p-cde-1",
+        "title": "Fixed-threshold benchmark for cartel detection",
+        "overall_similarity": 0.91,
+        "problem_overlap": 1.0,
+        "method_overlap": 0.8,
+        "evaluation_overlap": 1.0
+      }
+    ],
+    "decisive_difference_needed": "The idea must change problem setting, metric, dataset, or deployment condition to avoid duplication.",
+    "missing_searches": [],
+    "verdict": "reject",
+    "novelty_strength": "weak",
+    "confidence": "high",
+    "evidence_spans": [
+      {
+        "id": "span-p-cde-1-eval",
+        "paper_id": "p-cde-1",
+        "section_id": "sec-p-cde-1-eval",
+        "quote": "Evaluation section: market conduct anomaly model is tested on synthetic market panel with false accusation rate. The result is used only for offline GapForge evaluation.",
+        "page_start": 4,
+        "page_end": 5,
+        "char_start": 0,
+        "char_end": 169,
+        "locator": "p-cde-1:Evaluation:p4",
+        "evidence_type": "result",
+        "confidence": "medium"
+      }
+    ],
+    "reviewer_objection": "Closest prior work already covers the synthetic benchmark idea.",
+    "recommended_action": "Reject or substantially reframe the idea."
+  },
+  {
+    "target_id": "good-cde-1",
+    "idea_summary": "Deployment-shift false accusation rate audit for cartel detection",
+    "query_plan": [
+      "cartel detection deployment shift false accusation rate",
+      "market conduct anomaly model shifted synthetic market panel"
+    ],
+    "candidates_considered": [
+      "p-cde-1",
+      "p-cde-2",
+      "p-cde-3"
+    ],
+    "top_prior_work": [
+      "p-cde-1: Fixed-threshold benchmark for cartel detection (similarity 0.44)"
+    ],
+    "comparison_table": [
+      {
+        "paper_id": "p-cde-1",
+        "title": "Fixed-threshold benchmark for cartel detection",
+        "overall_similarity": 0.44,
+        "problem_overlap": 0.7,
+        "method_overlap": 0.7,
+        "evaluation_overlap": 0.5
+      }
+    ],
+    "decisive_difference_needed": "Show shifted deployment slices are not already evaluated by the closest benchmark paper.",
+    "missing_searches": [
+      "citation-neighborhood expansion around deployment shift"
+    ],
+    "verdict": "revise",
+    "novelty_strength": "weak",
+    "confidence": "medium",
+    "evidence_spans": [
+      {
+        "id": "span-p-cde-1-eval",
+        "paper_id": "p-cde-1",
+        "section_id": "sec-p-cde-1-eval",
+        "quote": "Evaluation section: market conduct anomaly model is tested on synthetic market panel with false accusation rate. The result is used only for offline GapForge evaluation.",
+        "page_start": 4,
+        "page_end": 5,
+        "char_start": 0,
+        "char_end": 169,
+        "locator": "p-cde-1:Evaluation:p4",
+        "evidence_type": "result",
+        "confidence": "medium"
+      },
+      {
+        "id": "span-p-cde-2-limitation",
+        "paper_id": "p-cde-2",
+        "section_id": "sec-p-cde-2-limitations",
+        "quote": "Limitations section: deployment shift and source coverage remain unresolved for cartel detection; adjacent collusion forensics evidence is only partial.",
+        "page_start": 6,
+        "page_end": 6,
+        "char_start": 0,
+        "char_end": 152,
+        "locator": "p-cde-2:Limitations:p6",
+        "evidence_type": "limitation",
+        "confidence": "medium"
+      }
+    ],
+    "reviewer_objection": "Closest benchmark overlaps; contribution needs sharper deployment-shift difference.",
+    "recommended_action": "Revise the setting and use closest prior work as a baseline."
+  }
+]

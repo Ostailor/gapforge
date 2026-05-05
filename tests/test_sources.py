@@ -85,6 +85,7 @@ def test_crossref_source_normalizes_public_api_response() -> None:
 
 
 def test_cached_http_client_reuses_cache(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.delenv("GAPFORGE_DISABLE_NETWORK", raising=False)
     calls = {"count": 0}
 
     class FakeResponse:

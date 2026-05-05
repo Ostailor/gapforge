@@ -2,10 +2,23 @@
 
 from __future__ import annotations
 
+import re
 from collections import Counter
 
 from gapforge.claim_ledger import ClaimLedger
-from gapforge.models import Claim, Evidence, Gap, PaperNote, Provenance, ResearchRunState
+from gapforge.models import (
+    Claim,
+    Evidence,
+    EvidenceSpan,
+    Gap,
+    GapEvidenceMatrix,
+    GapEvidenceRow,
+    PaperNote,
+    PaperSection,
+    Provenance,
+    ResearchRunState,
+)
+from gapforge.review.audit import locked_object_ids
 from gapforge.skills.base import Skill
 from gapforge.state import utc_now_iso
 
@@ -26,11 +39,37 @@ GAP_TYPES = {
 class GapMining(Skill):
     name = "gap-mining"
 
-    def run(self, state: ResearchRunState) -> ResearchRunState:
+    def run(self, state: ResearchRunState, *, force: bool = False) -> ResearchRunState:
         gaps = self.mine_gaps(state)
+        matrices = self.build_evidence_matrices(state, gaps)
+        _apply_matrix_confidence(state, gaps, matrices)
+        if not force:
+            gaps, matrices = _preserve_locked_gaps(state, gaps, matrices)
         state.gaps = gaps
+        state.gap_evidence_matrices = matrices
         state.claims = self._add_gap_claims(state, gaps).claims
         self.mark_complete(state)
+        return state
+
+    def run_filtered(
+        self,
+        state: ResearchRunState,
+        *,
+        min_confidence: str = "low",
+        include_low_confidence: bool = True,
+        force: bool = False,
+    ) -> ResearchRunState:
+        self.run(state, force=force)
+        threshold = "low" if include_low_confidence else min_confidence
+        allowed = _filter_by_confidence(state.gaps, threshold)
+        allowed_ids = {gap.id for gap in allowed}
+        if not force:
+            locked_ids = locked_object_ids(state, "gap")
+            locked = [gap for gap in state.gaps if gap.id in locked_ids and gap.id not in allowed_ids]
+            allowed.extend(locked)
+            allowed_ids |= {gap.id for gap in locked}
+        state.gaps = allowed
+        state.gap_evidence_matrices = [matrix for matrix in state.gap_evidence_matrices if matrix.gap_id in allowed_ids]
         return state
 
     def mine_gaps(self, state: ResearchRunState) -> list[Gap]:
@@ -43,10 +82,11 @@ class GapMining(Skill):
         gaps.extend(self._missing_metric_gaps(state, notes, claims))
         gaps.extend(self._missing_dataset_gaps(state, notes, claims))
         gaps.extend(self._assumption_gaps(state, notes, claims))
+        gaps.extend(self._full_text_evidence_gaps(state, notes, claims))
         gaps.extend(self._contradiction_gaps(state, claims))
         gaps.extend(self._cross_domain_gaps(state, claims))
 
-        if field_map is not None:
+        if field_map is not None and _adjacent_field_sources_searched(state):
             for candidate in field_map.initial_gap_candidates[:3]:
                 gaps.append(
                     self._make_gap(
@@ -64,6 +104,9 @@ class GapMining(Skill):
                 )
 
         return _dedupe_gaps(gaps)
+
+    def build_evidence_matrices(self, state: ResearchRunState, gaps: list[Gap]) -> list[GapEvidenceMatrix]:
+        return [_build_gap_evidence_matrix(state, gap) for gap in gaps]
 
     def _repeated_limitation_gaps(self, state: ResearchRunState, notes: list[PaperNote], claims: list[Claim]) -> list[Gap]:
         buckets = {
@@ -189,6 +232,53 @@ class GapMining(Skill):
             )
         return gaps
 
+    def _full_text_evidence_gaps(self, state: ResearchRunState, notes: list[PaperNote], claims: list[Claim]) -> list[Gap]:
+        gaps = []
+        span_paper_ids = {span.paper_id for span in state.evidence_spans}
+        full_text_paper_ids = {section.paper_id for section in state.paper_sections if section.text.strip()}
+        claimed_results_without_spans = [
+            note
+            for note in notes
+            if (note.main_results or note.metrics) and note.paper_id in full_text_paper_ids and note.paper_id not in span_paper_ids
+        ]
+        if len(claimed_results_without_spans) >= 2:
+            gaps.append(
+                self._make_gap(
+                    state=state,
+                    gap_type="reproducibility gap",
+                    title="Claimed metrics or results lack locator-backed evidence",
+                    description=(
+                        "Several full-text-aware notes mention metrics or results, but no page or section-level evidence span "
+                        "anchors those claims."
+                    ),
+                    notes=claimed_results_without_spans,
+                    claims=_claims_matching(claims, ["result", "metric", "evidence"]),
+                    reason="Existing notes cannot support audit-ready comparison without evidence spans for the claimed metrics/results.",
+                    risk="The evidence may exist in the paper text but the parser or reader did not capture the relevant span.",
+                    confidence="low",
+                    novelty_status="unchecked",
+                )
+            )
+        missing_full_text = [
+            note for note in notes if note.source_basis != "full text" and (note.metrics or note.main_results or note.stated_limitations)
+        ]
+        if len(missing_full_text) >= 2:
+            gaps.append(
+                self._make_gap(
+                    state=state,
+                    gap_type="reproducibility gap",
+                    title="Abstract-only evidence limits gap certainty",
+                    description="Several candidate signals rely on abstract-only notes rather than parsed full text.",
+                    notes=missing_full_text,
+                    claims=_claims_matching(claims, ["abstract", "full text", "evidence"]),
+                    reason="A gap should not be treated as settled until full-text sections confirm the metric, result, or limitation.",
+                    risk="Full text may contain the missing evaluation details and dissolve the apparent gap.",
+                    confidence="low",
+                    novelty_status="unchecked",
+                )
+            )
+        return gaps
+
     def _contradiction_gaps(self, state: ResearchRunState, claims: list[Claim]) -> list[Gap]:
         contradictions = state.field_map.contradictions if state.field_map else []
         return [
@@ -208,6 +298,8 @@ class GapMining(Skill):
         ]
 
     def _cross_domain_gaps(self, state: ResearchRunState, claims: list[Claim]) -> list[Gap]:
+        if not _adjacent_field_sources_searched(state):
+            return []
         adjacent_fields = state.field_map.adjacent_fields if state.field_map else []
         dominant_methods = state.field_map.dominant_methods if state.field_map else []
         gaps = []
@@ -343,9 +435,428 @@ def _claims_matching(claims: list[Claim], terms: list[str]) -> list[Claim]:
     return [claim for claim in claims if any(term in (claim.text + " " + claim.notes).lower() for term in lowered)]
 
 
+def _build_gap_evidence_matrix(state: ResearchRunState, gap: Gap) -> GapEvidenceMatrix:
+    note_by_paper = {note.paper_id: note for note in state.paper_notes}
+    section_by_id = {section.id: section for section in state.paper_sections}
+    gap_terms = _gap_terms(gap)
+    rows: list[GapEvidenceRow] = []
+    for paper_id in gap.supporting_paper_ids or gap.linked_paper_ids:
+        note = note_by_paper.get(paper_id)
+        if note is not None:
+            rows.extend(_support_rows_from_note(note, gap, gap_terms, state.evidence_spans, section_by_id))
+    rows.extend(_span_rows_for_gap(gap, gap_terms, state.evidence_spans, section_by_id))
+    rows.extend(_claim_rows_for_gap(gap, state.claims))
+    rows.extend(_counter_rows_for_gap(gap, state.paper_notes, state.evidence_spans, section_by_id))
+    rows = _dedupe_rows(rows)
+    support_papers = _dedupe([row.paper_id for row in rows if row.supports_or_counters == "supports"])
+    counter_papers = _dedupe([row.paper_id for row in rows if row.supports_or_counters == "counters"])
+    repeated_limitation_count = len(
+        {row.paper_id for row in rows if row.supports_or_counters == "supports" and row.evidence_type in {"limitation", "negative-result"}}
+    )
+    missing_metric_count = len(
+        {row.paper_id for row in rows if row.supports_or_counters == "supports" and row.evidence_type == "missing-metric"}
+    )
+    missing_dataset_count = len(
+        {row.paper_id for row in rows if row.supports_or_counters == "supports" and row.evidence_type == "missing-dataset"}
+    )
+    assumption_pattern_count = len(
+        {row.paper_id for row in rows if row.supports_or_counters == "supports" and row.evidence_type == "assumption"}
+    )
+    confidence = _matrix_confidence(state, rows, support_papers, counter_papers)
+    return GapEvidenceMatrix(
+        gap_id=gap.id,
+        evidence_rows=rows,
+        papers_supporting=support_papers,
+        papers_countering=counter_papers,
+        repeated_limitation_count=repeated_limitation_count,
+        missing_metric_count=missing_metric_count,
+        missing_dataset_count=missing_dataset_count,
+        assumption_pattern_count=assumption_pattern_count,
+        confidence=confidence,
+        provenance=Provenance(
+            created_by_skill=GapMining.name,
+            source_ids=support_papers + counter_papers,
+            timestamp=utc_now_iso(),
+            reasoning_summary="Built evidence matrix from paper notes, evidence spans, claims, and counterevidence heuristics.",
+        ),
+    )
+
+
+def _support_rows_from_note(
+    note: PaperNote,
+    gap: Gap,
+    gap_terms: set[str],
+    spans: list[EvidenceSpan],
+    section_by_id: dict[str, PaperSection],
+) -> list[GapEvidenceRow]:
+    rows: list[GapEvidenceRow] = []
+    for text in note.stated_limitations + note.what_it_cannot_answer + note.unstated_limitations:
+        if _relevant(text, gap_terms) or _type_relevant(gap.type, text):
+            rows.append(_row_from_note(note, text, "limitation", "supports", spans, section_by_id))
+    for assumption in note.assumptions:
+        if gap.type == "assumption gap" or _relevant(assumption, gap_terms):
+            rows.append(_row_from_note(note, assumption, "assumption", "supports", spans, section_by_id))
+    if gap.type in {"measurement gap", "evaluation gap"} and not note.metrics:
+        rows.append(_row_from_note(note, "Structured note has no extracted metrics.", "missing-metric", "supports", spans, section_by_id))
+    if gap.type in {"benchmark gap", "deployment gap"} and not note.datasets:
+        rows.append(
+            _row_from_note(
+                note,
+                "Structured note has no extracted datasets or benchmarks.",
+                "missing-dataset",
+                "supports",
+                spans,
+                section_by_id,
+            )
+        )
+    if gap.type == "deployment gap" and note.datasets and all("synthetic" in item.lower() for item in note.datasets):
+        rows.append(
+            _row_from_note(
+                note,
+                "Structured note reports synthetic-only dataset evidence.",
+                "missing-dataset",
+                "supports",
+                spans,
+                section_by_id,
+            )
+        )
+    if not rows and note.one_sentence_summary:
+        rows.append(_row_from_note(note, note.one_sentence_summary, "contextual", "contextual", spans, section_by_id))
+    return rows
+
+
+def _span_rows_for_gap(
+    gap: Gap,
+    gap_terms: set[str],
+    spans: list[EvidenceSpan],
+    section_by_id: dict[str, PaperSection],
+) -> list[GapEvidenceRow]:
+    rows = []
+    support_ids = set(gap.supporting_paper_ids or gap.linked_paper_ids)
+    for span in spans:
+        if support_ids and span.paper_id not in support_ids:
+            continue
+        if not _relevant(span.quote, gap_terms) and not _type_relevant(gap.type, span.quote):
+            continue
+        rows.append(_row_from_span(span, "supports", section_by_id))
+    return rows
+
+
+def _claim_rows_for_gap(gap: Gap, claims: list[Claim]) -> list[GapEvidenceRow]:
+    rows = []
+    claim_by_id = {claim.id: claim for claim in claims}
+    for claim_id in gap.supporting_claim_ids:
+        claim = claim_by_id.get(claim_id)
+        if claim is None:
+            continue
+        for paper_id in claim.source_paper_ids or [""]:
+            rows.append(
+                GapEvidenceRow(
+                    paper_id=paper_id,
+                    claim_or_note_id=claim.id,
+                    evidence_type=claim.type,
+                    text=claim.text,
+                    supports_or_counters="supports",
+                    locator="claim-ledger",
+                )
+            )
+    for claim_id in gap.counterevidence_claim_ids:
+        claim = claim_by_id.get(claim_id)
+        if claim is None:
+            continue
+        for paper_id in claim.source_paper_ids or [""]:
+            rows.append(
+                GapEvidenceRow(
+                    paper_id=paper_id,
+                    claim_or_note_id=claim.id,
+                    evidence_type=claim.type,
+                    text=claim.text,
+                    supports_or_counters="counters",
+                    locator="claim-ledger",
+                )
+            )
+    return rows
+
+
+def _counter_rows_for_gap(
+    gap: Gap,
+    notes: list[PaperNote],
+    spans: list[EvidenceSpan],
+    section_by_id: dict[str, PaperSection],
+) -> list[GapEvidenceRow]:
+    support_ids = set(gap.supporting_paper_ids or gap.linked_paper_ids)
+    rows = []
+    for note in notes:
+        if note.paper_id in support_ids:
+            continue
+        counter_text = _counter_text(gap, note)
+        if counter_text:
+            rows.append(_row_from_note(note, counter_text, "counterevidence", "counters", spans, section_by_id))
+    return rows
+
+
+def _row_from_note(
+    note: PaperNote,
+    text: str,
+    evidence_type: str,
+    supports_or_counters: str,
+    spans: list[EvidenceSpan],
+    section_by_id: dict[str, PaperSection],
+) -> GapEvidenceRow:
+    span = _best_span(note.paper_id, text, spans)
+    section = section_by_id.get(span.section_id) if span is not None else None
+    return GapEvidenceRow(
+        paper_id=note.paper_id,
+        claim_or_note_id=f"note:{note.paper_id}",
+        evidence_span_id=span.id if span is not None else "",
+        evidence_type=evidence_type,
+        text=text,
+        supports_or_counters=supports_or_counters,
+        section_type=section.section_type if section is not None else "",
+        locator=span.locator if span is not None else note.citation_key or note.paper_id,
+    )
+
+
+def _row_from_span(span: EvidenceSpan, supports_or_counters: str, section_by_id: dict[str, PaperSection]) -> GapEvidenceRow:
+    section = section_by_id.get(span.section_id)
+    return GapEvidenceRow(
+        paper_id=span.paper_id,
+        claim_or_note_id="",
+        evidence_span_id=span.id,
+        evidence_type=span.evidence_type,
+        text=span.quote,
+        supports_or_counters=supports_or_counters,
+        section_type=section.section_type if section is not None else "",
+        locator=span.locator or _span_locator(span, section),
+    )
+
+
+def _matrix_confidence(
+    state: ResearchRunState,
+    rows: list[GapEvidenceRow],
+    support_papers: list[str],
+    counter_papers: list[str],
+) -> str:
+    support_rows = [row for row in rows if row.supports_or_counters == "supports"]
+    span_rows = [row for row in support_rows if row.evidence_span_id]
+    abstract_only = _mostly_abstract_only(state, support_papers)
+    coverage_low = state.source_coverage is None or state.source_coverage.confidence == "low"
+    counter_search = _counterevidence_search_present(state)
+    if len(support_papers) >= 2 and span_rows and counter_search and not counter_papers and not coverage_low and not abstract_only:
+        return "high"
+    if (len(support_papers) >= 2 or span_rows) and not counter_papers and not abstract_only:
+        return "medium"
+    if span_rows and not coverage_low:
+        return "medium"
+    return "low"
+
+
+def _apply_matrix_confidence(state: ResearchRunState, gaps: list[Gap], matrices: list[GapEvidenceMatrix]) -> None:
+    matrix_by_gap = {matrix.gap_id: matrix for matrix in matrices}
+    for gap in gaps:
+        matrix = matrix_by_gap.get(gap.id)
+        if matrix is None:
+            gap.confidence = "low"
+            if not gap.explicit_reason:
+                gap.explicit_reason = "No evidence matrix could be built for this gap."
+            continue
+        gap.confidence = _min_confidence(gap.confidence, matrix.confidence)
+        if matrix.papers_countering:
+            gap.confidence = _lower_confidence(gap.confidence)
+            counter_text = f" Potential counterevidence papers: {', '.join(matrix.papers_countering[:5])}."
+            if counter_text not in gap.risk_that_gap_is_fake:
+                gap.risk_that_gap_is_fake = (gap.risk_that_gap_is_fake + counter_text).strip()
+        if not matrix.evidence_rows and not gap.explicit_reason:
+            gap.explicit_reason = "No note, claim, or span evidence was available for the evidence matrix."
+
+
+def _filter_by_confidence(gaps: list[Gap], min_confidence: str) -> list[Gap]:
+    threshold = CONFIDENCE_ORDER.get(min_confidence, 1)
+    return [gap for gap in gaps if CONFIDENCE_ORDER.get(gap.confidence, 1) >= threshold]
+
+
+def _preserve_locked_gaps(
+    state: ResearchRunState,
+    new_gaps: list[Gap],
+    new_matrices: list[GapEvidenceMatrix],
+) -> tuple[list[Gap], list[GapEvidenceMatrix]]:
+    locked_ids = locked_object_ids(state, "gap")
+    if not locked_ids:
+        return new_gaps, new_matrices
+
+    locked_gaps = {gap.id: gap for gap in state.gaps if gap.id in locked_ids}
+    locked_matrices = {matrix.gap_id: matrix for matrix in state.gap_evidence_matrices if matrix.gap_id in locked_ids}
+
+    merged_gaps = [locked_gaps.get(gap.id, gap) for gap in new_gaps]
+    gap_ids = {gap.id for gap in merged_gaps}
+    merged_gaps.extend(gap for gap_id, gap in locked_gaps.items() if gap_id not in gap_ids)
+
+    merged_matrices = [locked_matrices.get(matrix.gap_id, matrix) for matrix in new_matrices]
+    matrix_ids = {matrix.gap_id for matrix in merged_matrices}
+    merged_matrices.extend(matrix for gap_id, matrix in locked_matrices.items() if gap_id not in matrix_ids)
+    return merged_gaps, merged_matrices
+
+
 def _has_any(values: list[str], terms: list[str]) -> bool:
     text = " ".join(values).lower()
     return any(term in text for term in terms)
+
+
+CONFIDENCE_ORDER = {"low": 1, "medium": 2, "high": 3}
+STOP_WORDS = {
+    "and",
+    "are",
+    "for",
+    "from",
+    "that",
+    "the",
+    "this",
+    "with",
+    "without",
+    "gap",
+    "papers",
+    "paper",
+    "work",
+}
+
+
+def _gap_terms(gap: Gap) -> set[str]:
+    text = " ".join(
+        [
+            gap.title,
+            gap.description,
+            gap.type,
+            gap.why_existing_work_does_not_solve_it,
+            gap.minimum_experiment_needed,
+        ]
+    )
+    return {token for token in re.findall(r"[a-z0-9]+", text.lower()) if token not in STOP_WORDS and len(token) > 3}
+
+
+def _relevant(text: str, terms: set[str]) -> bool:
+    if not text or not terms:
+        return False
+    tokens = set(re.findall(r"[a-z0-9]+", text.lower()))
+    return len(tokens & terms) >= 1
+
+
+def _type_relevant(gap_type: str, text: str) -> bool:
+    lowered = text.lower()
+    type_terms = {
+        "benchmark gap": ["benchmark", "dataset", "label", "ground truth"],
+        "evaluation gap": ["evaluation", "metric", "baseline", "result"],
+        "measurement gap": ["metric", "false positive", "specificity", "precision", "recall"],
+        "assumption gap": ["assume", "assumption", "controlled", "synthetic"],
+        "deployment gap": ["deployment", "real-world", "real world", "shift", "external"],
+        "reproducibility gap": ["code", "reproduc", "replication", "implementation"],
+        "negative-result gap": ["negative", "failure", "fails", "cannot"],
+        "theory gap": ["theory", "contradiction", "explain"],
+        "scalability gap": ["scale", "scalability", "large-scale", "latency"],
+        "cross-domain gap": ["transfer", "adjacent", "imported"],
+    }
+    return any(term in lowered for term in type_terms.get(gap_type, []))
+
+
+def _best_span(paper_id: str, text: str, spans: list[EvidenceSpan]) -> EvidenceSpan | None:
+    candidates = [span for span in spans if span.paper_id == paper_id]
+    if not candidates:
+        return None
+    text_tokens = set(re.findall(r"[a-z0-9]+", text.lower()))
+    best: tuple[int, EvidenceSpan] | None = None
+    for span in candidates:
+        overlap = len(text_tokens & set(re.findall(r"[a-z0-9]+", span.quote.lower())))
+        if best is None or overlap > best[0]:
+            best = (overlap, span)
+    if best is not None and best[0] > 0:
+        return best[1]
+    return None
+
+
+def _span_locator(span: EvidenceSpan, section: PaperSection | None) -> str:
+    if span.locator:
+        return span.locator
+    section_name = section.normalized_title or section.title if section is not None else "section"
+    page = span.page_start or (section.page_start if section is not None else 0)
+    return f"{span.paper_id}:{section_name}:p{page}" if page else f"{span.paper_id}:{section_name}"
+
+
+def _counter_text(gap: Gap, note: PaperNote) -> str:
+    lowered_gap = " ".join([gap.title, gap.description, gap.type]).lower()
+    if gap.type in {"measurement gap", "evaluation gap"} and note.metrics:
+        metric_text = " ".join(note.metrics).lower()
+        if "false" in lowered_gap and any(term in metric_text for term in ["false positive", "false-positive", "specificity", "fpr"]):
+            return f"Note reports relevant metrics: {', '.join(note.metrics)}."
+        if "metric" in lowered_gap:
+            return f"Note reports metrics: {', '.join(note.metrics)}."
+    if gap.type == "benchmark gap" and note.datasets:
+        return f"Note reports datasets or benchmarks: {', '.join(note.datasets)}."
+    if gap.type == "deployment gap":
+        text = " ".join(note.datasets + note.main_results + note.stated_limitations).lower()
+        if any(term in text for term in ["real-world", "real world", "deployment", "external"]):
+            return "Note appears to include deployment or real-world evidence."
+    if gap.type == "reproducibility gap":
+        text = " ".join(note.useful_technical_tools + note.main_results + note.stated_limitations).lower()
+        if any(term in text for term in ["code available", "replication", "reproducible"]):
+            return "Note appears to include reproducibility evidence."
+    if gap.type == "assumption gap":
+        text = " ".join(note.main_results + note.stated_limitations + note.what_it_cannot_answer).lower()
+        if any(term in text for term in ["ablation", "tested", "validated", "robust"]):
+            return "Note appears to test or validate the relevant assumption."
+    return ""
+
+
+def _mostly_abstract_only(state: ResearchRunState, paper_ids: list[str]) -> bool:
+    if not paper_ids:
+        return True
+    notes = [note for note in state.paper_notes if note.paper_id in set(paper_ids)]
+    if not notes:
+        return False
+    return sum(1 for note in notes if note.source_basis != "full text") >= max(1, len(notes) // 2)
+
+
+def _counterevidence_search_present(state: ResearchRunState) -> bool:
+    return bool(
+        state.novelty_assessments
+        or state.novelty_dossiers
+        or any(record.purpose in {"novelty", "citation_expansion"} for record in state.search_queries)
+    )
+
+
+def _adjacent_field_sources_searched(state: ResearchRunState) -> bool:
+    if state.field_map is None:
+        return False
+    adjacent_fields = [field.lower() for field in state.field_map.adjacent_fields]
+    if not adjacent_fields:
+        return False
+    for record in state.search_queries:
+        query = record.query.lower()
+        if record.purpose == "analogy" and any(field in query for field in adjacent_fields):
+            return True
+    return any(analogy.papers_or_sources_to_search for analogy in state.cross_domain_analogies)
+
+
+def _dedupe_rows(rows: list[GapEvidenceRow]) -> list[GapEvidenceRow]:
+    seen: set[tuple[str, str, str, str]] = set()
+    deduped = []
+    for row in rows:
+        key = (row.paper_id, row.evidence_span_id, row.evidence_type, row.text[:120])
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(row)
+    return deduped
+
+
+def _min_confidence(left: str, right: str) -> str:
+    return left if CONFIDENCE_ORDER.get(left, 1) <= CONFIDENCE_ORDER.get(right, 1) else right
+
+
+def _lower_confidence(value: str) -> str:
+    if value == "high":
+        return "medium"
+    if value == "medium":
+        return "low"
+    return "low"
 
 
 def _why_it_matters(gap_type: str, topic: str) -> str:

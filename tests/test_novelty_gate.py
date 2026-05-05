@@ -7,7 +7,8 @@ import sys
 from pathlib import Path
 
 from gapforge.config import GapForgeConfig
-from gapforge.models import ExperimentPlan, Gap, Hypothesis, NoveltyAssessment, Paper
+from gapforge.models import ExperimentPlan, Gap, Hypothesis, NoveltyAssessment, Paper, PaperSection, SearchQueryRecord, SourceCoverageReport
+from gapforge.novelty.comparator import PriorWorkComparator
 from gapforge.skills.novelty_gate import NoveltyGate
 from gapforge.state import ResearchStateManager
 
@@ -42,6 +43,9 @@ def test_novelty_gate_rejects_duplicate_idea(tmp_path: Path) -> None:
     assert state.gaps[0].novelty_status == "likely_not_new"
     assert state.rejected_ideas
     assert any(claim.type == "novelty" for claim in state.claims)
+    assert state.novelty_dossiers
+    assert state.novelty_dossiers[0].top_prior_work
+    assert state.novelty_dossiers[0].decisive_difference_needed
 
 
 def test_novelty_gate_revises_near_duplicate_idea(tmp_path: Path) -> None:
@@ -72,26 +76,27 @@ def test_novelty_gate_revises_near_duplicate_idea(tmp_path: Path) -> None:
     assert assessment.verdict == "revise"
     assert assessment.novelty_strength == "weak"
     assert state.gaps[0].novelty_status == "weak"
+    assert state.novelty_dossiers[0].recommended_action.startswith("Revise")
 
 
-def test_novelty_gate_pursues_distinct_but_related_idea(tmp_path: Path) -> None:
+def test_novelty_gate_marks_plausibly_new_idea_unknown_when_coverage_is_weak(tmp_path: Path) -> None:
     state = _state_with_gap(
         tmp_path,
         Gap(
-            id="gap-pursue",
+            id="gap-weak-coverage",
             title="Abstention-aware collusion detection under false-positive budgets",
             description="Evaluate collusion detection with abstention under fixed false-positive budgets.",
             supporting_paper_ids=["p-related"],
-            why_existing_work_does_not_solve_it="Closest work studies anomaly detection, not collusion-specific evaluation.",
-            minimum_experiment_needed="Compare against selective anomaly detection baselines at fixed false-positive budgets.",
-            risk_that_gap_is_fake="Selective classification papers may already include a collusion benchmark.",
+            why_existing_work_does_not_solve_it="Closest work studies industrial monitoring, not collusion-specific evaluation.",
+            minimum_experiment_needed="Compare against alert calibration baselines at fixed false-positive budgets.",
+            risk_that_gap_is_fake="Alert calibration papers may already solve the false-positive budget piece.",
         ),
         [
             Paper(
                 id="p-related",
-                title="Selective classification for anomaly detection with false-positive budgets",
+                title="Calibrating probabilistic alerts in industrial monitoring",
                 authors=["C"],
-                abstract="Selective classification abstains on uncertain anomaly predictions under false-positive budgets.",
+                abstract="We study alert calibration, false positive budgets, precision and recall for industrial monitoring systems.",
                 year=2023,
                 source="fixture",
             )
@@ -101,9 +106,46 @@ def test_novelty_gate_pursues_distinct_but_related_idea(tmp_path: Path) -> None:
     NoveltyGate().run(state)
 
     assessment = state.novelty_assessments[0]
+    assert assessment.verdict == "unknown"
+    assert assessment.novelty_strength == "unknown"
+    assert state.gaps[0].novelty_status == "unchecked"
+    assert any("source connector search" in item for item in assessment.missing_searches)
+
+
+def test_novelty_gate_pursues_distinct_but_related_idea_with_strong_coverage(tmp_path: Path) -> None:
+    state = _state_with_gap(
+        tmp_path,
+        Gap(
+            id="gap-pursue",
+            title="Abstention-aware collusion detection under false-positive budgets",
+            description="Evaluate collusion detection with abstention under fixed false-positive budgets.",
+            supporting_paper_ids=["p-related"],
+            why_existing_work_does_not_solve_it="Closest work studies industrial monitoring, not collusion-specific evaluation.",
+            minimum_experiment_needed="Compare against alert calibration baselines at fixed false-positive budgets.",
+            risk_that_gap_is_fake="Alert calibration papers may already solve the false-positive budget piece.",
+        ),
+        [
+            Paper(
+                id="p-related",
+                title="Calibrating probabilistic alerts in industrial monitoring",
+                authors=["C"],
+                abstract="We study alert calibration, false positive budgets, precision and recall for industrial monitoring systems.",
+                year=2023,
+                source="fixture",
+            )
+        ],
+    )
+    _mark_coverage_strong(state, ["p-related"])
+
+    NoveltyGate().run(state)
+
+    assessment = state.novelty_assessments[0]
     assert assessment.verdict == "pursue"
     assert assessment.novelty_strength == "medium"
+    assert assessment.novelty_strength != "strong"
     assert state.gaps[0].novelty_status == "medium"
+    assert state.novelty_dossiers[0].top_prior_work
+    assert "closest prior work" in state.novelty_dossiers[0].recommended_action.lower()
 
 
 def test_novelty_gate_marks_unsearched_idea_unknown(tmp_path: Path) -> None:
@@ -126,6 +168,46 @@ def test_novelty_gate_marks_unsearched_idea_unknown(tmp_path: Path) -> None:
     assert assessment.novelty_strength == "unknown"
     assert assessment.missing_searches
     assert not state.claims
+    assert state.novelty_dossiers[0].verdict == "unknown"
+
+
+def test_full_text_section_overlap_increases_prior_work_similarity(tmp_path: Path) -> None:
+    paper = Paper(
+        id="p-fulltext",
+        title="Analyst queue monitoring for alert systems",
+        authors=["D"],
+        abstract="We study false positive monitoring budgets for alert systems.",
+        year=2024,
+        source="fixture",
+    )
+    gap = Gap(
+        id="gap-fulltext",
+        title="False-positive calibrated collusion detection benchmark",
+        description="Evaluate collusion detection with false-positive budgets and benchmark metrics.",
+        minimum_experiment_needed="Run a benchmark using false-positive budgets and collusion detection metrics.",
+    )
+    comparator = PriorWorkComparator()
+    without_sections = comparator.compare(" ".join([gap.title, gap.description, gap.minimum_experiment_needed]), [paper], gap=gap)
+    with_sections = comparator.compare(
+        " ".join([gap.title, gap.description, gap.minimum_experiment_needed]),
+        [paper],
+        gap=gap,
+        sections=[
+            PaperSection(
+                id="section-1",
+                paper_id="p-fulltext",
+                title="Evaluation",
+                section_type="experiments",
+                text="The benchmark evaluates collusion detection under false-positive budgets with precision and recall metrics.",
+                page_start=5,
+                page_end=6,
+                confidence="high",
+            )
+        ],
+    )
+
+    assert with_sections[0].full_text_similarity > 0
+    assert with_sections[0].overall_similarity > without_sections[0].overall_similarity
 
 
 def test_novelty_gate_writes_artifacts_and_validates_paper_ready_experiments(tmp_path: Path) -> None:
@@ -188,6 +270,19 @@ def test_novelty_check_cli(tmp_path: Path) -> None:
     assert "novelty assessments" in novelty.stdout
     assert (run_dir / "novelty_gate.md").exists()
 
+    dossier = subprocess.run(
+        [sys.executable, "-m", "gapforge.cli", "novelty-dossier", "--run-id", run_dir.name, "--gap-id", gap_id],
+        cwd=tmp_path,
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert dossier.returncode == 0, dossier.stderr
+    assert "novelty dossiers" in dossier.stdout
+    assert (run_dir / "novelty_dossiers.md").exists()
+
 
 def _state_with_gap(tmp_path: Path, gap: Gap, papers: list[Paper]):
     manager = ResearchStateManager(GapForgeConfig.from_cwd(tmp_path))
@@ -195,3 +290,37 @@ def _state_with_gap(tmp_path: Path, gap: Gap, papers: list[Paper]):
     state.gaps = [gap]
     state.papers = papers
     return state
+
+
+def _mark_coverage_strong(state, paper_ids: list[str]) -> None:
+    record = SearchQueryRecord(
+        id="query-coverage",
+        query=state.topic.text,
+        source_names=["fixture"],
+        purpose="novelty",
+        max_results=20,
+        result_paper_ids=paper_ids,
+    )
+    state.search_queries = [record]
+    state.paper_sections = [
+        PaperSection(
+            id=f"section-{paper_id}",
+            paper_id=paper_id,
+            title="Evaluation",
+            section_type="experiments",
+            text="This full-text fixture records evaluation coverage for closest-prior-work comparison.",
+            page_start=1,
+            page_end=2,
+            confidence="medium",
+        )
+        for paper_id in paper_ids
+    ]
+    state.source_coverage = SourceCoverageReport(
+        run_id=state.run_id,
+        topic=state.topic.text,
+        searched_sources=["fixture"],
+        query_records=[record],
+        papers_by_source={"fixture": len(paper_ids)},
+        papers_with_full_text=paper_ids,
+        confidence="high",
+    )

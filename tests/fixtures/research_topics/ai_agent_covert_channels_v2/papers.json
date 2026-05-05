@@ -1,0 +1,77 @@
+[
+  {
+    "id": "p-acc-1",
+    "title": "Fixed-threshold benchmark for agent covert-channel detection",
+    "authors": [
+      "Synthetic Fixture Author"
+    ],
+    "abstract": "Synthetic fixture paper. We evaluate agent covert-channel detection with communication trace monitor under fixed covert-signal false alarm rate budgets on a synthetic multi-agent transcript benchmark. This fixture is not real research.",
+    "year": 2025,
+    "venue": "Synthetic FixtureConf",
+    "source": "fixture",
+    "url": "https://example.test/acc/1",
+    "pdf_url": "https://example.test/acc/1.pdf",
+    "keywords": [
+      "agent covert-channel detection",
+      "covert-signal false alarm rate",
+      "communication trace monitor",
+      "benchmark"
+    ],
+    "citation_count": 32,
+    "roles": [
+      "benchmark"
+    ],
+    "raw_metadata": {
+      "fixture_notice": "synthetic, not real research"
+    }
+  },
+  {
+    "id": "p-acc-2",
+    "title": "Deployment limitations in agent covert-channel detection",
+    "authors": [
+      "Synthetic Fixture Author"
+    ],
+    "abstract": "Synthetic fixture paper. The study reports that agent covert-channel detection systems often rely on synthetic multi-agent transcript benchmark and do not validate deployment shift. This fixture is not real research.",
+    "year": 2024,
+    "venue": "Synthetic Fixture Workshop",
+    "source": "fixture",
+    "url": "https://example.test/acc/2",
+    "pdf_url": "https://example.test/acc/2.pdf",
+    "keywords": [
+      "agent covert-channel detection",
+      "deployment",
+      "limitation"
+    ],
+    "citation_count": 18,
+    "roles": [
+      "method"
+    ],
+    "raw_metadata": {
+      "fixture_notice": "synthetic, not real research"
+    }
+  },
+  {
+    "id": "p-acc-3",
+    "title": "Network Covert Channels tools for low false alarms",
+    "authors": [
+      "Synthetic Fixture Author"
+    ],
+    "abstract": "Synthetic fixture paper. Adjacent field work in network covert channels studies low false alarms but does not solve agent covert-channel detection. This fixture is not real research.",
+    "year": 2023,
+    "venue": "Synthetic Adjacent Fields",
+    "source": "fixture",
+    "url": "https://example.test/acc/3",
+    "keywords": [
+      "network covert channels",
+      "false alarms",
+      "transfer"
+    ],
+    "citation_count": 41,
+    "roles": [
+      "adjacent_field"
+    ],
+    "raw_metadata": {
+      "fixture_notice": "synthetic, not real research"
+    }
+  }
+]

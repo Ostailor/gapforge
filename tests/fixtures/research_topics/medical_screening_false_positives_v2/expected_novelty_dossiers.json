@@ -1,0 +1,113 @@
+[
+  {
+    "target_id": "dup-msf-1",
+    "idea_summary": "Fixed-threshold benchmark for medical screening",
+    "query_plan": [
+      "\"Fixed-threshold benchmark\" medical screening",
+      "medical screening specificity at fixed recall benchmark"
+    ],
+    "candidates_considered": [
+      "p-msf-1",
+      "p-msf-2",
+      "p-msf-3"
+    ],
+    "top_prior_work": [
+      "p-msf-1: Fixed-threshold benchmark for medical screening (similarity 0.91)"
+    ],
+    "comparison_table": [
+      {
+        "paper_id": "p-msf-1",
+        "title": "Fixed-threshold benchmark for medical screening",
+        "overall_similarity": 0.91,
+        "problem_overlap": 1.0,
+        "method_overlap": 0.8,
+        "evaluation_overlap": 1.0
+      }
+    ],
+    "decisive_difference_needed": "The idea must change problem setting, metric, dataset, or deployment condition to avoid duplication.",
+    "missing_searches": [],
+    "verdict": "reject",
+    "novelty_strength": "weak",
+    "confidence": "high",
+    "evidence_spans": [
+      {
+        "id": "span-p-msf-1-eval",
+        "paper_id": "p-msf-1",
+        "section_id": "sec-p-msf-1-eval",
+        "quote": "Evaluation section: calibrated screening classifier is tested on synthetic screening cohort with specificity at fixed recall. The result is used only for offline GapForge evaluation.",
+        "page_start": 4,
+        "page_end": 5,
+        "char_start": 0,
+        "char_end": 182,
+        "locator": "p-msf-1:Evaluation:p4",
+        "evidence_type": "result",
+        "confidence": "medium"
+      }
+    ],
+    "reviewer_objection": "Closest prior work already covers the synthetic benchmark idea.",
+    "recommended_action": "Reject or substantially reframe the idea."
+  },
+  {
+    "target_id": "good-msf-1",
+    "idea_summary": "Deployment-shift specificity at fixed recall audit for medical screening",
+    "query_plan": [
+      "medical screening deployment shift specificity at fixed recall",
+      "calibrated screening classifier shifted synthetic screening cohort"
+    ],
+    "candidates_considered": [
+      "p-msf-1",
+      "p-msf-2",
+      "p-msf-3"
+    ],
+    "top_prior_work": [
+      "p-msf-1: Fixed-threshold benchmark for medical screening (similarity 0.44)"
+    ],
+    "comparison_table": [
+      {
+        "paper_id": "p-msf-1",
+        "title": "Fixed-threshold benchmark for medical screening",
+        "overall_similarity": 0.44,
+        "problem_overlap": 0.7,
+        "method_overlap": 0.7,
+        "evaluation_overlap": 0.5
+      }
+    ],
+    "decisive_difference_needed": "Show shifted deployment slices are not already evaluated by the closest benchmark paper.",
+    "missing_searches": [
+      "citation-neighborhood expansion around deployment shift"
+    ],
+    "verdict": "revise",
+    "novelty_strength": "weak",
+    "confidence": "medium",
+    "evidence_spans": [
+      {
+        "id": "span-p-msf-1-eval",
+        "paper_id": "p-msf-1",
+        "section_id": "sec-p-msf-1-eval",
+        "quote": "Evaluation section: calibrated screening classifier is tested on synthetic screening cohort with specificity at fixed recall. The result is used only for offline GapForge evaluation.",
+        "page_start": 4,
+        "page_end": 5,
+        "char_start": 0,
+        "char_end": 182,
+        "locator": "p-msf-1:Evaluation:p4",
+        "evidence_type": "result",
+        "confidence": "medium"
+      },
+      {
+        "id": "span-p-msf-2-limitation",
+        "paper_id": "p-msf-2",
+        "section_id": "sec-p-msf-2-limitations",
+        "quote": "Limitations section: deployment shift and source coverage remain unresolved for medical screening; adjacent industrial quality control evidence is only partial.",
+        "page_start": 6,
+        "page_end": 6,
+        "char_start": 0,
+        "char_end": 160,
+        "locator": "p-msf-2:Limitations:p6",
+        "evidence_type": "limitation",
+        "confidence": "medium"
+      }
+    ],
+    "reviewer_objection": "Closest benchmark overlaps; contribution needs sharper deployment-shift difference.",
+    "recommended_action": "Revise the setting and use closest prior work as a baseline."
+  }
+]

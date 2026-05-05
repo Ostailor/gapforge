@@ -1,0 +1,31 @@
+[
+  {
+    "id": "good-lsm-1",
+    "title": "Deployment-shift substitution precision audit for lexical substitution monitoring",
+    "type": "evaluation gap",
+    "description": "Synthetic fixture gap: lexical substitution monitoring needs evaluation under deployment shift while preserving substitution precision constraints.",
+    "supporting_paper_ids": [
+      "p-lsm-1",
+      "p-lsm-2"
+    ],
+    "why_existing_work_does_not_solve_it": "Fixture papers test semantic drift monitor and discuss limitations, but do not jointly resolve deployment shift.",
+    "minimum_experiment_needed": "Run semantic drift monitor and a simple baseline on shifted edited text stream corpus slices at fixed substitution precision.",
+    "risk_that_gap_is_fake": "Synthetic fixture risk: real prior work may already include this exact audit.",
+    "confidence": "medium",
+    "novelty_status": "unchecked"
+  },
+  {
+    "id": "good-lsm-2",
+    "title": "Adjacent software provenance transfer requires mechanism evidence",
+    "type": "cross-domain gap",
+    "description": "Synthetic fixture gap: software provenance offers low-false-alarm tools, but transfer to lexical substitution monitoring needs evidence-backed adaptation.",
+    "supporting_paper_ids": [
+      "p-lsm-3"
+    ],
+    "why_existing_work_does_not_solve_it": "Adjacent evidence is technical but not directly validated in the target domain.",
+    "minimum_experiment_needed": "Adapt one software provenance mechanism and compare against semantic drift monitor at fixed substitution precision.",
+    "risk_that_gap_is_fake": "Synthetic fixture risk: the analogy may be shallow without additional adjacent-field papers.",
+    "confidence": "low",
+    "novelty_status": "unchecked"
+  }
+]

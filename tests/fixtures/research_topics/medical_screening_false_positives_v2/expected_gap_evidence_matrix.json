@@ -1,0 +1,99 @@
+[
+  {
+    "gap_id": "good-msf-1",
+    "evidence_rows": [
+      {
+        "paper_id": "p-msf-1",
+        "claim_or_note_id": "p-msf-1",
+        "evidence_span_id": "span-p-msf-1-eval",
+        "evidence_type": "result",
+        "text": "calibrated screening classifier is tested on synthetic screening cohort with specificity at fixed recall.",
+        "supports_or_counters": "supports",
+        "section_type": "experiments",
+        "locator": "p-msf-1:Evaluation:p4"
+      },
+      {
+        "paper_id": "p-msf-2",
+        "claim_or_note_id": "p-msf-2",
+        "evidence_span_id": "span-p-msf-2-limitation",
+        "evidence_type": "limitation",
+        "text": "Deployment shift remains unresolved for medical screening.",
+        "supports_or_counters": "supports",
+        "section_type": "limitations",
+        "locator": "p-msf-2:Limitations:p6"
+      },
+      {
+        "paper_id": "p-msf-3",
+        "claim_or_note_id": "p-msf-3",
+        "evidence_span_id": "span-p-msf-3-eval",
+        "evidence_type": "counterevidence",
+        "text": "industrial quality control has low false alarm tools that may counter claims of total absence.",
+        "supports_or_counters": "counters",
+        "section_type": "experiments",
+        "locator": "p-msf-3:Evaluation:p4"
+      }
+    ],
+    "papers_supporting": [
+      "p-msf-1",
+      "p-msf-2"
+    ],
+    "papers_countering": [
+      "p-msf-3"
+    ],
+    "repeated_limitation_count": 1,
+    "missing_metric_count": 0,
+    "missing_dataset_count": 0,
+    "assumption_pattern_count": 1,
+    "confidence": "medium"
+  },
+  {
+    "gap_id": "dup-msf-1",
+    "evidence_rows": [
+      {
+        "paper_id": "p-msf-1",
+        "claim_or_note_id": "p-msf-1",
+        "evidence_span_id": "span-p-msf-1-eval",
+        "evidence_type": "counterevidence",
+        "text": "The duplicate benchmark is already covered in p-msf-1.",
+        "supports_or_counters": "counters",
+        "section_type": "experiments",
+        "locator": "p-msf-1:Evaluation:p4"
+      }
+    ],
+    "papers_supporting": [
+      "p-msf-1"
+    ],
+    "papers_countering": [
+      "p-msf-1"
+    ],
+    "repeated_limitation_count": 0,
+    "missing_metric_count": 0,
+    "missing_dataset_count": 0,
+    "assumption_pattern_count": 0,
+    "confidence": "low"
+  },
+  {
+    "gap_id": "good-msf-2",
+    "evidence_rows": [
+      {
+        "paper_id": "p-msf-3",
+        "claim_or_note_id": "p-msf-3",
+        "evidence_span_id": "span-p-msf-3-eval",
+        "evidence_type": "method",
+        "text": "Adjacent-field low false alarm tool is available but requires adaptation.",
+        "supports_or_counters": "supports",
+        "section_type": "experiments",
+        "locator": "p-msf-3:Evaluation:p4"
+      }
+    ],
+    "papers_supporting": [
+      "p-msf-3"
+    ],
+    "papers_countering": [],
+    "repeated_limitation_count": 0,
+    "missing_metric_count": 0,
+    "missing_dataset_count": 0,
+    "assumption_pattern_count": 0,
+    "confidence": "low"
+  }
+]

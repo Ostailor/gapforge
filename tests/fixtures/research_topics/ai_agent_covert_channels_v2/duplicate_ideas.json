@@ -1,0 +1,8 @@
+[
+  {
+    "id": "dup-acc-1",
+    "title": "Fixed-threshold benchmark for agent covert-channel detection",
+    "description": "Duplicate idea: repeat the same fixed-threshold benchmark for agent covert-channel detection already covered by p-acc-1.",
+    "expected_verdict": "reject"
+  }
+]

@@ -6,6 +6,12 @@ It contains:
 
 - `topic`: canonical topic text, slug, and creation time
 - `papers`: normalized search results
+- `paper_artifacts`: downloaded or manually supplied paper artifacts such as PDFs, HTML, text, or metadata records
+- `paper_sections`: parsed full-text sections with page and character locators
+- `evidence_spans`: page/section-level evidence spans used by full-text-aware claims
+- `search_queries`: durable records of executed search queries and failures
+- `source_coverage`: optional source coverage summary for the run
+- `citation_graph`: optional citation/related-work graph
 - `paper_notes`: reading notes and evidence snippets
 - `paper_triage`: tiered reading-priority decisions
 - `field_map`: structured map of clusters, methods, datasets, metrics, saturation signals, underexplored areas, contradictions, adjacent fields, and initial gap candidates
@@ -27,6 +33,15 @@ State is persisted to `state.json` in each run directory. User-facing artifacts 
 - `topic.md`
 - `config.json`
 - `papers.json`
+- `paper_artifacts.json`
+- `paper_sections.json`
+- `evidence_spans.json`
+- `evidence_spans.md`
+- `search_queries.json`
+- `source_coverage.json`
+- `full_text_coverage.md`
+- `citation_graph.json`
+- `citation_graph.md`
 - `paper_notes.json`
 - `paper_notes.md`
 - `paper_triage.json`

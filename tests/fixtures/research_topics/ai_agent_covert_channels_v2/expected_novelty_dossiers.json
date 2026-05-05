@@ -1,0 +1,113 @@
+[
+  {
+    "target_id": "dup-acc-1",
+    "idea_summary": "Fixed-threshold benchmark for agent covert-channel detection",
+    "query_plan": [
+      "\"Fixed-threshold benchmark\" agent covert-channel detection",
+      "agent covert-channel detection covert-signal false alarm rate benchmark"
+    ],
+    "candidates_considered": [
+      "p-acc-1",
+      "p-acc-2",
+      "p-acc-3"
+    ],
+    "top_prior_work": [
+      "p-acc-1: Fixed-threshold benchmark for agent covert-channel detection (similarity 0.91)"
+    ],
+    "comparison_table": [
+      {
+        "paper_id": "p-acc-1",
+        "title": "Fixed-threshold benchmark for agent covert-channel detection",
+        "overall_similarity": 0.91,
+        "problem_overlap": 1.0,
+        "method_overlap": 0.8,
+        "evaluation_overlap": 1.0
+      }
+    ],
+    "decisive_difference_needed": "The idea must change problem setting, metric, dataset, or deployment condition to avoid duplication.",
+    "missing_searches": [],
+    "verdict": "reject",
+    "novelty_strength": "weak",
+    "confidence": "high",
+    "evidence_spans": [
+      {
+        "id": "span-p-acc-1-eval",
+        "paper_id": "p-acc-1",
+        "section_id": "sec-p-acc-1-eval",
+        "quote": "Evaluation section: communication trace monitor is tested on synthetic multi-agent transcript benchmark with covert-signal false alarm rate. The result is used only for offline GapForge evaluation.",
+        "page_start": 4,
+        "page_end": 5,
+        "char_start": 0,
+        "char_end": 197,
+        "locator": "p-acc-1:Evaluation:p4",
+        "evidence_type": "result",
+        "confidence": "medium"
+      }
+    ],
+    "reviewer_objection": "Closest prior work already covers the synthetic benchmark idea.",
+    "recommended_action": "Reject or substantially reframe the idea."
+  },
+  {
+    "target_id": "good-acc-1",
+    "idea_summary": "Deployment-shift covert-signal false alarm rate audit for agent covert-channel detection",
+    "query_plan": [
+      "agent covert-channel detection deployment shift covert-signal false alarm rate",
+      "communication trace monitor shifted synthetic multi-agent transcript benchmark"
+    ],
+    "candidates_considered": [
+      "p-acc-1",
+      "p-acc-2",
+      "p-acc-3"
+    ],
+    "top_prior_work": [
+      "p-acc-1: Fixed-threshold benchmark for agent covert-channel detection (similarity 0.44)"
+    ],
+    "comparison_table": [
+      {
+        "paper_id": "p-acc-1",
+        "title": "Fixed-threshold benchmark for agent covert-channel detection",
+        "overall_similarity": 0.44,
+        "problem_overlap": 0.7,
+        "method_overlap": 0.7,
+        "evaluation_overlap": 0.5
+      }
+    ],
+    "decisive_difference_needed": "Show shifted deployment slices are not already evaluated by the closest benchmark paper.",
+    "missing_searches": [
+      "citation-neighborhood expansion around deployment shift"
+    ],
+    "verdict": "revise",
+    "novelty_strength": "weak",
+    "confidence": "medium",
+    "evidence_spans": [
+      {
+        "id": "span-p-acc-1-eval",
+        "paper_id": "p-acc-1",
+        "section_id": "sec-p-acc-1-eval",
+        "quote": "Evaluation section: communication trace monitor is tested on synthetic multi-agent transcript benchmark with covert-signal false alarm rate. The result is used only for offline GapForge evaluation.",
+        "page_start": 4,
+        "page_end": 5,
+        "char_start": 0,
+        "char_end": 197,
+        "locator": "p-acc-1:Evaluation:p4",
+        "evidence_type": "result",
+        "confidence": "medium"
+      },
+      {
+        "id": "span-p-acc-2-limitation",
+        "paper_id": "p-acc-2",
+        "section_id": "sec-p-acc-2-limitations",
+        "quote": "Limitations section: deployment shift and source coverage remain unresolved for agent covert-channel detection; adjacent network covert channels evidence is only partial.",
+        "page_start": 6,
+        "page_end": 6,
+        "char_start": 0,
+        "char_end": 170,
+        "locator": "p-acc-2:Limitations:p6",
+        "evidence_type": "limitation",
+        "confidence": "medium"
+      }
+    ],
+    "reviewer_objection": "Closest benchmark overlaps; contribution needs sharper deployment-shift difference.",
+    "recommended_action": "Revise the setting and use closest prior work as a baseline."
+  }
+]

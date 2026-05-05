@@ -1,0 +1,173 @@
+[
+  {
+    "paper_id": "p-cde-1",
+    "citation_key": "p-cde-1",
+    "one_sentence_summary": "Synthetic fixture note: Fixed-threshold benchmark for cartel detection discusses cartel detection and false accusation rate.",
+    "core_claims": [
+      "cartel detection can be evaluated with explicit false accusation rate controls."
+    ],
+    "method": [
+      "market conduct anomaly model"
+    ],
+    "datasets": [
+      "synthetic market panel"
+    ],
+    "metrics": [
+      "false accusation rate"
+    ],
+    "main_results": [
+      "Synthetic result: market conduct anomaly model is evaluated with false accusation rate."
+    ],
+    "assumptions": [
+      "synthetic market panel reflects enough of the target setting for a first-pass fixture."
+    ],
+    "stated_limitations": [
+      "Deployment shift remains unresolved for cartel detection."
+    ],
+    "unstated_limitations": [
+      "The fixture cannot establish real-world validity for cartel detection economics."
+    ],
+    "what_it_cannot_answer": [
+      "Whether real literature already solves cartel detection economics."
+    ],
+    "useful_technical_tools": [
+      "market conduct anomaly model"
+    ],
+    "possible_connections": [
+      "collusion forensics"
+    ],
+    "relevance_to_topic": "high for synthetic offline evaluation",
+    "confidence": "medium",
+    "quotes_or_evidence_snippets": [
+      {
+        "source_id": "p-cde-1",
+        "quote": "Evaluation section: market conduct anomaly model is tested on synthetic market panel with false accusation rate. The result is used only for offline GapForge evaluation.",
+        "locator": "p-cde-1:Evaluation:p4",
+        "confidence": "medium",
+        "source_paper_id": "p-cde-1"
+      }
+    ],
+    "created_by_skill": "eval-fixture",
+    "source_basis": "full text",
+    "sections_used": [
+      "sec-p-cde-1-intro",
+      "sec-p-cde-1-eval",
+      "sec-p-cde-1-limitations"
+    ],
+    "missing_sections": []
+  },
+  {
+    "paper_id": "p-cde-2",
+    "citation_key": "p-cde-2",
+    "one_sentence_summary": "Synthetic fixture note: Deployment limitations in cartel detection discusses cartel detection and false accusation rate.",
+    "core_claims": [
+      "cartel detection can be evaluated with explicit false accusation rate controls."
+    ],
+    "method": [
+      "market conduct anomaly model"
+    ],
+    "datasets": [
+      "synthetic market panel"
+    ],
+    "metrics": [
+      "false accusation rate"
+    ],
+    "main_results": [
+      "Synthetic result: market conduct anomaly model is evaluated with false accusation rate."
+    ],
+    "assumptions": [
+      "synthetic market panel reflects enough of the target setting for a first-pass fixture."
+    ],
+    "stated_limitations": [
+      "Deployment shift remains unresolved for cartel detection."
+    ],
+    "unstated_limitations": [
+      "The fixture cannot establish real-world validity for cartel detection economics."
+    ],
+    "what_it_cannot_answer": [
+      "Whether real literature already solves cartel detection economics."
+    ],
+    "useful_technical_tools": [
+      "market conduct anomaly model"
+    ],
+    "possible_connections": [
+      "collusion forensics"
+    ],
+    "relevance_to_topic": "high for synthetic offline evaluation",
+    "confidence": "medium",
+    "quotes_or_evidence_snippets": [
+      {
+        "source_id": "p-cde-2",
+        "quote": "Evaluation section: market conduct anomaly model is tested on synthetic market panel with false accusation rate. The result is used only for offline GapForge evaluation.",
+        "locator": "p-cde-2:Evaluation:p4",
+        "confidence": "medium",
+        "source_paper_id": "p-cde-2"
+      }
+    ],
+    "created_by_skill": "eval-fixture",
+    "source_basis": "full text",
+    "sections_used": [
+      "sec-p-cde-2-intro",
+      "sec-p-cde-2-eval",
+      "sec-p-cde-2-limitations"
+    ],
+    "missing_sections": []
+  },
+  {
+    "paper_id": "p-cde-3",
+    "citation_key": "p-cde-3",
+    "one_sentence_summary": "Synthetic fixture note: Collusion Forensics tools for low false alarms discusses cartel detection and false accusation rate.",
+    "core_claims": [
+      "cartel detection can be evaluated with explicit false accusation rate controls."
+    ],
+    "method": [
+      "market conduct anomaly model"
+    ],
+    "datasets": [
+      "synthetic market panel"
+    ],
+    "metrics": [
+      "false accusation rate"
+    ],
+    "main_results": [
+      "Synthetic result: market conduct anomaly model is evaluated with false accusation rate."
+    ],
+    "assumptions": [
+      "synthetic market panel reflects enough of the target setting for a first-pass fixture."
+    ],
+    "stated_limitations": [
+      "Deployment shift remains unresolved for cartel detection."
+    ],
+    "unstated_limitations": [
+      "The fixture cannot establish real-world validity for cartel detection economics."
+    ],
+    "what_it_cannot_answer": [
+      "Whether real literature already solves cartel detection economics."
+    ],
+    "useful_technical_tools": [
+      "market conduct anomaly model"
+    ],
+    "possible_connections": [
+      "collusion forensics"
+    ],
+    "relevance_to_topic": "high for synthetic offline evaluation",
+    "confidence": "medium",
+    "quotes_or_evidence_snippets": [
+      {
+        "source_id": "p-cde-3",
+        "quote": "Evaluation section: market conduct anomaly model is tested on synthetic market panel with false accusation rate. The result is used only for offline GapForge evaluation.",
+        "locator": "p-cde-3:Evaluation:p4",
+        "confidence": "medium",
+        "source_paper_id": "p-cde-3"
+      }
+    ],
+    "created_by_skill": "eval-fixture",
+    "source_basis": "full text",
+    "sections_used": [
+      "sec-p-cde-3-intro",
+      "sec-p-cde-3-eval",
+      "sec-p-cde-3-limitations"
+    ],
+    "missing_sections": []
+  }
+]

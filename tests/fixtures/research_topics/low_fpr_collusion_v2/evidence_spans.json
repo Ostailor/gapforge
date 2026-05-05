@@ -1,0 +1,80 @@
+[
+  {
+    "id": "span-p-lfc-1-eval",
+    "paper_id": "p-lfc-1",
+    "section_id": "sec-p-lfc-1-eval",
+    "quote": "Evaluation section: graph detector is tested on synthetic collusion graph with false-positive rate. The result is used only for offline GapForge evaluation.",
+    "page_start": 4,
+    "page_end": 5,
+    "char_start": 0,
+    "char_end": 156,
+    "locator": "p-lfc-1:Evaluation:p4",
+    "evidence_type": "result",
+    "confidence": "medium"
+  },
+  {
+    "id": "span-p-lfc-1-limitation",
+    "paper_id": "p-lfc-1",
+    "section_id": "sec-p-lfc-1-limitations",
+    "quote": "Limitations section: deployment shift and source coverage remain unresolved for collusion detection; adjacent fraud screening evidence is only partial.",
+    "page_start": 6,
+    "page_end": 6,
+    "char_start": 0,
+    "char_end": 151,
+    "locator": "p-lfc-1:Limitations:p6",
+    "evidence_type": "limitation",
+    "confidence": "medium"
+  },
+  {
+    "id": "span-p-lfc-2-eval",
+    "paper_id": "p-lfc-2",
+    "section_id": "sec-p-lfc-2-eval",
+    "quote": "Evaluation section: graph detector is tested on synthetic collusion graph with false-positive rate. The result is used only for offline GapForge evaluation.",
+    "page_start": 4,
+    "page_end": 5,
+    "char_start": 0,
+    "char_end": 156,
+    "locator": "p-lfc-2:Evaluation:p4",
+    "evidence_type": "result",
+    "confidence": "medium"
+  },
+  {
+    "id": "span-p-lfc-2-limitation",
+    "paper_id": "p-lfc-2",
+    "section_id": "sec-p-lfc-2-limitations",
+    "quote": "Limitations section: deployment shift and source coverage remain unresolved for collusion detection; adjacent fraud screening evidence is only partial.",
+    "page_start": 6,
+    "page_end": 6,
+    "char_start": 0,
+    "char_end": 151,
+    "locator": "p-lfc-2:Limitations:p6",
+    "evidence_type": "limitation",
+    "confidence": "medium"
+  },
+  {
+    "id": "span-p-lfc-3-eval",
+    "paper_id": "p-lfc-3",
+    "section_id": "sec-p-lfc-3-eval",
+    "quote": "Evaluation section: graph detector is tested on synthetic collusion graph with false-positive rate. The result is used only for offline GapForge evaluation.",
+    "page_start": 4,
+    "page_end": 5,
+    "char_start": 0,
+    "char_end": 156,
+    "locator": "p-lfc-3:Evaluation:p4",
+    "evidence_type": "result",
+    "confidence": "medium"
+  },
+  {
+    "id": "span-p-lfc-3-limitation",
+    "paper_id": "p-lfc-3",
+    "section_id": "sec-p-lfc-3-limitations",
+    "quote": "Limitations section: deployment shift and source coverage remain unresolved for collusion detection; adjacent fraud screening evidence is only partial.",
+    "page_start": 6,
+    "page_end": 6,
+    "char_start": 0,
+    "char_end": 151,
+    "locator": "p-lfc-3:Limitations:p6",
+    "evidence_type": "limitation",
+    "confidence": "medium"
+  }
+]

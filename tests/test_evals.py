@@ -6,7 +6,9 @@ import sys
 from pathlib import Path
 
 from gapforge.evals.benchmark import run_evals
-from gapforge.evals.fixtures import FIXTURE_NAMES, list_fixtures, load_fixture
+from gapforge.evals.fixtures import FIXTURE_NAMES, V2_FIXTURE_NAMES, list_fixtures, load_fixture
+from gapforge.evals.metrics import gap_evidence_matrix_score, unsupported_claim_rate
+from gapforge.models import Claim
 
 
 def test_eval_fixtures_are_complete() -> None:
@@ -21,6 +23,20 @@ def test_eval_fixtures_are_complete() -> None:
         assert fixture.known_bad_gaps
         assert fixture.duplicate_ideas
         assert fixture.expected_reviewer_objections
+
+
+def test_v2_eval_fixtures_are_complete_and_offline() -> None:
+    names = list_fixtures()
+    assert set(V2_FIXTURE_NAMES).issubset(names)
+    for name in V2_FIXTURE_NAMES:
+        fixture = load_fixture(name)
+        assert fixture.is_v2
+        assert fixture.paper_sections
+        assert fixture.evidence_spans
+        assert fixture.expected_novelty_dossiers
+        assert fixture.expected_gap_evidence_matrix
+        assert fixture.expected_source_coverage is not None
+        assert fixture.expected_source_coverage.searched_sources == ["fixture-source"]
 
 
 def test_run_evals_single_fixture_writes_report(tmp_path: Path) -> None:
@@ -53,6 +69,7 @@ def test_run_evals_all_fixtures_offline(tmp_path: Path, monkeypatch) -> None:
 
 def test_eval_cli_writes_report(tmp_path: Path) -> None:
     env = {**os.environ, "GAPFORGE_DISABLE_NETWORK": "1"}
+    env["PYTHONPATH"] = str(Path.cwd() / "src")
     result = subprocess.run(
         [sys.executable, "-m", "gapforge.cli", "eval", "--fixture", "low_fpr_collusion", "--write-report"],
         cwd=Path.cwd(),
@@ -77,3 +94,52 @@ def test_fixture_duplicate_ideas_are_intentionally_rejected() -> None:
 
     assert result.scores.novelty_gate_accuracy == 1.0
     assert "dup-qpo-1" in result.rejected_gaps
+
+
+def test_run_v2_evals_includes_v2_metrics_offline(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("GAPFORGE_DISABLE_NETWORK", "1")
+
+    report = run_evals(v2=True, output_dir=tmp_path, write_report=True)
+
+    assert len(report.results) == len(V2_FIXTURE_NAMES)
+    assert all(result.scores.full_text_coverage_score is not None for result in report.results)
+    assert all(result.scores.novelty_dossier_completeness_score is not None for result in report.results)
+    text = (tmp_path / "eval_report.md").read_text(encoding="utf-8")
+    assert "### v0.1 Scores" in text
+    assert "### v0.2 Scores" in text
+    assert "Failed Checks And Suggested Improvements" in text
+
+
+def test_v2_duplicate_ideas_are_rejected_by_dossier_aware_novelty_gate() -> None:
+    report = run_evals(fixture="ai_agent_covert_channels_v2", write_report=False)
+    result = report.results[0]
+
+    assert result.scores.novelty_gate_accuracy == 1.0
+    assert any(item.startswith("dup-acc") for item in result.rejected_gaps)
+
+
+def test_unsupported_high_confidence_full_text_claim_is_caught() -> None:
+    fixture = load_fixture("low_fpr_collusion_v2")
+    from gapforge.evals.benchmark import _state_from_fixture
+
+    state = _state_from_fixture(fixture)
+    state.claims.append(
+        Claim(
+            id="claim-high-fulltext-no-span",
+            text="Unsupported high-confidence full-text claim.",
+            type="result",
+            status="supported",
+            confidence="high",
+            source_paper_ids=[fixture.papers[0].id],
+            needs_verification=False,
+        )
+    )
+
+    assert unsupported_claim_rate(state.claims, state) > 0
+
+
+def test_gap_evidence_matrix_scoring_works() -> None:
+    fixture = load_fixture("medical_screening_false_positives_v2")
+    score = gap_evidence_matrix_score(fixture.known_good_gaps, fixture.expected_gap_evidence_matrix)
+
+    assert score > 0.5

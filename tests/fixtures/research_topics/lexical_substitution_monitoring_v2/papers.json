@@ -1,0 +1,77 @@
+[
+  {
+    "id": "p-lsm-1",
+    "title": "Fixed-threshold benchmark for lexical substitution monitoring",
+    "authors": [
+      "Synthetic Fixture Author"
+    ],
+    "abstract": "Synthetic fixture paper. We evaluate lexical substitution monitoring with semantic drift monitor under fixed substitution precision budgets on a edited text stream corpus. This fixture is not real research.",
+    "year": 2025,
+    "venue": "Synthetic FixtureConf",
+    "source": "fixture",
+    "url": "https://example.test/lsm/1",
+    "pdf_url": "https://example.test/lsm/1.pdf",
+    "keywords": [
+      "lexical substitution monitoring",
+      "substitution precision",
+      "semantic drift monitor",
+      "benchmark"
+    ],
+    "citation_count": 32,
+    "roles": [
+      "benchmark"
+    ],
+    "raw_metadata": {
+      "fixture_notice": "synthetic, not real research"
+    }
+  },
+  {
+    "id": "p-lsm-2",
+    "title": "Deployment limitations in lexical substitution monitoring",
+    "authors": [
+      "Synthetic Fixture Author"
+    ],
+    "abstract": "Synthetic fixture paper. The study reports that lexical substitution monitoring systems often rely on edited text stream corpus and do not validate deployment shift. This fixture is not real research.",
+    "year": 2024,
+    "venue": "Synthetic Fixture Workshop",
+    "source": "fixture",
+    "url": "https://example.test/lsm/2",
+    "pdf_url": "https://example.test/lsm/2.pdf",
+    "keywords": [
+      "lexical substitution monitoring",
+      "deployment",
+      "limitation"
+    ],
+    "citation_count": 18,
+    "roles": [
+      "method"
+    ],
+    "raw_metadata": {
+      "fixture_notice": "synthetic, not real research"
+    }
+  },
+  {
+    "id": "p-lsm-3",
+    "title": "Software Provenance tools for low false alarms",
+    "authors": [
+      "Synthetic Fixture Author"
+    ],
+    "abstract": "Synthetic fixture paper. Adjacent field work in software provenance studies low false alarms but does not solve lexical substitution monitoring. This fixture is not real research.",
+    "year": 2023,
+    "venue": "Synthetic Adjacent Fields",
+    "source": "fixture",
+    "url": "https://example.test/lsm/3",
+    "keywords": [
+      "software provenance",
+      "false alarms",
+      "transfer"
+    ],
+    "citation_count": 41,
+    "roles": [
+      "adjacent_field"
+    ],
+    "raw_metadata": {
+      "fixture_notice": "synthetic, not real research"
+    }
+  }
+]

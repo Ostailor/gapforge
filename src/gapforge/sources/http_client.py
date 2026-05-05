@@ -37,9 +37,21 @@ class CachedHttpClient:
         return json.loads(body)
 
     def get_text(self, url: str, params: dict[str, Any] | None = None, *, namespace: str = "http") -> str:
+        body, _headers = self.get_bytes(url, params, namespace=namespace)
+        return body.decode("utf-8", errors="replace")
+
+    def get_bytes(
+        self,
+        url: str,
+        params: dict[str, Any] | None = None,
+        *,
+        namespace: str = "http",
+        max_bytes: int | None = None,
+        headers: dict[str, str] | None = None,
+    ) -> tuple[bytes, dict[str, str]]:
         cache_path = self._cache_path(namespace, url, params or {})
         if cache_path.exists():
-            return cache_path.read_text(encoding="utf-8")
+            return cache_path.read_bytes(), {}
         if os.environ.get("GAPFORGE_DISABLE_NETWORK") == "1":
             raise HttpClientError(f"Network disabled for uncached GET {url}")
 
@@ -47,11 +59,23 @@ class CachedHttpClient:
         last_error: Exception | None = None
         for attempt in range(self.retries + 1):
             try:
-                request = Request(full_url, headers={"User-Agent": self.user_agent, "Accept": "*/*"})
+                request_headers = {"User-Agent": self.user_agent, "Accept": "*/*"}
+                request_headers.update(headers or {})
+                request = Request(full_url, headers=request_headers)
                 with urlopen(request, timeout=self.timeout) as response:
-                    text = response.read().decode("utf-8", errors="replace")
-                cache_path.write_text(text, encoding="utf-8")
-                return text
+                    response_headers = _response_headers(response)
+                    content_length = response_headers.get("content-length")
+                    if max_bytes is not None and content_length:
+                        try:
+                            if int(content_length) > max_bytes:
+                                raise HttpClientError(f"GET failed for {full_url}: response exceeds {max_bytes} bytes")
+                        except ValueError:
+                            pass
+                    data = response.read(max_bytes + 1) if max_bytes is not None else response.read()
+                if max_bytes is not None and len(data) > max_bytes:
+                    raise HttpClientError(f"GET failed for {full_url}: response exceeds {max_bytes} bytes")
+                cache_path.write_bytes(data)
+                return data, response_headers
             except (HTTPError, URLError, TimeoutError, OSError) as exc:
                 last_error = exc
                 if attempt < self.retries:
@@ -89,3 +113,10 @@ def cache_summary(cache_dir: Path) -> dict[str, Any]:
         "bytes": sum(path.stat().st_size for path in files),
         "namespaces": dict(sorted(namespaces.items())),
     }
+
+
+def _response_headers(response: object) -> dict[str, str]:
+    raw_headers = getattr(response, "headers", {}) or {}
+    if hasattr(raw_headers, "items"):
+        return {str(key).lower(): str(value) for key, value in raw_headers.items()}
+    return {}

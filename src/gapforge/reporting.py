@@ -9,9 +9,12 @@ from typing import Any
 
 from gapforge.models import (
     Claim,
+    CrossDomainTransferCandidate,
     ExperimentPlan,
     Gap,
+    GapEvidenceMatrix,
     NoveltyAssessment,
+    NoveltyDossier,
     Paper,
     PaperNote,
     ResearchRunState,
@@ -19,16 +22,18 @@ from gapforge.models import (
     ReviewerSimulationSummary,
     to_plain,
 )
+from gapforge.review.audit import is_rejected, review_summary
+from gapforge.sources.coverage import generate_source_coverage
 
 CONFIDENCE_RANK = {"high": 3, "medium": 2, "low": 1}
 NOVELTY_RANK = {"strong": 4, "medium": 3, "weak": 2, "unchecked": 1, "likely_not_new": 0}
 VERDICT_RANK = {"pursue": 3, "revise": 2, "unknown": 1, "reject": 0}
 
 
-def write_final_report(state: ResearchRunState, *, output_format: str = "markdown") -> Path:
+def write_final_report(state: ResearchRunState, *, output_format: str = "markdown", strict: bool = False) -> Path:
     """Write the final report artifact into a run directory."""
 
-    report = build_final_report(state)
+    report = build_final_report(state, strict=strict)
     run_dir = Path(state.run_dir)
     run_dir.mkdir(parents=True, exist_ok=True)
     if output_format == "markdown":
@@ -42,144 +47,209 @@ def write_final_report(state: ResearchRunState, *, output_format: str = "markdow
     raise ValueError(f"Unsupported report format: {output_format}")
 
 
-def build_final_report(state: ResearchRunState) -> dict[str, Any]:
+def build_final_report(state: ResearchRunState, *, strict: bool = False) -> dict[str, Any]:
     """Build a structured report dictionary before rendering."""
 
     paper_by_id = {paper.id: paper for paper in state.papers}
     notes_by_paper = {note.paper_id: note for note in state.paper_notes}
     novelty_by_target = {item.target_gap_or_hypothesis_id: item for item in state.novelty_assessments}
+    dossier_by_target = {item.target_id: item for item in state.novelty_dossiers}
+    matrix_by_gap = {item.gap_id: item for item in state.gap_evidence_matrices}
+    transfer_by_id = {item.id: item for item in state.cross_domain_transfers}
     objections_by_experiment = _group_objections(state.reviewer_objections)
-    top_gap = _top_gap(state.gaps, novelty_by_target)
+    active_gaps = [gap for gap in state.gaps if not is_rejected(state, "gap", gap.id)]
+    top_gap = _top_gap(active_gaps, novelty_by_target, matrix_by_gap)
     top_experiment = _top_experiment(state.experiments, top_gap, novelty_by_target, objections_by_experiment)
-    top_direction = _top_direction(top_gap, top_experiment, novelty_by_target, objections_by_experiment)
+    coverage = _search_coverage(state)
+    evidence_index = _evidence_locator_index(state)
+    top_direction = _top_direction_v2(
+        top_gap,
+        top_experiment,
+        novelty_by_target,
+        objections_by_experiment,
+        dossier_by_target,
+        matrix_by_gap,
+        coverage,
+        evidence_index,
+        strict=strict,
+    )
     supported_claims = [claim for claim in state.claims if claim.status == "supported" and claim.supporting_evidence]
     uncertain_claims = [
         claim for claim in state.claims if claim.status in {"unsupported", "uncertain", "contested"} or claim.needs_verification
     ]
+    strongest_gaps = [
+        _gap_record(gap, novelty_by_target, matrix_by_gap.get(gap.id), evidence_index)
+        for gap in _ranked_gaps(active_gaps, novelty_by_target, matrix_by_gap)[:8]
+    ]
+    deeply_read = _key_papers_read_deeply(state, paper_by_id, notes_by_paper, evidence_index)
+    novelty_records = [_novelty_record(item, dossier_by_target.get(item.target_gap_or_hypothesis_id)) for item in state.novelty_assessments]
+    experiment_records = [
+        _experiment_record(experiment, novelty_by_target, objections_by_experiment)
+        for experiment in _ranked_experiments(state.experiments, novelty_by_target, objections_by_experiment)
+    ]
+    claim_summary = _claim_ledger_summary(state)
+    rejected = _rejected_ideas(state)
+    human_summary = review_summary(state)
+    uncertainty = _uncertainty_section(state, coverage, uncertain_claims, novelty_records)
+    next_actions = _next_actions_v2(state, top_gap, top_experiment, coverage, top_direction, uncertainty)
+    sections = {
+        "executive_summary": {
+            "recommended_direction": top_direction,
+            "evidence_backed_claim_count": len(supported_claims),
+            "uncertain_or_unsupported_claim_count": len(uncertain_claims),
+            "novelty_warning": _novelty_warning(state.novelty_assessments),
+            "strict_mode": strict,
+        },
+        "what_was_searched": _what_was_searched(coverage),
+        "source_and_full_text_coverage": coverage,
+        "field_map": _literature_map(state, paper_by_id),
+        "important_paper_clusters": _top_paper_clusters(state, paper_by_id),
+        "papers_read_deeply": deeply_read,
+        "evidence_backed_research_gaps": strongest_gaps,
+        "gap_evidence_matrix_summary": _gap_matrix_summary(state, evidence_index),
+        "cross_domain_transfer_candidates": _cross_domain_transfer_candidates(state, transfer_by_id),
+        "closest_prior_work_dossiers": novelty_records,
+        "recommended_top_research_direction": top_direction,
+        "experiment_plan_for_top_direction": _experiment_for_top_direction(top_experiment, experiment_records),
+        "reviewer_simulation_and_blocking_issues": _reviewer_simulation(state),
+        "claim_ledger_summary": claim_summary,
+        "human_review_summary": human_summary,
+        "rejected_ideas": rejected,
+        "what_remains_uncertain": uncertainty,
+        "next_actions": next_actions,
+    }
 
     return {
         "run_id": state.run_id,
         "topic": state.topic.text,
+        "schema_version": state.config.get("schema_version", 1),
+        "report_version": "v0.2",
+        "strict": strict,
         "generated_from": {
             "papers": len(state.papers),
             "paper_notes": len(state.paper_notes),
             "claims": len(state.claims),
             "gaps": len(state.gaps),
             "novelty_assessments": len(state.novelty_assessments),
+            "novelty_dossiers": len(state.novelty_dossiers),
+            "evidence_spans": len(state.evidence_spans),
+            "paper_sections": len(state.paper_sections),
             "experiments": len(state.experiments),
             "reviewer_objections": len(state.reviewer_objections),
         },
-        "executive_summary": {
-            "recommended_direction": top_direction,
-            "evidence_backed_claim_count": len(supported_claims),
-            "uncertain_or_unsupported_claim_count": len(uncertain_claims),
-            "novelty_warning": _novelty_warning(state.novelty_assessments),
-        },
+        "sections": sections,
+        "evidence_locators": _all_evidence_locators(state),
+        "source_coverage": coverage,
+        "executive_summary": sections["executive_summary"],
         "broad_topic_interpretation": _topic_interpretation(state),
-        "literature_map": _literature_map(state, paper_by_id),
-        "search_coverage": _search_coverage(state),
-        "top_paper_clusters": _top_paper_clusters(state, paper_by_id),
-        "key_papers_read_deeply": _key_papers_read_deeply(state, paper_by_id, notes_by_paper),
-        "strongest_research_gaps": [_gap_record(gap, novelty_by_target) for gap in _ranked_gaps(state.gaps, novelty_by_target)[:8]],
-        "cross_domain_connections": [
-            {
-                "source_field": item.source_field,
-                "source_concept": item.source_concept,
-                "target_gap_id": item.target_gap_id,
-                "why_it_maps": item.why_it_maps,
-                "what_breaks": item.what_breaks_in_the_mapping,
-                "candidate_transfer": item.technical_transfer_candidate,
-                "search_queries": item.papers_or_sources_to_search,
-                "confidence": item.confidence,
-            }
-            for item in state.cross_domain_analogies
-        ],
-        "novelty_gate_results": [_novelty_record(item) for item in state.novelty_assessments],
-        "recommended_experiment_plans": [
-            _experiment_record(experiment, novelty_by_target, objections_by_experiment)
-            for experiment in _ranked_experiments(state.experiments, novelty_by_target, objections_by_experiment)
-        ],
-        "reviewer_simulation": _reviewer_simulation(state),
-        "claim_ledger_summary": _claim_ledger_summary(state),
+        "literature_map": sections["field_map"],
+        "search_coverage": coverage,
+        "top_paper_clusters": sections["important_paper_clusters"],
+        "key_papers_read_deeply": deeply_read,
+        "strongest_research_gaps": strongest_gaps,
+        "cross_domain_connections": sections["cross_domain_transfer_candidates"],
+        "novelty_gate_results": novelty_records,
+        "recommended_experiment_plans": experiment_records,
+        "reviewer_simulation": sections["reviewer_simulation_and_blocking_issues"],
+        "claim_ledger_summary": claim_summary,
         "unsupported_or_uncertain_claims": [_claim_record(claim) for claim in uncertain_claims[:20]],
-        "rejected_ideas": _rejected_ideas(state),
-        "next_actions": _next_actions(state, top_gap, top_experiment),
+        "rejected_ideas": rejected,
+        "human_review_summary": human_summary,
+        "next_actions": next_actions,
     }
 
 
 def render_markdown_report(report: dict[str, Any]) -> str:
-    """Render a structured report dictionary as Markdown."""
+    """Render a v0.2 evidence-located research dossier as Markdown."""
 
+    sections = report.get("sections", {})
+    summary = sections.get("executive_summary", report.get("executive_summary", {}))
+    direction = summary.get("recommended_direction", {})
+    coverage = sections.get("source_and_full_text_coverage", report.get("search_coverage", {}))
     lines = [
         f"# GapForge Final Research Report: {report['topic']}",
         "",
         f"Run ID: `{report['run_id']}`",
+        f"Report version: `{report.get('report_version', 'v0.2')}`",
+        f"Strict mode: {str(report.get('strict', False)).lower()}",
         "",
     ]
+
     _section(lines, "1. Executive Summary")
-    summary = report["executive_summary"]
-    direction = summary["recommended_direction"]
     lines.extend(
         [
-            f"Recommended strongest direction: **{direction['title']}**",
+            f"Recommendation: **{direction.get('title', 'No direction ready')}**",
             "",
-            direction["justification"],
+            direction.get("justification", "No recommendation was produced."),
             "",
+            f"- Readiness: {direction.get('readiness', 'not_ready')}",
             f"- Linked gap: `{direction.get('gap_id') or 'none'}`",
             f"- Linked experiment: `{direction.get('experiment_id') or 'none'}`",
             f"- Novelty verdict: {direction.get('novelty_verdict', 'unknown')}",
             f"- Novelty strength: {direction.get('novelty_strength', 'unknown')}",
-            f"- Confidence: {direction.get('confidence', 'low')}",
-            f"- Evidence-backed ledger claims: {summary['evidence_backed_claim_count']}",
-            f"- Unsupported or uncertain ledger claims: {summary['uncertain_or_unsupported_claim_count']}",
+            f"- Closest-prior-work dossier: `{direction.get('dossier_id') or 'none'}`",
+            f"- Evidence locators: {_format_ids(direction.get('evidence_locators', []))}",
+            f"- Blocking reasons: {'; '.join(direction.get('blocking_reasons', [])) or 'none'}",
+            f"- Evidence-backed ledger claims: {summary.get('evidence_backed_claim_count', 0)}",
+            f"- Unsupported or uncertain ledger claims: {summary.get('uncertain_or_unsupported_claim_count', 0)}",
             "",
-            f"Novelty caution: {summary['novelty_warning']}",
+            f"Novelty caution: {summary.get('novelty_warning', 'Novelty has not been established.')}",
             "",
         ]
     )
 
-    _section(lines, "2. Broad Topic Interpretation")
-    interpretation = report["broad_topic_interpretation"]
+    _section(lines, "2. What Was Searched")
+    searched = sections.get("what_was_searched", {})
     lines.extend(
         [
-            interpretation["interpretation"],
-            "",
-            f"- Run maturity: {interpretation['run_maturity']}",
-            f"- Evidence posture: {interpretation['evidence_posture']}",
-            f"- Hypotheses recorded: {interpretation['hypothesis_count']}",
+            f"- Queries run: {searched.get('query_count', 0)}",
+            f"- Purposes: {_format_counts(searched.get('purpose_counts', {}))}",
+            f"- Sources searched: {', '.join(searched.get('searched_sources', [])) or 'none'}",
             "",
         ]
     )
-
-    _section(lines, "3. Literature Map")
-    literature_map = report["literature_map"]
-    lines.append(f"Field-map confidence: **{literature_map['confidence']}**")
+    for query in searched.get("queries", [])[:16]:
+        lines.append(
+            f"- `{query['id']}` {query['purpose']}: {query['query']} "
+            f"(sources={', '.join(query['source_names']) or 'none'}, results={len(query['result_paper_ids'])}, "
+            f"failures={len(query['failure_messages'])})"
+        )
+    if not searched.get("queries"):
+        lines.append("- No searches are recorded. Treat the report as an offline or manually assembled smoke artifact.")
     lines.append("")
-    _bullet_lines(lines, "Major questions", literature_map["major_questions"])
-    _bullet_lines(lines, "Dominant methods", literature_map["dominant_methods"])
-    _bullet_lines(lines, "Common datasets", literature_map["common_datasets"])
-    _bullet_lines(lines, "Common metrics", literature_map["common_metrics"])
-    _bullet_lines(lines, "Saturated areas", literature_map["saturated_areas"])
-    _bullet_lines(lines, "Underexplored areas", literature_map["underexplored_areas"])
-    _bullet_lines(lines, "Limitations", literature_map["limitations"])
 
-    _section(lines, "4. Search Coverage")
-    coverage = report["search_coverage"]
+    _section(lines, "3. Source and Full-Text Coverage")
     lines.extend(
         [
-            f"- Papers collected: {coverage['paper_count']}",
-            f"- Source counts: {_format_counts(coverage['source_counts'])}",
-            f"- Year range: {coverage['year_range']}",
-            f"- Papers with DOI: {coverage['papers_with_doi']}",
-            f"- Papers with PDF URL: {coverage['papers_with_pdf']}",
-            f"- Abstract-only notes: {coverage['abstract_only_notes']}",
-            f"- Search limitations: {coverage['limitations']}",
+            "Compatibility label: Search and Source Coverage.",
+            "",
+            f"- Papers collected: {coverage.get('paper_count', 0)}",
+            f"- Source counts: {_format_counts(coverage.get('source_counts', {}))}",
+            f"- Failed sources: {', '.join(coverage.get('failed_sources', [])) or 'none'}",
+            f"- Papers with parsed full text: {coverage.get('papers_with_full_text', 0)}",
+            f"- Abstract-only notes: {coverage.get('abstract_only_notes', 0)}",
+            f"- Fallback/offline papers: {coverage.get('fallback_paper_count', 0)}",
+            f"- Fixture/fallback label: {coverage.get('fixture_or_fallback_label', 'not detected')}",
+            f"- Coverage confidence: {coverage.get('confidence', 'low')}",
+            f"- Coverage assessment: {coverage.get('coverage_assessment', 'unknown')}",
+            f"- Limitations: {coverage.get('limitations', 'No limitations recorded.')}",
             "",
         ]
     )
 
-    _section(lines, "5. Top Paper Clusters")
-    for cluster in report["top_paper_clusters"]:
+    _section(lines, "4. Field Map")
+    literature_map = sections.get("field_map", {})
+    lines.append(f"Field-map confidence: **{literature_map.get('confidence', 'low')}**")
+    lines.append("")
+    _bullet_lines(lines, "Major questions", literature_map.get("major_questions", []))
+    _bullet_lines(lines, "Dominant methods", literature_map.get("dominant_methods", []))
+    _bullet_lines(lines, "Common datasets", literature_map.get("common_datasets", []))
+    _bullet_lines(lines, "Common metrics", literature_map.get("common_metrics", []))
+    _bullet_lines(lines, "Underexplored areas", literature_map.get("underexplored_areas", []))
+    _bullet_lines(lines, "Limitations", literature_map.get("limitations", []))
+
+    _section(lines, "5. Important Paper Clusters")
+    for cluster in sections.get("important_paper_clusters", []):
         lines.extend(
             [
                 f"### {cluster['name']}",
@@ -193,25 +263,26 @@ def render_markdown_report(report: dict[str, Any]) -> str:
                 "",
             ]
         )
-    if not report["top_paper_clusters"]:
+    if not sections.get("important_paper_clusters"):
         lines.extend(["No clusters were generated.", ""])
 
-    _section(lines, "6. Key Papers Read Deeply")
-    for paper in report["key_papers_read_deeply"]:
+    _section(lines, "6. Papers Read Deeply")
+    for paper in sections.get("papers_read_deeply", []):
         lines.extend(
             [
                 f"- `{paper['paper_id']}` {paper['citation']}",
-                f"  - Source basis: {paper['source_basis']}; confidence: {paper['confidence']}",
+                f"  - Evidence basis: {paper['evidence_label']}; confidence: {paper['confidence']}",
+                f"  - Sections used: {', '.join(paper.get('sections_used', [])) or 'none'}",
+                f"  - Evidence locators: {_format_ids(paper.get('evidence_locators', []))}",
                 f"  - Summary: {paper['summary']}",
-                f"  - Evidence snippets: {paper['evidence_snippet_count']}",
             ]
         )
-    if not report["key_papers_read_deeply"]:
+    if not sections.get("papers_read_deeply"):
         lines.append("- No paper notes are available.")
     lines.append("")
 
-    _section(lines, "7. Strongest Research Gaps")
-    for gap in report["strongest_research_gaps"]:
+    _section(lines, "7. Evidence-Backed Research Gaps")
+    for gap in sections.get("evidence_backed_research_gaps", []):
         lines.extend(
             [
                 f"### {gap['title']}",
@@ -220,57 +291,91 @@ def render_markdown_report(report: dict[str, Any]) -> str:
                 f"- Type: {gap['type']}",
                 f"- Confidence: {gap['confidence']}",
                 f"- Novelty status: {gap['novelty_status']}",
+                f"- Evidence basis: {gap['evidence_basis']}",
                 f"- Supporting papers: {_format_ids(gap['supporting_paper_ids'])}",
-                f"- Supporting claims: {_format_ids(gap['supporting_claim_ids'])}",
+                f"- Evidence locators: {_format_ids(gap.get('evidence_locators', []))}",
+                f"- Counterevidence papers: {_format_ids(gap['counterevidence_paper_ids'])}",
                 f"- Risk that gap is fake: {gap['risk_that_gap_is_fake']}",
                 "",
                 gap["description"],
                 "",
             ]
         )
-    if not report["strongest_research_gaps"]:
-        lines.extend(["No gap candidates are available.", ""])
+    if not sections.get("evidence_backed_research_gaps"):
+        lines.extend(["No evidence-backed gap candidates are available.", ""])
 
-    _section(lines, "8. Cross-Domain Connections")
-    for item in report["cross_domain_connections"]:
+    _section(lines, "8. Gap Evidence Matrix Summary")
+    for matrix in sections.get("gap_evidence_matrix_summary", []):
+        lines.extend(
+            [
+                f"- `{matrix['gap_id']}` confidence={matrix['confidence']}; rows={matrix['evidence_row_count']}; "
+                f"supporting={_format_ids(matrix['papers_supporting'])}; countering={_format_ids(matrix['papers_countering'])}",
+                f"  - Locators: {_format_ids(matrix.get('evidence_locators', []))}",
+            ]
+        )
+    if not sections.get("gap_evidence_matrix_summary"):
+        lines.append("- No gap evidence matrices are available.")
+    lines.append("")
+
+    _section(lines, "9. Cross-Domain Transfer Candidates")
+    for item in sections.get("cross_domain_transfer_candidates", []):
         lines.extend(
             [
                 f"- {item['source_field']} / {item['source_concept']} -> `{item['target_gap_id']}`",
-                f"  - Why it may map: {item['why_it_maps']}",
-                f"  - What breaks: {item['what_breaks']}",
-                f"  - Search next: {', '.join(item['search_queries'][:3]) or 'none'}",
+                f"  - Status: {item['status']}",
+                f"  - Source papers: {_format_ids(item['source_paper_ids'])}",
+                f"  - Evidence spans: {_format_ids(item.get('evidence_span_ids', []))}",
+                f"  - Transfer mechanism: {item.get('technical_mechanism') or item.get('candidate_transfer') or 'not established'}",
+                f"  - What breaks: {item.get('what_breaks') or 'not specified'}",
                 f"  - Confidence: {item['confidence']}",
             ]
         )
-    if not report["cross_domain_connections"]:
-        lines.append("- No cross-domain analogies were generated.")
+        if item["status"] == "query_only":
+            lines.append("  - Interpretation: query-only seed, not an evidence-backed conclusion.")
+    if not sections.get("cross_domain_transfer_candidates"):
+        lines.append("- No cross-domain transfer candidates are available.")
     lines.append("")
 
-    _section(lines, "9. Novelty Gate Results")
-    for item in report["novelty_gate_results"]:
+    _section(lines, "10. Closest-Prior-Work Dossiers")
+    for item in sections.get("closest_prior_work_dossiers", []):
         lines.extend(
             [
                 f"- `{item['target_id']}` verdict={item['verdict']}, strength={item['novelty_strength']}, confidence={item['confidence']}",
-                f"  - Closest prior work: {_format_ids(item['closest_prior_work'])}",
-                f"  - What is new: {'; '.join(item['what_is_new']) or 'not established'}",
-                f"  - What is not new: {'; '.join(item['what_is_not_new']) or 'unknown'}",
-                f"  - Missing searches: {len(item['missing_searches'])}",
+                f"  - Closest prior work: {_format_ids(item['closest_prior_work'] or item.get('dossier_top_prior_work', []))}",
+                f"  - Candidates considered: {item.get('dossier_candidate_count', 0)}",
+                f"  - Missing searches: {'; '.join(item['missing_searches']) or 'none'}",
+                f"  - Decisive difference needed: {item['decisive_difference_needed'] or 'not specified'}",
+                f"  - Dossier action: {item.get('dossier_recommended_action') or 'not available'}",
             ]
         )
-    if not report["novelty_gate_results"]:
-        lines.append("- No novelty assessments are available. Treat novelty as unchecked.")
+    if not sections.get("closest_prior_work_dossiers"):
+        lines.append("- No novelty dossiers are available. Treat novelty as unchecked.")
     lines.append("")
 
-    _section(lines, "10. Recommended Experiment Plans")
-    for experiment in report["recommended_experiment_plans"][:8]:
+    _section(lines, "11. Recommended Top Research Direction")
+    lines.extend(
+        [
+            f"Direction: **{direction.get('title', 'No direction ready')}**",
+            f"Recommended strongest direction: {direction.get('title', 'No direction ready')}.",
+            "",
+            direction.get("justification", "No recommendation was produced."),
+            "",
+            f"- Readiness: {direction.get('readiness', 'not_ready')}",
+            f"- This is a novelty claim: {str(direction.get('claims_novelty', False)).lower()}",
+            f"- Blocking reasons: {'; '.join(direction.get('blocking_reasons', [])) or 'none'}",
+            "",
+        ]
+    )
+
+    _section(lines, "12. Experiment Plan for Top Direction")
+    experiment = sections.get("experiment_plan_for_top_direction") or {}
+    if experiment:
         lines.extend(
             [
                 f"### {experiment['title']}",
                 "",
                 f"- Experiment ID: `{experiment['id']}`",
                 f"- Linked gaps: {_format_ids(experiment['linked_gap_ids'])}",
-                f"- Novelty assessment: `{experiment['novelty_assessment_id'] or 'none'}`",
-                f"- Confidence: {experiment['confidence']}",
                 f"- Baselines: {', '.join(experiment['baselines']) or 'missing'}",
                 f"- Metrics: {', '.join(experiment['metrics']) or 'missing'}",
                 f"- Falsification condition: {experiment['falsification_condition']}",
@@ -279,79 +384,102 @@ def render_markdown_report(report: dict[str, Any]) -> str:
                 "",
             ]
         )
-    if not report["recommended_experiment_plans"]:
-        lines.extend(["No experiment plans are available.", ""])
+    else:
+        lines.extend(["No experiment is ready for the top direction.", ""])
 
-    _section(lines, "11. Reviewer Simulation")
-    review = report["reviewer_simulation"]
-    for summary in review["summaries"]:
-        readiness = (
-            f"- `{summary['experiment_id']}` readiness={summary['submission_readiness_score']}/100, "
-            f"recommendation={summary['final_recommendation']}"
-        )
+    _section(lines, "13. Reviewer Simulation and Blocking Issues")
+    review = sections.get("reviewer_simulation_and_blocking_issues", {})
+    for summary_item in review.get("summaries", []):
         lines.extend(
             [
-                readiness,
-                f"  - Blocking issues: {'; '.join(summary['blocking_issues']) or 'none'}",
-                f"  - Required fixes: {'; '.join(summary['required_fixes']) or 'none'}",
+                f"- `{summary_item['experiment_id']}` readiness={summary_item['submission_readiness_score']}/100, "
+                f"recommendation={summary_item['final_recommendation']}",
+                f"  - Blocking issues: {'; '.join(summary_item['blocking_issues']) or 'none'}",
+                f"  - Required fixes: {'; '.join(summary_item['required_fixes']) or 'none'}",
             ]
         )
-    if not review["summaries"]:
+    if not review.get("summaries"):
         lines.append("- No reviewer summaries are available.")
     lines.extend(["", "Most serious objections:", ""])
-    for objection in review["serious_objections"]:
+    for objection in review.get("serious_objections", []):
         lines.extend(
             [
                 f"- `{objection['experiment_id']}` {objection['severity']}/{objection['category']}: {objection['objection']}",
+                f"  - Evidence/prior work: {', '.join(objection['evidence_or_prior_work']) or 'none'}",
                 f"  - Fix: {objection['suggested_fix']}",
             ]
         )
-    if not review["serious_objections"]:
+    if not review.get("serious_objections"):
         lines.append("- No major or fatal objections recorded.")
     lines.append("")
 
-    _section(lines, "12. Claim Ledger Summary")
-    claim_summary = report["claim_ledger_summary"]
+    _section(lines, "14. Claim Ledger Summary")
+    claim_summary = sections.get("claim_ledger_summary", {})
     lines.extend(
         [
-            f"- Status counts: {_format_counts(claim_summary['status_counts'])}",
-            f"- Type counts: {_format_counts(claim_summary['type_counts'])}",
-            f"- Claims needing verification: {claim_summary['claims_needing_verification']}",
-            f"- Claims without sources: {claim_summary['claims_without_sources']}",
+            f"- Status counts: {_format_counts(claim_summary.get('status_counts', {}))}",
+            f"- Type counts: {_format_counts(claim_summary.get('type_counts', {}))}",
+            f"- Claims needing verification: {claim_summary.get('claims_needing_verification', 0)}",
+            f"- Claims without sources: {claim_summary.get('claims_without_sources', 0)}",
             "",
             "Evidence-backed claims:",
             "",
         ]
     )
-    for claim in claim_summary["evidence_backed_claims"]:
-        lines.append(f"- `{claim['id']}` ({claim['type']}, {claim['confidence']}): {claim['text']}")
-    if not claim_summary["evidence_backed_claims"]:
+    for claim in claim_summary.get("evidence_backed_claims", []):
+        lines.append(
+            f"- `{claim['id']}` ({claim['type']}, {claim['confidence']}): {claim['text']} "
+            f"locators={_format_ids(claim.get('evidence_locators', []))}"
+        )
+    if not claim_summary.get("evidence_backed_claims"):
+        lines.append("- none")
+    lines.extend(["", "Unsupported or uncertain claims:", ""])
+    for claim in report.get("unsupported_or_uncertain_claims", []):
+        lines.append(f"- `{claim['id']}` ({claim['type']}; status={claim['status']}): {claim['text']}")
+    if not report.get("unsupported_or_uncertain_claims"):
         lines.append("- none")
     lines.append("")
-    _bullet_lines(lines, "Hypotheses", claim_summary["hypotheses"])
 
-    _section(lines, "13. Unsupported or Uncertain Claims")
-    for claim in report["unsupported_or_uncertain_claims"]:
-        lines.extend(
-            [
-                f"- `{claim['id']}` ({claim['type']}; status={claim['status']}; confidence={claim['confidence']})",
-                f"  - {claim['text']}",
-                f"  - Source papers: {_format_ids(claim['source_paper_ids'])}",
-            ]
+    _section(lines, "15. Human Review Summary")
+    human_review = sections.get("human_review_summary", {})
+    lines.extend(
+        [
+            f"- Review records: {human_review.get('review_count', 0)}",
+            f"- Actions: {_format_counts(human_review.get('action_counts', {}))}",
+            f"- Locked objects: {_format_ids(human_review.get('locked_objects', []))}",
+            f"- Rejected objects: {_format_ids(human_review.get('rejected_objects', []))}",
+            "",
+        ]
+    )
+    for record in human_review.get("recent_reviews", []):
+        lines.append(
+            f"- `{record['id']}` {record['action']} `{record['object_type']}:{record['object_id']}`"
+            + (f": {record['note']}" if record["note"] else "")
         )
-    if not report["unsupported_or_uncertain_claims"]:
-        lines.append("- No unsupported, contested, or uncertain claims are recorded.")
+    if not human_review.get("recent_reviews"):
+        lines.append("- none")
     lines.append("")
 
-    _section(lines, "14. Rejected Ideas")
-    for idea in report["rejected_ideas"]:
+    _section(lines, "16. Rejected Ideas")
+    for idea in sections.get("rejected_ideas", []):
         lines.extend([f"- `{idea['id']}` {idea['idea']}", f"  - Reason: {idea['reason']}"])
-    if not report["rejected_ideas"]:
+    if not sections.get("rejected_ideas"):
         lines.append("- No rejected ideas are recorded.")
     lines.append("")
 
-    _section(lines, "15. Next Actions")
-    lines.extend([f"- {item}" for item in report["next_actions"]] or ["- No next actions generated."])
+    _section(lines, "17. What Remains Uncertain")
+    uncertainty = sections.get("what_remains_uncertain", {})
+    for title, values in [
+        ("Missing searches", uncertainty.get("missing_searches", [])),
+        ("Poor or fallback coverage", uncertainty.get("coverage_warnings", [])),
+        ("Unsupported claims", uncertainty.get("unsupported_claims", [])),
+        ("Abstract-only evidence", uncertainty.get("abstract_only_papers", [])),
+        ("Fake-gap risks", uncertainty.get("gap_risks", [])),
+    ]:
+        _bullet_lines(lines, title, values)
+
+    _section(lines, "18. Next Actions")
+    lines.extend([f"- {item}" for item in sections.get("next_actions", [])] or ["- No next actions generated."])
     lines.append("")
     return "\n".join(lines).rstrip() + "\n"
 
@@ -374,20 +502,33 @@ def _group_objections(objections: list[ReviewerObjection]) -> dict[str, list[Rev
     return grouped
 
 
-def _top_gap(gaps: list[Gap], novelty_by_target: dict[str, NoveltyAssessment]) -> Gap | None:
-    ranked = _ranked_gaps(gaps, novelty_by_target)
+def _top_gap(
+    gaps: list[Gap],
+    novelty_by_target: dict[str, NoveltyAssessment],
+    matrix_by_gap: dict[str, GapEvidenceMatrix] | None = None,
+) -> Gap | None:
+    ranked = _ranked_gaps(gaps, novelty_by_target, matrix_by_gap)
     return ranked[0] if ranked else None
 
 
-def _ranked_gaps(gaps: list[Gap], novelty_by_target: dict[str, NoveltyAssessment]) -> list[Gap]:
-    def score(gap: Gap) -> tuple[int, int, int, int, int, str]:
+def _ranked_gaps(
+    gaps: list[Gap],
+    novelty_by_target: dict[str, NoveltyAssessment],
+    matrix_by_gap: dict[str, GapEvidenceMatrix] | None = None,
+) -> list[Gap]:
+    matrices = matrix_by_gap or {}
+
+    def score(gap: Gap) -> tuple[int, int, int, int, int, int, str]:
         novelty = novelty_by_target.get(gap.id)
+        matrix = matrices.get(gap.id)
         verdict_score = VERDICT_RANK.get(novelty.verdict, 1) if novelty is not None else 1
         novelty_score = NOVELTY_RANK.get(gap.novelty_status, 1)
         confidence_score = CONFIDENCE_RANK.get(gap.confidence, 1)
         evidence_score = len(gap.supporting_paper_ids or gap.linked_paper_ids) + len(gap.supporting_claim_ids)
+        matrix_score = len(matrix.evidence_rows) + len(matrix.papers_supporting) if matrix is not None else 0
+        counter_penalty = -(len(matrix.papers_countering) if matrix is not None else 0)
         non_meta_score = 0 if _is_meta_gap(gap) else 1
-        return (verdict_score, non_meta_score, novelty_score, confidence_score, evidence_score, gap.id)
+        return (verdict_score, non_meta_score, novelty_score, confidence_score, matrix_score, evidence_score + counter_penalty, gap.id)
 
     return sorted(gaps, key=score, reverse=True)
 
@@ -404,6 +545,111 @@ def _top_experiment(
             if top_gap.id in experiment.linked_gap_ids:
                 return experiment
     return ranked[0] if ranked else None
+
+
+def _top_direction_v2(
+    top_gap: Gap | None,
+    top_experiment: ExperimentPlan | None,
+    novelty_by_target: dict[str, NoveltyAssessment],
+    objections_by_experiment: dict[str, list[ReviewerObjection]],
+    dossier_by_target: dict[str, NoveltyDossier],
+    matrix_by_gap: dict[str, GapEvidenceMatrix],
+    coverage: dict[str, Any],
+    evidence_index: dict[str, list[str]],
+    *,
+    strict: bool,
+) -> dict[str, Any]:
+    if top_gap is None:
+        return _no_direction("No evidence-backed gap is available.", strict)
+
+    novelty = novelty_by_target.get(top_gap.id)
+    dossier = dossier_by_target.get(top_gap.id)
+    evidence_locators = _gap_evidence_locators(top_gap, matrix_by_gap.get(top_gap.id), evidence_index)
+    objections = objections_by_experiment.get(top_experiment.id, []) if top_experiment is not None else []
+    blocking = [item for item in objections if item.blocks_submission]
+    missing_searches = list(dossier.missing_searches if dossier is not None else (novelty.missing_searches if novelty is not None else []))
+    blocking_reasons = []
+    if coverage.get("coverage_assessment") == "poor":
+        blocking_reasons.append("Source or full-text coverage is poor.")
+    if coverage.get("fallback_paper_count", 0):
+        blocking_reasons.append("Some papers are fallback/offline artifacts.")
+    if not evidence_locators:
+        blocking_reasons.append("The top gap has no EvidenceSpan locator-backed evidence.")
+    if dossier is None:
+        blocking_reasons.append("No closest-prior-work dossier exists for the top gap.")
+    elif dossier.verdict != "pursue":
+        blocking_reasons.append(f"Closest-prior-work dossier verdict is {dossier.verdict}, not pursue.")
+    if missing_searches:
+        blocking_reasons.append(f"{len(missing_searches)} novelty search item(s) are still missing.")
+    if top_experiment is None:
+        blocking_reasons.append("No experiment plan exists for the top gap.")
+    if blocking:
+        blocking_reasons.append(f"{len(blocking)} reviewer blocking issue(s) remain.")
+
+    ready = not blocking_reasons
+    if strict and not ready:
+        return _no_direction(
+            "Strict mode refused to recommend a paper direction until coverage, evidence, and novelty gates pass.",
+            strict,
+            blocking_reasons,
+        )
+    if coverage.get("coverage_assessment") == "poor":
+        return _no_direction(
+            "Coverage is too weak to recommend a paper idea; run the next search and full-text steps first.",
+            strict,
+            blocking_reasons,
+        )
+
+    title = top_experiment.title if top_experiment is not None else (top_gap.title or top_gap.id)
+    claims_novelty = bool(
+        dossier and dossier.verdict == "pursue" and dossier.novelty_strength in {"medium", "strong"} and not missing_searches
+    )
+    novelty_phrase = (
+        "The dossier supports a provisional novelty claim." if claims_novelty else "The report does not claim this direction is novel yet."
+    )
+    return {
+        "title": title,
+        "readiness": "ready" if ready else "provisional",
+        "gap_id": top_gap.id,
+        "experiment_id": top_experiment.id if top_experiment is not None else "",
+        "dossier_id": dossier.target_id if dossier is not None else "",
+        "justification": (
+            f"This is the strongest current candidate because it has the best ranked evidence-backed gap posture and a concrete "
+            f"experiment plan. {novelty_phrase} Treat it as provisional wherever blocking reasons remain."
+        ),
+        "confidence": top_experiment.confidence if top_experiment is not None else top_gap.confidence,
+        "novelty_verdict": dossier.verdict if dossier is not None else (novelty.verdict if novelty is not None else "unknown"),
+        "novelty_strength": (
+            dossier.novelty_strength if dossier is not None else (novelty.novelty_strength if novelty is not None else "unknown")
+        ),
+        "dossier_recommended_action": dossier.recommended_action if dossier is not None else "not available",
+        "dossier_decisive_difference_needed": dossier.decisive_difference_needed if dossier is not None else "",
+        "blocking_reasons": blocking_reasons,
+        "evidence_locators": evidence_locators,
+        "missing_searches": missing_searches,
+        "claims_novelty": claims_novelty,
+    }
+
+
+def _no_direction(message: str, strict: bool, blocking_reasons: list[str] | None = None) -> dict[str, Any]:
+    return {
+        "title": "No direction ready",
+        "readiness": "not_ready",
+        "gap_id": "",
+        "experiment_id": "",
+        "dossier_id": "",
+        "justification": message,
+        "confidence": "low",
+        "novelty_verdict": "unknown",
+        "novelty_strength": "unknown",
+        "dossier_recommended_action": "run more search and full-text evidence collection",
+        "dossier_decisive_difference_needed": "",
+        "blocking_reasons": blocking_reasons or [],
+        "evidence_locators": [],
+        "missing_searches": [],
+        "claims_novelty": False,
+        "strict_mode": strict,
+    }
 
 
 def _is_meta_gap(gap: Gap) -> bool:
@@ -446,6 +692,7 @@ def _top_direction(
     top_experiment: ExperimentPlan | None,
     novelty_by_target: dict[str, NoveltyAssessment],
     objections_by_experiment: dict[str, list[ReviewerObjection]],
+    dossier_by_target: dict[str, Any],
 ) -> dict[str, Any]:
     if top_gap is None and top_experiment is None:
         return {
@@ -460,6 +707,7 @@ def _top_direction(
         novelty = novelty_by_target.get(top_gap.id)
     if novelty is None and top_experiment is not None:
         novelty = _novelty_for_experiment(top_experiment, novelty_by_target)
+    dossier = dossier_by_target.get(top_gap.id) if top_gap is not None else None
     objections = objections_by_experiment.get(top_experiment.id, []) if top_experiment is not None else []
     blocking = sum(1 for item in objections if item.blocks_submission)
     if top_experiment is not None:
@@ -484,6 +732,8 @@ def _top_direction(
         justification = "This direction is the best current gap, but it still needs an experiment plan before it can guide work."
     if novelty is not None and novelty.verdict in {"reject", "unknown"}:
         justification += " The novelty gate does not yet support a strong novelty claim."
+    if dossier is not None and dossier.decisive_difference_needed:
+        justification += f" Dossier decisive difference: {dossier.decisive_difference_needed}"
     if blocking:
         justification += f" Reviewer simulation currently lists {blocking} blocking issue(s)."
     return {
@@ -494,6 +744,8 @@ def _top_direction(
         "confidence": confidence,
         "novelty_verdict": novelty.verdict if novelty is not None else "unknown",
         "novelty_strength": novelty.novelty_strength if novelty is not None else "unknown",
+        "dossier_recommended_action": dossier.recommended_action if dossier is not None else "not available",
+        "dossier_decisive_difference_needed": dossier.decisive_difference_needed if dossier is not None else "",
         "blocking_reviewer_issues": blocking,
     }
 
@@ -574,24 +826,70 @@ def _literature_map(state: ResearchRunState, paper_by_id: dict[str, Paper]) -> d
 def _search_coverage(state: ResearchRunState) -> dict[str, Any]:
     years = [paper.year for paper in state.papers if paper.year]
     source_counts = Counter(paper.source or "unknown" for paper in state.papers)
-    abstract_only = sum(1 for note in state.paper_notes if note.source_basis == "metadata/abstract only")
+    coverage = state.source_coverage or generate_source_coverage(state)
+    abstract_only = len(coverage.papers_abstract_only)
     limitations = []
-    if not state.papers:
-        limitations.append("No papers were collected.")
-    if abstract_only:
-        limitations.append(f"{abstract_only} note(s) are based on metadata/abstract only.")
+    limitations.extend(coverage.coverage_warnings)
     if any(item.missing_searches for item in state.novelty_assessments):
         limitations.append("Some novelty-gate searches remain missing.")
     if not limitations:
         limitations.append("No explicit search limitation was recorded.")
+    fixture_or_fallback = _fixture_or_fallback_label(state, coverage.fallback_paper_count)
+    coverage_assessment = _coverage_assessment(coverage.confidence, len(coverage.query_records), len(coverage.papers_with_full_text))
     return {
         "paper_count": len(state.papers),
         "source_counts": dict(sorted(source_counts.items())),
+        "query_count": len(coverage.query_records),
+        "queries": [
+            {
+                "id": record.id,
+                "query": record.query,
+                "purpose": record.purpose,
+                "source_names": record.source_names,
+                "result_paper_ids": record.result_paper_ids,
+                "failure_messages": record.failure_messages,
+            }
+            for record in coverage.query_records
+        ],
+        "searched_sources": coverage.searched_sources,
+        "failed_sources": coverage.failed_sources,
         "year_range": f"{min(years)}-{max(years)}" if years else "unknown",
         "papers_with_doi": sum(1 for paper in state.papers if paper.doi),
-        "papers_with_pdf": sum(1 for paper in state.papers if paper.pdf_url),
+        "papers_with_pdf": len(coverage.papers_with_pdf),
+        "papers_with_full_text": len(coverage.papers_with_full_text),
         "abstract_only_notes": abstract_only,
+        "fallback_paper_count": coverage.fallback_paper_count,
+        "fixture_or_fallback_label": fixture_or_fallback,
+        "confidence": coverage.confidence,
+        "coverage_assessment": coverage_assessment,
         "limitations": " ".join(limitations),
+    }
+
+
+def _fixture_or_fallback_label(state: ResearchRunState, fallback_count: int) -> str:
+    if fallback_count:
+        return "fallback/offline papers present"
+    if any(paper.source == "fixture" or paper.raw_metadata.get("fixture_notice") for paper in state.papers):
+        return "synthetic fixture data"
+    return "not detected"
+
+
+def _coverage_assessment(confidence: str, query_count: int, full_text_count: int) -> str:
+    if confidence == "low" or query_count == 0:
+        return "poor"
+    if full_text_count == 0:
+        return "limited"
+    return "adequate"
+
+
+def _what_was_searched(coverage: dict[str, Any]) -> dict[str, Any]:
+    purpose_counts = Counter(query["purpose"] for query in coverage.get("queries", []))
+    return {
+        "query_count": coverage.get("query_count", 0),
+        "queries": coverage.get("queries", []),
+        "purpose_counts": dict(sorted(purpose_counts.items())),
+        "searched_sources": coverage.get("searched_sources", []),
+        "failed_sources": coverage.get("failed_sources", []),
     }
 
 
@@ -621,7 +919,10 @@ def _top_paper_clusters(state: ResearchRunState, paper_by_id: dict[str, Paper]) 
 
 
 def _key_papers_read_deeply(
-    state: ResearchRunState, paper_by_id: dict[str, Paper], notes_by_paper: dict[str, PaperNote]
+    state: ResearchRunState,
+    paper_by_id: dict[str, Paper],
+    notes_by_paper: dict[str, PaperNote],
+    evidence_index: dict[str, list[str]],
 ) -> list[dict[str, Any]]:
     candidate_ids: list[str] = []
     if state.paper_triage is not None:
@@ -639,17 +940,32 @@ def _key_papers_read_deeply(
                 "citation": _citation(paper) if paper is not None else paper_id,
                 "summary": note.one_sentence_summary or note.summary or "No summary recorded.",
                 "source_basis": note.source_basis,
+                "evidence_label": _evidence_label(note.source_basis),
                 "confidence": note.confidence,
                 "core_claims": note.core_claims,
                 "main_results": note.main_results,
                 "evidence_snippet_count": len(note.quotes_or_evidence_snippets or note.evidence),
+                "evidence_locators": _note_evidence_locators(note, evidence_index),
+                "sections_used": note.sections_used,
+                "missing_sections": note.missing_sections,
             }
         )
     return records[:12]
 
 
-def _gap_record(gap: Gap, novelty_by_target: dict[str, NoveltyAssessment]) -> dict[str, Any]:
+def _gap_record(
+    gap: Gap,
+    novelty_by_target: dict[str, NoveltyAssessment],
+    matrix: GapEvidenceMatrix | None = None,
+    evidence_index: dict[str, list[str]] | None = None,
+) -> dict[str, Any]:
     novelty = novelty_by_target.get(gap.id)
+    index = evidence_index or {}
+    locators = _gap_evidence_locators(gap, matrix, index)
+    full_text_locators = {locator for values in index.values() for locator in values}
+    has_full_text_evidence = bool(set(locators) & full_text_locators) or bool(
+        matrix is not None and any(row.evidence_span_id for row in matrix.evidence_rows)
+    )
     return {
         "id": gap.id,
         "title": gap.title or gap.id,
@@ -658,6 +974,11 @@ def _gap_record(gap: Gap, novelty_by_target: dict[str, NoveltyAssessment]) -> di
         "supporting_paper_ids": gap.supporting_paper_ids or gap.linked_paper_ids,
         "supporting_claim_ids": gap.supporting_claim_ids,
         "counterevidence_claim_ids": gap.counterevidence_claim_ids,
+        "counterevidence_paper_ids": matrix.papers_countering if matrix is not None else [],
+        "evidence_row_count": len(matrix.evidence_rows) if matrix is not None else 0,
+        "evidence_locators": locators,
+        "evidence_basis": "full-text evidence" if has_full_text_evidence else "abstract-only or indirect evidence",
+        "evidence_matrix_confidence": matrix.confidence if matrix is not None else "none",
         "why_existing_work_does_not_solve_it": gap.why_existing_work_does_not_solve_it,
         "why_it_matters": gap.why_it_matters,
         "minimum_experiment_needed": gap.minimum_experiment_needed,
@@ -668,11 +989,79 @@ def _gap_record(gap: Gap, novelty_by_target: dict[str, NoveltyAssessment]) -> di
     }
 
 
-def _novelty_record(assessment: NoveltyAssessment) -> dict[str, Any]:
+def _transfer_record(transfer: CrossDomainTransferCandidate | None) -> dict[str, Any]:
+    if transfer is None:
+        return {}
+    return {
+        "id": transfer.id,
+        "status": transfer.status,
+        "source_paper_ids": transfer.source_paper_ids,
+        "technical_mechanism": transfer.technical_mechanism,
+        "required_adaptation": transfer.required_adaptation,
+        "evidence_span_ids": transfer.evidence_span_ids,
+        "confidence": transfer.confidence,
+    }
+
+
+def _cross_domain_transfer_candidates(
+    state: ResearchRunState,
+    transfer_by_id: dict[str, CrossDomainTransferCandidate],
+) -> list[dict[str, Any]]:
+    records = []
+    for item in state.cross_domain_analogies:
+        transfer_record = _transfer_record(transfer_by_id.get(item.transfer_candidate_id))
+        records.append(
+            {
+                "source_field": item.source_field,
+                "source_concept": item.source_concept,
+                "target_gap_id": item.target_gap_id,
+                "why_it_maps": item.why_it_maps,
+                "what_breaks": item.what_breaks_in_the_mapping,
+                "candidate_transfer": item.technical_transfer_candidate,
+                "search_queries": item.papers_or_sources_to_search,
+                "confidence": item.confidence,
+                "status": item.status,
+                "source_paper_ids": item.source_paper_ids,
+                "technical_mechanism": transfer_record.get("technical_mechanism", ""),
+                "required_adaptation": transfer_record.get("required_adaptation", ""),
+                "evidence_span_ids": transfer_record.get("evidence_span_ids", []),
+                "transfer": transfer_record,
+            }
+        )
+    for transfer in state.cross_domain_transfers:
+        if any(record.get("transfer", {}).get("id") == transfer.id for record in records):
+            continue
+        records.append(
+            {
+                "source_field": transfer.source_field,
+                "source_concept": transfer.source_concept,
+                "target_gap_id": transfer.target_gap_id,
+                "why_it_maps": transfer.why_it_maps,
+                "what_breaks": transfer.what_breaks,
+                "candidate_transfer": transfer.technical_mechanism,
+                "search_queries": [],
+                "confidence": transfer.confidence,
+                "status": transfer.status,
+                "source_paper_ids": transfer.source_paper_ids,
+                "technical_mechanism": transfer.technical_mechanism,
+                "required_adaptation": transfer.required_adaptation,
+                "evidence_span_ids": transfer.evidence_span_ids,
+                "transfer": _transfer_record(transfer),
+            }
+        )
+    return records
+
+
+def _novelty_record(assessment: NoveltyAssessment, dossier: NoveltyDossier | None = None) -> dict[str, Any]:
     return {
         "target_id": assessment.target_gap_or_hypothesis_id,
         "idea_summary": assessment.idea_summary,
         "closest_prior_work": assessment.closest_prior_work,
+        "dossier_top_prior_work": dossier.top_prior_work if dossier is not None else [],
+        "dossier_recommended_action": dossier.recommended_action if dossier is not None else "",
+        "dossier_candidate_count": len(dossier.candidates_considered) if dossier is not None else 0,
+        "dossier_comparison_table": dossier.comparison_table if dossier is not None else [],
+        "evidence_locators": [span.locator for span in dossier.evidence_spans if span.locator] if dossier is not None else [],
         "similarity_to_prior_work": assessment.similarity_to_prior_work,
         "what_is_new": assessment.what_is_new,
         "what_is_not_new": assessment.what_is_not_new,
@@ -789,6 +1178,7 @@ def _claim_record(claim: Claim) -> dict[str, Any]:
         "source_paper_ids": claim.source_paper_ids,
         "supporting_evidence_count": len(claim.supporting_evidence),
         "counter_evidence_count": len(claim.counter_evidence),
+        "evidence_locators": [item.locator for item in claim.supporting_evidence if item.locator],
         "needs_verification": claim.needs_verification,
         "closest_prior_work": claim.closest_prior_work,
     }
@@ -797,6 +1187,22 @@ def _claim_record(claim: Claim) -> dict[str, Any]:
 def _rejected_ideas(state: ResearchRunState) -> list[dict[str, Any]]:
     records = [{"id": item.id, "idea": item.idea, "reason": item.reason} for item in state.rejected_ideas]
     existing = {item["id"] for item in records}
+    gap_by_id = {gap.id: gap for gap in state.gaps}
+    for record in state.human_reviews:
+        if record.object_type != "gap" or record.action != "reject":
+            continue
+        rejected_id = f"human-rejected-{record.object_id}"
+        if rejected_id in existing:
+            continue
+        gap = gap_by_id.get(record.object_id)
+        records.append(
+            {
+                "id": rejected_id,
+                "idea": (gap.title or gap.description) if gap is not None else record.object_id,
+                "reason": f"Human reviewer rejected this gap: {record.note or 'no reason recorded'}.",
+            }
+        )
+        existing.add(rejected_id)
     for assessment in state.novelty_assessments:
         if assessment.verdict != "reject":
             continue
@@ -813,6 +1219,136 @@ def _rejected_ideas(state: ResearchRunState) -> list[dict[str, Any]]:
             }
         )
     return records
+
+
+def _evidence_locator_index(state: ResearchRunState) -> dict[str, list[str]]:
+    index: dict[str, list[str]] = {}
+    for span in state.evidence_spans:
+        if span.locator:
+            index.setdefault(span.paper_id, []).append(span.locator)
+            if span.section_id:
+                index.setdefault(span.section_id, []).append(span.locator)
+            index.setdefault(span.id, []).append(span.locator)
+    return {key: _dedupe(values) for key, values in index.items()}
+
+
+def _all_evidence_locators(state: ResearchRunState) -> list[dict[str, Any]]:
+    return [
+        {
+            "id": span.id,
+            "paper_id": span.paper_id,
+            "section_id": span.section_id,
+            "locator": span.locator,
+            "evidence_type": span.evidence_type,
+            "confidence": span.confidence,
+        }
+        for span in state.evidence_spans
+        if span.locator
+    ]
+
+
+def _note_evidence_locators(note: PaperNote, evidence_index: dict[str, list[str]]) -> list[str]:
+    locators = list(evidence_index.get(note.paper_id, []))
+    locators.extend(item.locator for item in (note.quotes_or_evidence_snippets or note.evidence) if item.locator)
+    for section_id in note.sections_used:
+        locators.extend(evidence_index.get(section_id, []))
+    return _dedupe(locators)
+
+
+def _gap_evidence_locators(
+    gap: Gap,
+    matrix: GapEvidenceMatrix | None,
+    evidence_index: dict[str, list[str]],
+) -> list[str]:
+    locators: list[str] = []
+    if matrix is not None:
+        locators.extend(row.locator for row in matrix.evidence_rows if row.locator)
+        locators.extend(row.evidence_span_id for row in matrix.evidence_rows if row.evidence_span_id and not row.locator)
+    for paper_id in gap.supporting_paper_ids or gap.linked_paper_ids:
+        locators.extend(evidence_index.get(paper_id, []))
+    return _dedupe(locators)
+
+
+def _gap_matrix_summary(state: ResearchRunState, evidence_index: dict[str, list[str]]) -> list[dict[str, Any]]:
+    gap_by_id = {gap.id: gap for gap in state.gaps}
+    records = []
+    for matrix in state.gap_evidence_matrices:
+        gap = gap_by_id.get(matrix.gap_id)
+        records.append(
+            {
+                "gap_id": matrix.gap_id,
+                "confidence": matrix.confidence,
+                "evidence_row_count": len(matrix.evidence_rows),
+                "papers_supporting": matrix.papers_supporting,
+                "papers_countering": matrix.papers_countering,
+                "repeated_limitation_count": matrix.repeated_limitation_count,
+                "missing_metric_count": matrix.missing_metric_count,
+                "missing_dataset_count": matrix.missing_dataset_count,
+                "assumption_pattern_count": matrix.assumption_pattern_count,
+                "evidence_locators": _gap_evidence_locators(gap, matrix, evidence_index) if gap is not None else [],
+            }
+        )
+    return records
+
+
+def _experiment_for_top_direction(top_experiment: ExperimentPlan | None, experiment_records: list[dict[str, Any]]) -> dict[str, Any]:
+    if top_experiment is None:
+        return {}
+    for record in experiment_records:
+        if record["id"] == top_experiment.id:
+            return record
+    return {}
+
+
+def _uncertainty_section(
+    state: ResearchRunState,
+    coverage: dict[str, Any],
+    uncertain_claims: list[Claim],
+    novelty_records: list[dict[str, Any]],
+) -> dict[str, list[str]]:
+    missing_searches = _dedupe(
+        [search for item in novelty_records for search in item.get("missing_searches", [])]
+        + [f"{query['id']}: {failure}" for query in coverage.get("queries", []) for failure in query.get("failure_messages", [])]
+    )
+    coverage_warnings = []
+    if coverage.get("coverage_assessment") != "adequate":
+        coverage_warnings.append(f"Coverage assessment is {coverage.get('coverage_assessment', 'unknown')}.")
+    if coverage.get("fixture_or_fallback_label") != "not detected":
+        coverage_warnings.append(f"Data label: {coverage.get('fixture_or_fallback_label')}.")
+    if coverage.get("limitations"):
+        coverage_warnings.append(coverage["limitations"])
+    return {
+        "missing_searches": missing_searches,
+        "coverage_warnings": _dedupe(coverage_warnings),
+        "unsupported_claims": [f"{claim.id}: {claim.text}" for claim in uncertain_claims[:12]],
+        "abstract_only_papers": [note.paper_id for note in state.paper_notes if note.source_basis != "full text"][:12],
+        "gap_risks": _dedupe([f"{gap.id}: {gap.risk_that_gap_is_fake}" for gap in state.gaps if gap.risk_that_gap_is_fake])[:12],
+    }
+
+
+def _next_actions_v2(
+    state: ResearchRunState,
+    top_gap: Gap | None,
+    top_experiment: ExperimentPlan | None,
+    coverage: dict[str, Any],
+    direction: dict[str, Any],
+    uncertainty: dict[str, list[str]],
+) -> list[str]:
+    actions = []
+    if direction.get("readiness") == "not_ready" or coverage.get("coverage_assessment") == "poor":
+        actions.append("Run additional source searches and build a source coverage report before choosing a paper direction.")
+    if coverage.get("papers_with_full_text", 0) == 0 and state.papers:
+        actions.append("Download and parse full text for Tier 1 and Tier 2 papers.")
+    if uncertainty.get("missing_searches"):
+        actions.append(f"Resolve missing novelty/source searches, starting with: {uncertainty['missing_searches'][0]}.")
+    if top_gap is not None and not direction.get("evidence_locators"):
+        actions.append(f"Add EvidenceSpan locators for the evidence supporting `{top_gap.id}`.")
+    if top_experiment is not None and direction.get("readiness") != "not_ready":
+        actions.append(f"Implement `{top_experiment.id}` only after the listed dossier and reviewer blockers are resolved.")
+    unsupported = [claim.id for claim in state.claims if claim.status == "unsupported" or claim.needs_verification]
+    if unsupported:
+        actions.append(f"Verify, contest, or downgrade uncertain ledger claims: {', '.join(unsupported[:6])}.")
+    return _dedupe(actions)[:8]
 
 
 def _next_actions(state: ResearchRunState, top_gap: Gap | None, top_experiment: ExperimentPlan | None) -> list[str]:
@@ -835,6 +1371,14 @@ def _next_actions(state: ResearchRunState, top_gap: Gap | None, top_experiment: 
     if unsupported:
         actions.append(f"Verify or downgrade uncertain ledger claims: {', '.join(unsupported[:6])}.")
     return actions[:8]
+
+
+def _evidence_label(source_basis: str) -> str:
+    if source_basis == "full text":
+        return "full-text evidence"
+    if "abstract" in source_basis:
+        return "abstract-only evidence"
+    return source_basis or "unknown evidence basis"
 
 
 def _citation(paper: Paper | None) -> str:

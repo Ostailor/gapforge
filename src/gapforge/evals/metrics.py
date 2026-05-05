@@ -5,7 +5,16 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-from gapforge.models import Claim, ExperimentPlan, Gap, NoveltyAssessment, ResearchRunState, ReviewerObjection
+from gapforge.models import (
+    Claim,
+    ExperimentPlan,
+    Gap,
+    GapEvidenceMatrix,
+    NoveltyAssessment,
+    NoveltyDossier,
+    ResearchRunState,
+    ReviewerObjection,
+)
 
 
 @dataclass(slots=True)
@@ -34,6 +43,14 @@ class EvalScores:
     unsupported_claim_rate: float
     experiment_completeness_score: float
     reviewer_objection_quality_score: float
+    full_text_coverage_score: float | None = None
+    evidence_span_precision_proxy: float | None = None
+    section_grounding_score: float | None = None
+    gap_evidence_matrix_score: float | None = None
+    novelty_dossier_completeness_score: float | None = None
+    source_coverage_transparency_score: float | None = None
+    human_review_respect_score: float | None = None
+    report_uncertainty_score: float | None = None
 
     def overall(self) -> float:
         positive = [
@@ -45,6 +62,22 @@ class EvalScores:
             self.reviewer_objection_quality_score,
         ]
         return round((sum(positive) + (1.0 - self.unsupported_claim_rate)) / 7, 3)
+
+    def v2_overall(self) -> float | None:
+        values = [
+            self.full_text_coverage_score,
+            self.evidence_span_precision_proxy,
+            self.section_grounding_score,
+            self.gap_evidence_matrix_score,
+            self.novelty_dossier_completeness_score,
+            self.source_coverage_transparency_score,
+            self.human_review_respect_score,
+            self.report_uncertainty_score,
+        ]
+        present = [value for value in values if value is not None]
+        if not present:
+            return None
+        return round(sum(present) / len(present), 3)
 
 
 def gap_specificity_score(gaps: list[Gap]) -> float:
@@ -76,10 +109,15 @@ def evidence_linkage_score(gaps: list[Gap]) -> float:
     return round(sum(1 for item in linked if item) / len(gaps), 3)
 
 
-def novelty_gate_accuracy(assessments: list[NoveltyAssessment], expected_duplicates: list[dict[str, object]]) -> float:
+def novelty_gate_accuracy(
+    assessments: list[NoveltyAssessment],
+    expected_duplicates: list[dict[str, object]],
+    dossiers: list[NoveltyDossier] | None = None,
+) -> float:
     if not expected_duplicates:
         return 1.0
     correct = 0
+    dossier_by_target = {dossier.target_id: dossier for dossier in dossiers or []}
     for duplicate in expected_duplicates:
         expected = str(duplicate.get("expected_verdict", "reject"))
         duplicate_text = f"{duplicate.get('id', '')} {duplicate.get('title', '')} {duplicate.get('description', '')}".lower()
@@ -89,7 +127,14 @@ def novelty_gate_accuracy(assessments: list[NoveltyAssessment], expected_duplica
             if _overlap(duplicate_text, assessment.idea_summary.lower()) >= 0.25
             or str(duplicate.get("id", "")) == assessment.target_gap_or_hypothesis_id
         ]
-        if any(assessment.verdict == expected for assessment in matched):
+        matched_dossiers = [
+            dossier
+            for target_id, dossier in dossier_by_target.items()
+            if str(duplicate.get("id", "")) == target_id or _overlap(duplicate_text, dossier.idea_summary.lower()) >= 0.25
+        ]
+        assessment_correct = any(assessment.verdict == expected for assessment in matched)
+        dossier_correct = any(dossier.verdict == expected for dossier in matched_dossiers)
+        if assessment_correct or dossier_correct:
             correct += 1
     return round(correct / len(expected_duplicates), 3)
 
@@ -103,9 +148,11 @@ def duplicate_detection_rate(assessments: list[NoveltyAssessment]) -> float:
     return round(sum(1 for item in duplicate_like if item.verdict == "reject") / len(duplicate_like), 3)
 
 
-def unsupported_claim_rate(claims: list[Claim]) -> float:
+def unsupported_claim_rate(claims: list[Claim], state: ResearchRunState | None = None) -> float:
     if not claims:
         return 0.0
+    full_text_paper_ids = {section.paper_id for section in state.paper_sections if section.text.strip()} if state is not None else set()
+    span_paper_ids = {span.paper_id for span in state.evidence_spans} if state is not None else set()
     unsupported = [
         claim
         for claim in claims
@@ -114,13 +161,20 @@ def unsupported_claim_rate(claims: list[Claim]) -> float:
         or claim.type == "novelty"
         and not claim.closest_prior_work
         or claim.status == "unsupported"
+        or (
+            claim.status == "supported"
+            and claim.confidence == "high"
+            and bool(set(claim.source_paper_ids) & full_text_paper_ids)
+            and not bool(set(claim.source_paper_ids) & span_paper_ids)
+        )
     ]
     return round(len(unsupported) / len(claims), 3)
 
 
-def experiment_completeness_score(experiments: list[ExperimentPlan]) -> float:
+def experiment_completeness_score(experiments: list[ExperimentPlan], dossiers: list[NoveltyDossier] | None = None) -> float:
     if not experiments:
         return 0.0
+    dossier_targets = {dossier.target_id for dossier in dossiers or []}
     required = [
         "linked_gap_ids",
         "hypothesis",
@@ -139,7 +193,11 @@ def experiment_completeness_score(experiments: list[ExperimentPlan]) -> float:
         for field_name in required:
             value = getattr(experiment, field_name)
             present += bool(value)
-        scores.append(present / len(required))
+        novelty_linked = bool(set(experiment.linked_gap_ids) & dossier_targets) or experiment.novelty_assessment_id in dossier_targets
+        explicit_unknown = experiment.novelty_assessment_id in {"", "unknown"} and any(
+            "novelty" in risk.lower() for risk in experiment.risks
+        )
+        scores.append((present + int(novelty_linked or explicit_unknown)) / (len(required) + 1))
     return round(sum(scores) / len(scores), 3)
 
 
@@ -150,6 +208,124 @@ def reviewer_objection_quality_score(objections: list[ReviewerObjection]) -> flo
     serious = sum(1 for item in objections if item.severity in {"major", "fatal"})
     concrete = sum(1 for item in objections if item.why_reviewer_would_care and item.suggested_fix)
     return round(min(1.0, (0.4 * len(categories) / 6) + (0.3 * serious / len(objections)) + (0.3 * concrete / len(objections))), 3)
+
+
+def full_text_coverage_score(state: ResearchRunState) -> float:
+    if not state.papers:
+        return 0.0
+    full_text_ids = {section.paper_id for section in state.paper_sections if section.text.strip()}
+    return round(len(full_text_ids) / len(state.papers), 3)
+
+
+def evidence_span_precision_proxy(state: ResearchRunState) -> float:
+    if not state.evidence_spans:
+        return 0.0
+    sections_by_id = {section.id: section for section in state.paper_sections}
+    valid = 0
+    for span in state.evidence_spans:
+        section = sections_by_id.get(span.section_id)
+        quote = " ".join(span.quote.lower().split())
+        section_text = " ".join(section.text.lower().split()) if section is not None else ""
+        if span.paper_id and quote and (not section or quote[:80] in section_text or _overlap(quote, section_text) >= 0.35):
+            valid += 1
+    return round(valid / len(state.evidence_spans), 3)
+
+
+def section_grounding_score(state: ResearchRunState) -> float:
+    if not state.paper_notes:
+        return 0.0
+    known_sections = {section.id for section in state.paper_sections}
+    span_paper_ids = {span.paper_id for span in state.evidence_spans}
+    scores = []
+    for note in state.paper_notes:
+        if note.source_basis == "full text":
+            has_known_section = bool(set(note.sections_used) & known_sections)
+            results_grounded = (
+                not note.main_results or note.paper_id in span_paper_ids or bool(note.quotes_or_evidence_snippets or note.evidence)
+            )
+            scores.append((int(has_known_section) + int(results_grounded)) / 2)
+        else:
+            scores.append(0.5 if note.confidence in {"low", "medium"} else 0.0)
+    return round(sum(scores) / len(scores), 3)
+
+
+def gap_evidence_matrix_score(gaps: list[Gap], matrices: list[GapEvidenceMatrix]) -> float:
+    if not gaps:
+        return 0.0
+    by_gap = {matrix.gap_id: matrix for matrix in matrices}
+    scores = []
+    for gap in gaps:
+        matrix = by_gap.get(gap.id)
+        if matrix is None:
+            scores.append(0.0 if not gap.explicit_reason else 0.4)
+            continue
+        linked = bool(matrix.evidence_rows or matrix.papers_supporting or matrix.papers_countering)
+        counters_represented = bool(matrix.papers_countering) or gap.confidence != "high"
+        confidence_ok = gap.confidence != "high" or len(matrix.papers_supporting) >= 2
+        scores.append((int(linked) + int(counters_represented) + int(confidence_ok)) / 3)
+    return round(sum(scores) / len(scores), 3)
+
+
+def novelty_dossier_completeness_score(dossiers: list[NoveltyDossier], expected_duplicates: list[dict[str, object]]) -> float:
+    if not dossiers:
+        return 0.0
+    duplicate_ids = {str(item.get("id", "")) for item in expected_duplicates}
+    scores = []
+    for dossier in dossiers:
+        required = [
+            bool(dossier.query_plan),
+            bool(dossier.candidates_considered),
+            bool(dossier.top_prior_work),
+            bool(dossier.comparison_table),
+            bool(dossier.decisive_difference_needed),
+            bool(dossier.recommended_action),
+            dossier.verdict in {"reject", "revise", "pursue", "unknown"},
+        ]
+        if dossier.target_id in duplicate_ids:
+            required.append(dossier.verdict == "reject")
+        scores.append(sum(1 for item in required if item) / len(required))
+    return round(sum(scores) / len(scores), 3)
+
+
+def source_coverage_transparency_score(state: ResearchRunState) -> float:
+    coverage = state.source_coverage
+    if coverage is None:
+        return 0.0
+    checks = [
+        bool(coverage.searched_sources),
+        bool(coverage.query_records),
+        bool(coverage.papers_by_source),
+        coverage.papers_with_full_text is not None,
+        coverage.papers_abstract_only is not None,
+        coverage.confidence in {"low", "medium", "high"},
+        bool(coverage.coverage_warnings) or coverage.confidence == "high",
+    ]
+    return round(sum(1 for item in checks if item) / len(checks), 3)
+
+
+def human_review_respect_score(state: ResearchRunState) -> float:
+    rejected_gap_ids = {record.object_id for record in state.human_reviews if record.object_type == "gap" and record.action == "reject"}
+    locked_ids = {record.object_id for record in state.human_reviews if record.action == "lock"}
+    if not rejected_gap_ids and not locked_ids:
+        return 1.0
+    experiments_for_rejected = [experiment.id for experiment in state.experiments if rejected_gap_ids & set(experiment.linked_gap_ids)]
+    locked_objects_present = all(
+        any(getattr(item, "id", "") == object_id for item in state.gaps + state.experiments + state.claims) for object_id in locked_ids
+    )
+    checks = [not experiments_for_rejected, locked_objects_present]
+    return round(sum(1 for item in checks if item) / len(checks), 3)
+
+
+def report_uncertainty_score(state: ResearchRunState) -> float:
+    uncertainty_signals = 0
+    uncertainty_signals += sum(
+        1 for claim in state.claims if claim.status in {"unsupported", "uncertain", "contested"} or claim.needs_verification
+    )
+    uncertainty_signals += sum(1 for gap in state.gaps if gap.risk_that_gap_is_fake)
+    uncertainty_signals += sum(1 for dossier in state.novelty_dossiers if dossier.missing_searches or dossier.confidence == "low")
+    uncertainty_signals += sum(1 for note in state.paper_notes if note.source_basis != "full text")
+    denominator = max(1, len(state.claims) + len(state.gaps) + len(state.novelty_dossiers) + len(state.paper_notes))
+    return round(min(1.0, uncertainty_signals / denominator), 3)
 
 
 def _tokens(text: str) -> list[str]:

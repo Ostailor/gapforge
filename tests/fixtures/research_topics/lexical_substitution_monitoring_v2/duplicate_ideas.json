@@ -1,0 +1,8 @@
+[
+  {
+    "id": "dup-lsm-1",
+    "title": "Fixed-threshold benchmark for lexical substitution monitoring",
+    "description": "Duplicate idea: repeat the same fixed-threshold benchmark for lexical substitution monitoring already covered by p-lsm-1.",
+    "expected_verdict": "reject"
+  }
+]

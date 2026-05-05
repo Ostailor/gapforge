@@ -38,7 +38,7 @@ class SkillRegistry:
             "paper-triage": PaperTriage(),
             "deep-reading": DeepReading(),
             "gap-mining": GapMining(),
-            "cross-domain-analogy": CrossDomainAnalogy(),
+            "cross-domain-analogy": CrossDomainAnalogy(sources),
             "novelty-gate": NoveltyGate(sources),
             "experiment-designer": ExperimentDesigner(),
             "reviewer-simulation": ReviewerSimulation(),

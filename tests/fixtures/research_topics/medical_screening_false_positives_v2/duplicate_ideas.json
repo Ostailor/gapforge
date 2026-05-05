@@ -1,0 +1,8 @@
+[
+  {
+    "id": "dup-msf-1",
+    "title": "Fixed-threshold benchmark for medical screening",
+    "description": "Duplicate idea: repeat the same fixed-threshold benchmark for medical screening already covered by p-msf-1.",
+    "expected_verdict": "reject"
+  }
+]

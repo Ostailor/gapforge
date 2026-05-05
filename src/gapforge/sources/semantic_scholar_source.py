@@ -37,7 +37,11 @@ class SemanticScholarSource(FakeSourceMixin, ResearchSource):
     ) -> list[Paper]:
         params = {
             "query": query,
-            "fields": "title,abstract,year,venue,url,authors,citationCount,publicationDate,openAccessPdf,externalIds,fieldsOfStudy",
+            "fields": (
+                "title,abstract,year,venue,url,authors,citationCount,influentialCitationCount,publicationDate,"
+                "openAccessPdf,externalIds,fieldsOfStudy,references.paperId,references.title,references.externalIds,"
+                "citations.paperId,citations.title,citations.externalIds"
+            ),
             "sort": _semantic_sort(sort),
             "year": format_semantic_year_filter(date_from, date_to),
         }

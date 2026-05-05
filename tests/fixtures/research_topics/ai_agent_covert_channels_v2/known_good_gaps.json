@@ -1,0 +1,31 @@
+[
+  {
+    "id": "good-acc-1",
+    "title": "Deployment-shift covert-signal false alarm rate audit for agent covert-channel detection",
+    "type": "evaluation gap",
+    "description": "Synthetic fixture gap: agent covert-channel detection needs evaluation under deployment shift while preserving covert-signal false alarm rate constraints.",
+    "supporting_paper_ids": [
+      "p-acc-1",
+      "p-acc-2"
+    ],
+    "why_existing_work_does_not_solve_it": "Fixture papers test communication trace monitor and discuss limitations, but do not jointly resolve deployment shift.",
+    "minimum_experiment_needed": "Run communication trace monitor and a simple baseline on shifted synthetic multi-agent transcript benchmark slices at fixed covert-signal false alarm rate.",
+    "risk_that_gap_is_fake": "Synthetic fixture risk: real prior work may already include this exact audit.",
+    "confidence": "medium",
+    "novelty_status": "unchecked"
+  },
+  {
+    "id": "good-acc-2",
+    "title": "Adjacent network covert channels transfer requires mechanism evidence",
+    "type": "cross-domain gap",
+    "description": "Synthetic fixture gap: network covert channels offers low-false-alarm tools, but transfer to agent covert-channel detection needs evidence-backed adaptation.",
+    "supporting_paper_ids": [
+      "p-acc-3"
+    ],
+    "why_existing_work_does_not_solve_it": "Adjacent evidence is technical but not directly validated in the target domain.",
+    "minimum_experiment_needed": "Adapt one network covert channels mechanism and compare against communication trace monitor at fixed covert-signal false alarm rate.",
+    "risk_that_gap_is_fake": "Synthetic fixture risk: the analogy may be shallow without additional adjacent-field papers.",
+    "confidence": "low",
+    "novelty_status": "unchecked"
+  }
+]

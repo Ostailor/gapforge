@@ -1,11 +1,17 @@
 .venv/
 __pycache__/
 *.py[cod]
+*.pdf
+!tests/fixtures/**/*.pdf
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
 *.egg-info/
 eval_report.md
+prompt_packs/
 
 runs/*
 !runs/.gitkeep
@@ -16,3 +22,4 @@ data/*
 .omx/logs/
 .omx/context/
 .gapforge_cache/
+artifacts/papers/

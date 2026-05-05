@@ -31,6 +31,31 @@ The Python implementations transform `ResearchRunState`. The local skill package
 - Prefer decisive experiments over vague ideas.
 - Attack ideas before recommending them.
 
+## v0.2 Skill Behavior
+
+v0.2 keeps deterministic skills as the default but gives them richer state:
+
+- Deep Reading automatically uses `PaperSection` objects when available and falls back to abstract-only notes when not.
+- Gap Mining uses `PaperNote`, `EvidenceSpan`, claim ledger, field map, and coverage signals to build `GapEvidenceMatrix` artifacts.
+- Cross-Domain Analogy separates query-only analogies from evidence-backed transfer candidates.
+- Novelty Gate can run in deep mode and produce closest-prior-work dossiers.
+- Experiment Designer skips rejected or human-rejected gaps by default.
+- Reviewer Simulation treats unsupported novelty and missing baselines as blocking issues.
+
+Common v0.2 commands:
+
+```bash
+gapforge run "topic" --v2 --max-papers 20
+gapforge read --run-id <run-id> --fulltext-only
+gapforge mine-gaps --run-id <run-id> --min-confidence medium
+gapforge analogies --run-id <run-id> --search --promote-evidence-only
+gapforge novelty-check --run-id <run-id> --deep
+gapforge novelty-dossier --run-id <run-id> --gap-id <gap-id>
+gapforge report --run-id <run-id> --strict
+```
+
+The skill contract remains the same: do not convert weak coverage into confident claims. If no full-text evidence is available, outputs should say so.
+
 ## Skill Package Requirements
 
 Every `skills/*/SKILL.md` must include:

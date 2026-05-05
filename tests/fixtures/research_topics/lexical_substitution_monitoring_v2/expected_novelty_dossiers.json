@@ -1,0 +1,113 @@
+[
+  {
+    "target_id": "dup-lsm-1",
+    "idea_summary": "Fixed-threshold benchmark for lexical substitution monitoring",
+    "query_plan": [
+      "\"Fixed-threshold benchmark\" lexical substitution monitoring",
+      "lexical substitution monitoring substitution precision benchmark"
+    ],
+    "candidates_considered": [
+      "p-lsm-1",
+      "p-lsm-2",
+      "p-lsm-3"
+    ],
+    "top_prior_work": [
+      "p-lsm-1: Fixed-threshold benchmark for lexical substitution monitoring (similarity 0.91)"
+    ],
+    "comparison_table": [
+      {
+        "paper_id": "p-lsm-1",
+        "title": "Fixed-threshold benchmark for lexical substitution monitoring",
+        "overall_similarity": 0.91,
+        "problem_overlap": 1.0,
+        "method_overlap": 0.8,
+        "evaluation_overlap": 1.0
+      }
+    ],
+    "decisive_difference_needed": "The idea must change problem setting, metric, dataset, or deployment condition to avoid duplication.",
+    "missing_searches": [],
+    "verdict": "reject",
+    "novelty_strength": "weak",
+    "confidence": "high",
+    "evidence_spans": [
+      {
+        "id": "span-p-lsm-1-eval",
+        "paper_id": "p-lsm-1",
+        "section_id": "sec-p-lsm-1-eval",
+        "quote": "Evaluation section: semantic drift monitor is tested on edited text stream corpus with substitution precision. The result is used only for offline GapForge evaluation.",
+        "page_start": 4,
+        "page_end": 5,
+        "char_start": 0,
+        "char_end": 167,
+        "locator": "p-lsm-1:Evaluation:p4",
+        "evidence_type": "result",
+        "confidence": "medium"
+      }
+    ],
+    "reviewer_objection": "Closest prior work already covers the synthetic benchmark idea.",
+    "recommended_action": "Reject or substantially reframe the idea."
+  },
+  {
+    "target_id": "good-lsm-1",
+    "idea_summary": "Deployment-shift substitution precision audit for lexical substitution monitoring",
+    "query_plan": [
+      "lexical substitution monitoring deployment shift substitution precision",
+      "semantic drift monitor shifted edited text stream corpus"
+    ],
+    "candidates_considered": [
+      "p-lsm-1",
+      "p-lsm-2",
+      "p-lsm-3"
+    ],
+    "top_prior_work": [
+      "p-lsm-1: Fixed-threshold benchmark for lexical substitution monitoring (similarity 0.44)"
+    ],
+    "comparison_table": [
+      {
+        "paper_id": "p-lsm-1",
+        "title": "Fixed-threshold benchmark for lexical substitution monitoring",
+        "overall_similarity": 0.44,
+        "problem_overlap": 0.7,
+        "method_overlap": 0.7,
+        "evaluation_overlap": 0.5
+      }
+    ],
+    "decisive_difference_needed": "Show shifted deployment slices are not already evaluated by the closest benchmark paper.",
+    "missing_searches": [
+      "citation-neighborhood expansion around deployment shift"
+    ],
+    "verdict": "revise",
+    "novelty_strength": "weak",
+    "confidence": "medium",
+    "evidence_spans": [
+      {
+        "id": "span-p-lsm-1-eval",
+        "paper_id": "p-lsm-1",
+        "section_id": "sec-p-lsm-1-eval",
+        "quote": "Evaluation section: semantic drift monitor is tested on edited text stream corpus with substitution precision. The result is used only for offline GapForge evaluation.",
+        "page_start": 4,
+        "page_end": 5,
+        "char_start": 0,
+        "char_end": 167,
+        "locator": "p-lsm-1:Evaluation:p4",
+        "evidence_type": "result",
+        "confidence": "medium"
+      },
+      {
+        "id": "span-p-lsm-2-limitation",
+        "paper_id": "p-lsm-2",
+        "section_id": "sec-p-lsm-2-limitations",
+        "quote": "Limitations section: deployment shift and source coverage remain unresolved for lexical substitution monitoring; adjacent software provenance evidence is only partial.",
+        "page_start": 6,
+        "page_end": 6,
+        "char_start": 0,
+        "char_end": 167,
+        "locator": "p-lsm-2:Limitations:p6",
+        "evidence_type": "limitation",
+        "confidence": "medium"
+      }
+    ],
+    "reviewer_objection": "Closest benchmark overlaps; contribution needs sharper deployment-shift difference.",
+    "recommended_action": "Revise the setting and use closest prior work as a baseline."
+  }
+]

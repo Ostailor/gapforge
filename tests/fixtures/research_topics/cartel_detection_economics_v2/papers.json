@@ -1,0 +1,77 @@
+[
+  {
+    "id": "p-cde-1",
+    "title": "Fixed-threshold benchmark for cartel detection",
+    "authors": [
+      "Synthetic Fixture Author"
+    ],
+    "abstract": "Synthetic fixture paper. We evaluate cartel detection with market conduct anomaly model under fixed false accusation rate budgets on a synthetic market panel. This fixture is not real research.",
+    "year": 2025,
+    "venue": "Synthetic FixtureConf",
+    "source": "fixture",
+    "url": "https://example.test/cde/1",
+    "pdf_url": "https://example.test/cde/1.pdf",
+    "keywords": [
+      "cartel detection",
+      "false accusation rate",
+      "market conduct anomaly model",
+      "benchmark"
+    ],
+    "citation_count": 32,
+    "roles": [
+      "benchmark"
+    ],
+    "raw_metadata": {
+      "fixture_notice": "synthetic, not real research"
+    }
+  },
+  {
+    "id": "p-cde-2",
+    "title": "Deployment limitations in cartel detection",
+    "authors": [
+      "Synthetic Fixture Author"
+    ],
+    "abstract": "Synthetic fixture paper. The study reports that cartel detection systems often rely on synthetic market panel and do not validate deployment shift. This fixture is not real research.",
+    "year": 2024,
+    "venue": "Synthetic Fixture Workshop",
+    "source": "fixture",
+    "url": "https://example.test/cde/2",
+    "pdf_url": "https://example.test/cde/2.pdf",
+    "keywords": [
+      "cartel detection",
+      "deployment",
+      "limitation"
+    ],
+    "citation_count": 18,
+    "roles": [
+      "method"
+    ],
+    "raw_metadata": {
+      "fixture_notice": "synthetic, not real research"
+    }
+  },
+  {
+    "id": "p-cde-3",
+    "title": "Collusion Forensics tools for low false alarms",
+    "authors": [
+      "Synthetic Fixture Author"
+    ],
+    "abstract": "Synthetic fixture paper. Adjacent field work in collusion forensics studies low false alarms but does not solve cartel detection. This fixture is not real research.",
+    "year": 2023,
+    "venue": "Synthetic Adjacent Fields",
+    "source": "fixture",
+    "url": "https://example.test/cde/3",
+    "keywords": [
+      "collusion forensics",
+      "false alarms",
+      "transfer"
+    ],
+    "citation_count": 41,
+    "roles": [
+      "adjacent_field"
+    ],
+    "raw_metadata": {
+      "fixture_notice": "synthetic, not real research"
+    }
+  }
+]

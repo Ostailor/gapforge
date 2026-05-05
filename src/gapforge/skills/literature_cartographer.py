@@ -9,6 +9,7 @@ from gapforge.claim_ledger import ClaimLedger
 from gapforge.models import Cluster, Evidence, FieldMap, Paper, Provenance, ResearchRunState
 from gapforge.skills.base import Skill
 from gapforge.sources.base import ResearchSource
+from gapforge.sources.coverage import add_search_query_record
 from gapforge.state import utc_now_iso
 
 CLUSTER_KEYWORDS = {
@@ -182,7 +183,25 @@ class LiteratureCartographer(Skill):
         papers = []
         seen = set()
         for source in self.sources:
-            for paper in source.search(state.topic.text, max_results=3, sort="newest"):
+            failures: list[str] = []
+            found: list[Paper] = []
+            source_name = str(getattr(source, "name", source.__class__.__name__))
+            try:
+                found = source.search(state.topic.text, max_results=3, sort="newest")
+            except Exception as exc:
+                failures.append(f"{source_name} search failed for {state.topic.text!r}: {exc}")
+            add_search_query_record(
+                state,
+                query=state.topic.text,
+                source_names=[source_name],
+                purpose="initial_topic",
+                max_results=3,
+                date_from=None,
+                date_to=None,
+                result_paper_ids=[paper.id for paper in found],
+                failure_messages=failures,
+            )
+            for paper in found:
                 if paper.id in seen:
                     continue
                 seen.add(paper.id)

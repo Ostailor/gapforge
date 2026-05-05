@@ -1,0 +1,99 @@
+[
+  {
+    "gap_id": "good-lfc-1",
+    "evidence_rows": [
+      {
+        "paper_id": "p-lfc-1",
+        "claim_or_note_id": "p-lfc-1",
+        "evidence_span_id": "span-p-lfc-1-eval",
+        "evidence_type": "result",
+        "text": "graph detector is tested on synthetic collusion graph with false-positive rate.",
+        "supports_or_counters": "supports",
+        "section_type": "experiments",
+        "locator": "p-lfc-1:Evaluation:p4"
+      },
+      {
+        "paper_id": "p-lfc-2",
+        "claim_or_note_id": "p-lfc-2",
+        "evidence_span_id": "span-p-lfc-2-limitation",
+        "evidence_type": "limitation",
+        "text": "Deployment shift remains unresolved for collusion detection.",
+        "supports_or_counters": "supports",
+        "section_type": "limitations",
+        "locator": "p-lfc-2:Limitations:p6"
+      },
+      {
+        "paper_id": "p-lfc-3",
+        "claim_or_note_id": "p-lfc-3",
+        "evidence_span_id": "span-p-lfc-3-eval",
+        "evidence_type": "counterevidence",
+        "text": "fraud screening has low false alarm tools that may counter claims of total absence.",
+        "supports_or_counters": "counters",
+        "section_type": "experiments",
+        "locator": "p-lfc-3:Evaluation:p4"
+      }
+    ],
+    "papers_supporting": [
+      "p-lfc-1",
+      "p-lfc-2"
+    ],
+    "papers_countering": [
+      "p-lfc-3"
+    ],
+    "repeated_limitation_count": 1,
+    "missing_metric_count": 0,
+    "missing_dataset_count": 0,
+    "assumption_pattern_count": 1,
+    "confidence": "medium"
+  },
+  {
+    "gap_id": "dup-lfc-1",
+    "evidence_rows": [
+      {
+        "paper_id": "p-lfc-1",
+        "claim_or_note_id": "p-lfc-1",
+        "evidence_span_id": "span-p-lfc-1-eval",
+        "evidence_type": "counterevidence",
+        "text": "The duplicate benchmark is already covered in p-lfc-1.",
+        "supports_or_counters": "counters",
+        "section_type": "experiments",
+        "locator": "p-lfc-1:Evaluation:p4"
+      }
+    ],
+    "papers_supporting": [
+      "p-lfc-1"
+    ],
+    "papers_countering": [
+      "p-lfc-1"
+    ],
+    "repeated_limitation_count": 0,
+    "missing_metric_count": 0,
+    "missing_dataset_count": 0,
+    "assumption_pattern_count": 0,
+    "confidence": "low"
+  },
+  {
+    "gap_id": "good-lfc-2",
+    "evidence_rows": [
+      {
+        "paper_id": "p-lfc-3",
+        "claim_or_note_id": "p-lfc-3",
+        "evidence_span_id": "span-p-lfc-3-eval",
+        "evidence_type": "method",
+        "text": "Adjacent-field low false alarm tool is available but requires adaptation.",
+        "supports_or_counters": "supports",
+        "section_type": "experiments",
+        "locator": "p-lfc-3:Evaluation:p4"
+      }
+    ],
+    "papers_supporting": [
+      "p-lfc-3"
+    ],
+    "papers_countering": [],
+    "repeated_limitation_count": 0,
+    "missing_metric_count": 0,
+    "missing_dataset_count": 0,
+    "assumption_pattern_count": 0,
+    "confidence": "low"
+  }
+]

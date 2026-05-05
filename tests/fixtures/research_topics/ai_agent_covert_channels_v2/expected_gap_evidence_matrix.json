@@ -1,0 +1,99 @@
+[
+  {
+    "gap_id": "good-acc-1",
+    "evidence_rows": [
+      {
+        "paper_id": "p-acc-1",
+        "claim_or_note_id": "p-acc-1",
+        "evidence_span_id": "span-p-acc-1-eval",
+        "evidence_type": "result",
+        "text": "communication trace monitor is tested on synthetic multi-agent transcript benchmark with covert-signal false alarm rate.",
+        "supports_or_counters": "supports",
+        "section_type": "experiments",
+        "locator": "p-acc-1:Evaluation:p4"
+      },
+      {
+        "paper_id": "p-acc-2",
+        "claim_or_note_id": "p-acc-2",
+        "evidence_span_id": "span-p-acc-2-limitation",
+        "evidence_type": "limitation",
+        "text": "Deployment shift remains unresolved for agent covert-channel detection.",
+        "supports_or_counters": "supports",
+        "section_type": "limitations",
+        "locator": "p-acc-2:Limitations:p6"
+      },
+      {
+        "paper_id": "p-acc-3",
+        "claim_or_note_id": "p-acc-3",
+        "evidence_span_id": "span-p-acc-3-eval",
+        "evidence_type": "counterevidence",
+        "text": "network covert channels has low false alarm tools that may counter claims of total absence.",
+        "supports_or_counters": "counters",
+        "section_type": "experiments",
+        "locator": "p-acc-3:Evaluation:p4"
+      }
+    ],
+    "papers_supporting": [
+      "p-acc-1",
+      "p-acc-2"
+    ],
+    "papers_countering": [
+      "p-acc-3"
+    ],
+    "repeated_limitation_count": 1,
+    "missing_metric_count": 0,
+    "missing_dataset_count": 0,
+    "assumption_pattern_count": 1,
+    "confidence": "medium"
+  },
+  {
+    "gap_id": "dup-acc-1",
+    "evidence_rows": [
+      {
+        "paper_id": "p-acc-1",
+        "claim_or_note_id": "p-acc-1",
+        "evidence_span_id": "span-p-acc-1-eval",
+        "evidence_type": "counterevidence",
+        "text": "The duplicate benchmark is already covered in p-acc-1.",
+        "supports_or_counters": "counters",
+        "section_type": "experiments",
+        "locator": "p-acc-1:Evaluation:p4"
+      }
+    ],
+    "papers_supporting": [
+      "p-acc-1"
+    ],
+    "papers_countering": [
+      "p-acc-1"
+    ],
+    "repeated_limitation_count": 0,
+    "missing_metric_count": 0,
+    "missing_dataset_count": 0,
+    "assumption_pattern_count": 0,
+    "confidence": "low"
+  },
+  {
+    "gap_id": "good-acc-2",
+    "evidence_rows": [
+      {
+        "paper_id": "p-acc-3",
+        "claim_or_note_id": "p-acc-3",
+        "evidence_span_id": "span-p-acc-3-eval",
+        "evidence_type": "method",
+        "text": "Adjacent-field low false alarm tool is available but requires adaptation.",
+        "supports_or_counters": "supports",
+        "section_type": "experiments",
+        "locator": "p-acc-3:Evaluation:p4"
+      }
+    ],
+    "papers_supporting": [
+      "p-acc-3"
+    ],
+    "papers_countering": [],
+    "repeated_limitation_count": 0,
+    "missing_metric_count": 0,
+    "missing_dataset_count": 0,
+    "assumption_pattern_count": 0,
+    "confidence": "low"
+  }
+]

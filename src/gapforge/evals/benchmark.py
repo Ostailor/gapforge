@@ -5,19 +5,27 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from gapforge.evals.fixtures import EvalFixture, load_fixtures
+from gapforge.evals.fixtures import V2_FIXTURE_NAMES, EvalFixture, load_fixtures
 from gapforge.evals.metrics import (
     EvalScores,
     RunMetrics,
     duplicate_detection_rate,
     evidence_linkage_score,
+    evidence_span_precision_proxy,
     experiment_completeness_score,
+    full_text_coverage_score,
+    gap_evidence_matrix_score,
     gap_specificity_score,
+    human_review_respect_score,
+    novelty_dossier_completeness_score,
     novelty_gate_accuracy,
+    report_uncertainty_score,
     reviewer_objection_quality_score,
+    section_grounding_score,
+    source_coverage_transparency_score,
     unsupported_claim_rate,
 )
-from gapforge.models import Claim, Evidence, ExperimentPlan, Gap, ResearchRunState, ResearchTopic
+from gapforge.models import Claim, Evidence, ExperimentPlan, Gap, HumanReviewRecord, Provenance, ResearchRunState, ResearchTopic
 from gapforge.skills.experiment_designer import ExperimentDesigner
 from gapforge.skills.novelty_gate import NoveltyGate
 from gapforge.skills.reviewer_simulation import ReviewerSimulation
@@ -47,6 +55,7 @@ class FixtureEvalResult:
 @dataclass(slots=True)
 class EvalReport:
     results: list[FixtureEvalResult]
+    v2: bool = False
     report_path: Path | None = None
 
     @property
@@ -67,10 +76,12 @@ def run_evals(
     fixture_root: Path | None = None,
     output_dir: Path | None = None,
     write_report: bool = True,
+    v2: bool = False,
 ) -> EvalReport:
-    fixtures = load_fixtures([fixture] if fixture else None, fixture_root)
+    selected = [fixture] if fixture else (V2_FIXTURE_NAMES if v2 else None)
+    fixtures = load_fixtures(selected, fixture_root)
     results = [_evaluate_fixture(item) for item in fixtures]
-    report = EvalReport(results=results)
+    report = EvalReport(results=results, v2=v2 or any(item.is_v2 for item in fixtures))
     if write_report:
         path = (output_dir or Path.cwd()) / "eval_report.md"
         path.write_text(render_eval_report(report), encoding="utf-8")
@@ -80,6 +91,10 @@ def run_evals(
 
 def render_eval_report(report: EvalReport) -> str:
     lines = ["# GapForge Evaluation Report", "", f"Overall score: **{report.overall_score:.3f}**", ""]
+    if report.v2:
+        v2_scores = [score for result in report.results if (score := result.scores.v2_overall()) is not None]
+        v2_overall = round(sum(v2_scores) / len(v2_scores), 3) if v2_scores else 0.0
+        lines.extend([f"v0.2 overall score: **{v2_overall:.3f}**", ""])
     for result in report.results:
         scores = result.scores
         lines.extend(
@@ -88,7 +103,7 @@ def render_eval_report(report: EvalReport) -> str:
                 "",
                 f"Topic: {result.topic}",
                 "",
-                "### Scores",
+                "### v0.1 Scores",
                 "",
                 f"- gap_specificity_score: {scores.gap_specificity_score:.3f}",
                 f"- evidence_linkage_score: {scores.evidence_linkage_score:.3f}",
@@ -101,6 +116,31 @@ def render_eval_report(report: EvalReport) -> str:
                 "",
             ]
         )
+        if scores.v2_overall() is not None:
+            lines.extend(
+                [
+                    "### v0.2 Scores",
+                    "",
+                    f"- full_text_coverage_score: {scores.full_text_coverage_score:.3f}",
+                    f"- evidence_span_precision_proxy: {scores.evidence_span_precision_proxy:.3f}",
+                    f"- section_grounding_score: {scores.section_grounding_score:.3f}",
+                    f"- gap_evidence_matrix_score: {scores.gap_evidence_matrix_score:.3f}",
+                    f"- novelty_dossier_completeness_score: {scores.novelty_dossier_completeness_score:.3f}",
+                    f"- source_coverage_transparency_score: {scores.source_coverage_transparency_score:.3f}",
+                    f"- human_review_respect_score: {scores.human_review_respect_score:.3f}",
+                    f"- report_uncertainty_score: {scores.report_uncertainty_score:.3f}",
+                    f"- fixture_v2_overall: {scores.v2_overall():.3f}",
+                    "",
+                ]
+            )
+        failed_checks = _failed_checks(scores, result)
+        lines.extend(["### Failed Checks And Suggested Improvements", ""])
+        lines.extend(["| Check | Suggested improvement |", "| --- | --- |"])
+        if failed_checks:
+            lines.extend([f"| {check} | {suggestion} |" for check, suggestion in failed_checks])
+        else:
+            lines.append("| none | Maintain current eval quality; add harder fixtures. |")
+        lines.append("")
         for title, values in [
             ("Unsupported Claims", result.unsupported_claims),
             ("Accepted Gaps", result.accepted_gaps),
@@ -125,12 +165,21 @@ def _evaluate_fixture(fixture: EvalFixture) -> FixtureEvalResult:
     scores = EvalScores(
         gap_specificity_score=gap_specificity_score(state.gaps),
         evidence_linkage_score=evidence_linkage_score(state.gaps),
-        novelty_gate_accuracy=novelty_gate_accuracy(state.novelty_assessments, fixture.duplicate_ideas),
+        novelty_gate_accuracy=novelty_gate_accuracy(state.novelty_assessments, fixture.duplicate_ideas, state.novelty_dossiers),
         duplicate_detection_rate=duplicate_detection_rate(state.novelty_assessments),
-        unsupported_claim_rate=unsupported_claim_rate(state.claims),
-        experiment_completeness_score=experiment_completeness_score(state.experiments),
+        unsupported_claim_rate=unsupported_claim_rate(state.claims, state),
+        experiment_completeness_score=experiment_completeness_score(state.experiments, state.novelty_dossiers),
         reviewer_objection_quality_score=reviewer_objection_quality_score(state.reviewer_objections),
     )
+    if fixture.is_v2:
+        scores.full_text_coverage_score = full_text_coverage_score(state)
+        scores.evidence_span_precision_proxy = evidence_span_precision_proxy(state)
+        scores.section_grounding_score = section_grounding_score(state)
+        scores.gap_evidence_matrix_score = gap_evidence_matrix_score(state.gaps, state.gap_evidence_matrices)
+        scores.novelty_dossier_completeness_score = novelty_dossier_completeness_score(state.novelty_dossiers, fixture.duplicate_ideas)
+        scores.source_coverage_transparency_score = source_coverage_transparency_score(state)
+        scores.human_review_respect_score = human_review_respect_score(state)
+        scores.report_uncertainty_score = report_uncertainty_score(state)
     unsupported = [
         claim.id
         for claim in state.claims
@@ -140,8 +189,11 @@ def _evaluate_fixture(fixture: EvalFixture) -> FixtureEvalResult:
         and not claim.closest_prior_work
         or claim.status == "unsupported"
     ]
-    accepted = [gap.id for gap in state.gaps if gap.novelty_status not in {"likely_not_new"}]
-    rejected = [gap.id for gap in state.gaps if gap.novelty_status == "likely_not_new"]
+    human_rejected_gap_ids = {
+        review.object_id for review in state.human_reviews if review.object_type == "gap" and review.action == "reject"
+    }
+    accepted = [gap.id for gap in state.gaps if gap.novelty_status not in {"likely_not_new"} and gap.id not in human_rejected_gap_ids]
+    rejected = [gap.id for gap in state.gaps if gap.novelty_status == "likely_not_new" or gap.id in human_rejected_gap_ids]
     novelty_failures = _novelty_failures(state, fixture)
     missing_baselines = [experiment.id for experiment in state.experiments if not experiment.baselines]
     return FixtureEvalResult(
@@ -164,8 +216,13 @@ def _state_from_fixture(fixture: EvalFixture) -> ResearchRunState:
         topic=topic,
         run_dir=str(fixture.path),
         papers=fixture.papers,
+        paper_sections=fixture.paper_sections,
+        evidence_spans=fixture.evidence_spans,
         paper_notes=fixture.paper_notes,
         gaps=[*fixture.known_good_gaps, *_duplicate_gaps(fixture), *fixture.known_bad_gaps],
+        gap_evidence_matrices=fixture.expected_gap_evidence_matrix,
+        novelty_dossiers=fixture.expected_novelty_dossiers,
+        source_coverage=fixture.expected_source_coverage,
     )
     state.claims = [
         Claim(
@@ -196,6 +253,24 @@ def _state_from_fixture(fixture: EvalFixture) -> ResearchRunState:
             needs_verification=False,
         ),
     ]
+    if fixture.known_bad_gaps:
+        state.human_reviews.append(
+            HumanReviewRecord(
+                id=f"review-reject-{fixture.known_bad_gaps[0].id}",
+                object_type="gap",
+                object_id=fixture.known_bad_gaps[0].id,
+                action="reject",
+                note="Synthetic eval fixture marks this gap as bad.",
+                reviewer="eval-fixture",
+                timestamp=utc_now_iso(),
+                provenance=Provenance(
+                    created_by_skill="eval-fixture",
+                    source_ids=[fixture.known_bad_gaps[0].id],
+                    timestamp=utc_now_iso(),
+                    reasoning_summary="Synthetic human review control for evaluator scoring.",
+                ),
+            )
+        )
     return state
 
 
@@ -260,3 +335,42 @@ def _recommended_improvements(
     if scores.reviewer_objection_quality_score < 0.7:
         improvements.append("Make reviewer objections more concrete with category, evidence, and fixes.")
     return improvements or ["Maintain current eval quality; add harder fixtures."]
+
+
+def _failed_checks(scores: EvalScores, result: FixtureEvalResult) -> list[tuple[str, str]]:
+    checks: list[tuple[str, str]] = []
+    thresholds = {
+        "gap_specificity_score": 0.7,
+        "evidence_linkage_score": 0.8,
+        "novelty_gate_accuracy": 0.8,
+        "duplicate_detection_rate": 0.8,
+        "experiment_completeness_score": 0.75,
+        "reviewer_objection_quality_score": 0.65,
+        "full_text_coverage_score": 0.7,
+        "evidence_span_precision_proxy": 0.8,
+        "section_grounding_score": 0.7,
+        "gap_evidence_matrix_score": 0.7,
+        "novelty_dossier_completeness_score": 0.75,
+        "source_coverage_transparency_score": 0.75,
+        "human_review_respect_score": 1.0,
+        "report_uncertainty_score": 0.3,
+    }
+    suggestions = {
+        "full_text_coverage_score": "Parse more full text before evaluating research quality.",
+        "evidence_span_precision_proxy": "Anchor evidence spans to quotes that appear in known sections.",
+        "section_grounding_score": "Link full-text paper notes to section IDs and evidence locators.",
+        "gap_evidence_matrix_score": "Require evidence rows and counterevidence accounting for every gap.",
+        "novelty_dossier_completeness_score": "Add query plans, candidates, top prior work, and comparison tables to dossiers.",
+        "source_coverage_transparency_score": "Record search queries, source failures, full-text coverage, and fallback warnings.",
+        "human_review_respect_score": "Prevent rejected human-reviewed gaps from producing experiments.",
+        "report_uncertainty_score": "Make uncertainty, missing searches, and fake-gap risks explicit.",
+    }
+    for name, threshold in thresholds.items():
+        value = getattr(scores, name)
+        if value is not None and value < threshold:
+            checks.append((name, suggestions.get(name, "Improve this metric before treating the run as research-useful.")))
+    if result.novelty_gate_failures:
+        checks.append(("novelty_gate_failures", "Reject fixture duplicate ideas with closest-prior-work dossiers."))
+    if result.missing_baselines:
+        checks.append(("missing_baselines", "Require baselines for every generated experiment."))
+    return checks

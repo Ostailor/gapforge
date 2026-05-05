@@ -1,0 +1,12 @@
+[
+  {
+    "category": "novelty",
+    "severity": "major",
+    "expected_contains": "closest prior work"
+  },
+  {
+    "category": "baseline",
+    "severity": "major",
+    "expected_contains": "baseline"
+  }
+]

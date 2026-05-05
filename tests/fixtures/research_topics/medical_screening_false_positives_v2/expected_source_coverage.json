@@ -1,0 +1,68 @@
+{
+  "run_id": "eval-medical_screening_false_positives_v2",
+  "topic": "medical screening false positives",
+  "searched_sources": [
+    "fixture-source"
+  ],
+  "query_records": [
+    {
+      "id": "query-msf-1",
+      "query": "medical screening false positives",
+      "source_names": [
+        "fixture-source"
+      ],
+      "purpose": "initial_topic",
+      "max_results": 3,
+      "date_from": "",
+      "date_to": "",
+      "executed_at": "2026-01-01T00:00:00+00:00",
+      "result_paper_ids": [
+        "p-msf-1",
+        "p-msf-2",
+        "p-msf-3"
+      ],
+      "failure_messages": []
+    },
+    {
+      "id": "query-msf-novelty",
+      "query": "medical screening specificity at fixed recall closest prior work",
+      "source_names": [
+        "fixture-source"
+      ],
+      "purpose": "novelty",
+      "max_results": 3,
+      "date_from": "",
+      "date_to": "",
+      "executed_at": "2026-01-01T00:00:00+00:00",
+      "result_paper_ids": [
+        "p-msf-1",
+        "p-msf-2"
+      ],
+      "failure_messages": []
+    }
+  ],
+  "papers_by_source": {
+    "fixture": 3
+  },
+  "papers_with_pdf": [
+    "p-msf-1",
+    "p-msf-2",
+    "p-msf-3"
+  ],
+  "papers_with_full_text": [
+    "p-msf-1",
+    "p-msf-2",
+    "p-msf-3"
+  ],
+  "papers_abstract_only": [],
+  "failed_downloads": [],
+  "failed_sources": [],
+  "fallback_paper_count": 0,
+  "missing_source_types": [
+    "live scholarly APIs intentionally disabled for fixture"
+  ],
+  "coverage_warnings": [
+    "Synthetic fixture coverage is offline and must not be treated as real literature coverage."
+  ],
+  "confidence": "medium"
+}

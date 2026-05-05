@@ -4,17 +4,21 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "gapforge"
-version = "0.1.0"
+version = "0.2.0"
 description = "A Codex-powered Research Ideation OS for finding experiment-ready research gaps."
 readme = "README.md"
 requires-python = ">=3.11"
 authors = [{ name = "GapForge" }]
-dependencies = []
+dependencies = [
+    "pypdf>=4.0",
+]
 
 [project.optional-dependencies]
 dev = [
     "mypy>=1.10",
+    "pre-commit>=3.7",
     "pytest>=8.0",
+    "pytest-cov>=5.0",
     "ruff>=0.5",
 ]
 

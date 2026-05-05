@@ -11,9 +11,13 @@ from gapforge.evals.fixtures import load_fixture
 from gapforge.models import (
     Claim,
     Evidence,
+    EvidenceSpan,
     ExperimentPlan,
     Gap,
+    GapEvidenceMatrix,
     NoveltyAssessment,
+    NoveltyDossier,
+    PaperSection,
     RejectedIdea,
     ReviewerObjection,
     ReviewerSimulationSummary,
@@ -33,23 +37,26 @@ def test_final_report_markdown_from_fixture_state(tmp_path: Path) -> None:
     text = path.read_text(encoding="utf-8")
     for heading in [
         "## 1. Executive Summary",
-        "## 2. Broad Topic Interpretation",
-        "## 3. Literature Map",
-        "## 4. Search Coverage",
-        "## 5. Top Paper Clusters",
-        "## 6. Key Papers Read Deeply",
-        "## 7. Strongest Research Gaps",
-        "## 8. Cross-Domain Connections",
-        "## 9. Novelty Gate Results",
-        "## 10. Recommended Experiment Plans",
-        "## 11. Reviewer Simulation",
-        "## 12. Claim Ledger Summary",
-        "## 13. Unsupported or Uncertain Claims",
-        "## 14. Rejected Ideas",
-        "## 15. Next Actions",
+        "## 2. What Was Searched",
+        "## 3. Source and Full-Text Coverage",
+        "## 4. Field Map",
+        "## 5. Important Paper Clusters",
+        "## 6. Papers Read Deeply",
+        "## 7. Evidence-Backed Research Gaps",
+        "## 8. Gap Evidence Matrix Summary",
+        "## 9. Cross-Domain Transfer Candidates",
+        "## 10. Closest-Prior-Work Dossiers",
+        "## 11. Recommended Top Research Direction",
+        "## 12. Experiment Plan for Top Direction",
+        "## 13. Reviewer Simulation and Blocking Issues",
+        "## 14. Claim Ledger Summary",
+        "## 15. Human Review Summary",
+        "## 16. Rejected Ideas",
+        "## 17. What Remains Uncertain",
+        "## 18. Next Actions",
     ]:
         assert heading in text
-    assert "Recommended strongest direction" in text
+    assert "Direction: **No direction ready**" in text
     assert "`p-lfc-1`" in text
     assert "False-positive calibrated collusion detector benchmark" in text
     assert "Novelty caution" in text
@@ -63,8 +70,11 @@ def test_final_report_json_from_fixture_state(tmp_path: Path) -> None:
 
     payload = json.loads(path.read_text(encoding="utf-8"))
     assert payload["topic"] == "low false positive collusion detection"
-    assert payload["executive_summary"]["recommended_direction"]["gap_id"] == "good-lfc-1"
+    assert payload["report_version"] == "v0.2"
+    assert payload["executive_summary"]["recommended_direction"]["readiness"] == "not_ready"
     assert payload["strongest_research_gaps"][0]["supporting_paper_ids"]
+    assert "sections" in payload
+    assert "source_coverage" in payload
     assert payload["rejected_ideas"][0]["id"] == "rejected-dup-lfc-1"
 
 
@@ -86,7 +96,7 @@ def test_report_cli_writes_markdown(tmp_path: Path) -> None:
     result = subprocess.run(
         [sys.executable, "-m", "gapforge.cli", "report", "--run-id", state.run_id],
         cwd=tmp_path,
-        env={**os.environ, "GAPFORGE_DISABLE_NETWORK": "1"},
+        env={**os.environ, "GAPFORGE_DISABLE_NETWORK": "1", "PYTHONPATH": str(Path.cwd() / "src")},
         text=True,
         capture_output=True,
         check=False,
@@ -95,6 +105,40 @@ def test_report_cli_writes_markdown(tmp_path: Path) -> None:
     assert result.returncode == 0, result.stderr
     assert "final_report.md" in result.stdout
     assert (Path(state.run_dir) / "final_report.md").exists()
+
+
+def test_report_includes_source_coverage_and_evidence_locators(tmp_path: Path) -> None:
+    state = _ready_report_state(tmp_path)
+
+    path = write_final_report(state)
+    text = path.read_text(encoding="utf-8")
+
+    assert "Source and Full-Text Coverage" in text
+    assert "p-lfc-1:Evaluation:p4" in text
+    assert "full-text evidence" in text
+
+
+def test_report_refuses_recommendation_under_poor_coverage_in_strict_mode(tmp_path: Path) -> None:
+    state = _fixture_report_state(tmp_path)
+
+    report = build_final_report(state, strict=True)
+
+    direction = report["sections"]["recommended_top_research_direction"]
+    assert direction["readiness"] == "not_ready"
+    assert direction["gap_id"] == ""
+    assert any("coverage" in reason.lower() for reason in direction["blocking_reasons"])
+
+
+def test_report_recommends_one_direction_when_thresholds_are_met(tmp_path: Path) -> None:
+    state = _ready_report_state(tmp_path)
+
+    report = build_final_report(state, strict=True)
+
+    direction = report["sections"]["recommended_top_research_direction"]
+    assert direction["readiness"] == "ready"
+    assert direction["gap_id"] == "good-lfc-1"
+    assert direction["experiment_id"] == "experiment-1"
+    assert direction["claims_novelty"] is True
 
 
 def _fixture_report_state(tmp_path: Path):
@@ -232,5 +276,89 @@ def _fixture_report_state(tmp_path: Path):
             created_by_skill="test-fixture",
             needs_verification=True,
         ),
+    ]
+    return state
+
+
+def _ready_report_state(tmp_path: Path):
+    state = _fixture_report_state(tmp_path)
+    fixture = load_fixture("low_fpr_collusion_v2")
+    state.paper_sections = [
+        PaperSection(
+            id="section-results-1",
+            paper_id="p-lfc-1",
+            title="Evaluation",
+            section_type="experiments",
+            text="Evaluation section: graph detector is tested with false-positive rate controls.",
+            page_start=4,
+            page_end=4,
+            confidence="medium",
+        )
+    ]
+    state.evidence_spans = [
+        EvidenceSpan(
+            id="span-1",
+            paper_id="p-lfc-1",
+            section_id="section-results-1",
+            quote="graph detector is tested with false-positive rate controls",
+            locator="p-lfc-1:Evaluation:p4",
+            evidence_type="result",
+            page_start=4,
+            page_end=4,
+            confidence="medium",
+        )
+    ]
+    state.paper_notes[0].source_basis = "full text"
+    state.paper_notes[0].sections_used = ["section-results-1"]
+    state.paper_notes[0].quotes_or_evidence_snippets = [
+        Evidence(
+            source_id="p-lfc-1",
+            source_paper_id="p-lfc-1",
+            quote="graph detector is tested with false-positive rate controls",
+            locator="p-lfc-1:Evaluation:p4",
+            confidence="medium",
+        )
+    ]
+    state.source_coverage = fixture.expected_source_coverage
+    state.source_coverage.papers_with_full_text = ["p-lfc-1", "p-lfc-2"]
+    state.source_coverage.confidence = "medium"
+    state.gap_evidence_matrices = [
+        GapEvidenceMatrix(
+            gap_id="good-lfc-1",
+            evidence_rows=fixture.expected_gap_evidence_matrix[0].evidence_rows,
+            papers_supporting=["p-lfc-1", "p-lfc-2"],
+            papers_countering=[],
+            confidence="medium",
+        )
+    ]
+    state.novelty_dossiers = [
+        NoveltyDossier(
+            target_id="good-lfc-1",
+            idea_summary=state.gaps[0].description,
+            query_plan=["collusion fixed false positive alert budget prior work"],
+            candidates_considered=["p-lfc-1", "p-lfc-2"],
+            top_prior_work=["p-lfc-1: False-positive calibrated collusion detector benchmark (similarity 0.35)"],
+            comparison_table=[{"paper_id": "p-lfc-1", "overall_similarity": 0.35}],
+            decisive_difference_needed="Show a measurable alert-budget tradeoff not reported by prior work.",
+            missing_searches=[],
+            verdict="pursue",
+            novelty_strength="medium",
+            confidence="medium",
+            evidence_spans=state.evidence_spans,
+            reviewer_objection="Use the closest prior work as a baseline.",
+            recommended_action="Pursue with closest prior work as a baseline.",
+        )
+    ]
+    state.novelty_assessments[0].missing_searches = []
+    state.reviewer_objections = []
+    state.reviewer_summaries = [
+        ReviewerSimulationSummary(
+            experiment_id="experiment-1",
+            submission_readiness_score=82,
+            blocking_issues=[],
+            required_fixes=[],
+            optional_fixes=["Add deployment data."],
+            final_recommendation="conference_potential",
+        )
     ]
     return state

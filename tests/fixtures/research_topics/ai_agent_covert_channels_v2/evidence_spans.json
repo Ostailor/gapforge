@@ -1,0 +1,80 @@
+[
+  {
+    "id": "span-p-acc-1-eval",
+    "paper_id": "p-acc-1",
+    "section_id": "sec-p-acc-1-eval",
+    "quote": "Evaluation section: communication trace monitor is tested on synthetic multi-agent transcript benchmark with covert-signal false alarm rate. The result is used only for offline GapForge evaluation.",
+    "page_start": 4,
+    "page_end": 5,
+    "char_start": 0,
+    "char_end": 197,
+    "locator": "p-acc-1:Evaluation:p4",
+    "evidence_type": "result",
+    "confidence": "medium"
+  },
+  {
+    "id": "span-p-acc-1-limitation",
+    "paper_id": "p-acc-1",
+    "section_id": "sec-p-acc-1-limitations",
+    "quote": "Limitations section: deployment shift and source coverage remain unresolved for agent covert-channel detection; adjacent network covert channels evidence is only partial.",
+    "page_start": 6,
+    "page_end": 6,
+    "char_start": 0,
+    "char_end": 170,
+    "locator": "p-acc-1:Limitations:p6",
+    "evidence_type": "limitation",
+    "confidence": "medium"
+  },
+  {
+    "id": "span-p-acc-2-eval",
+    "paper_id": "p-acc-2",
+    "section_id": "sec-p-acc-2-eval",
+    "quote": "Evaluation section: communication trace monitor is tested on synthetic multi-agent transcript benchmark with covert-signal false alarm rate. The result is used only for offline GapForge evaluation.",
+    "page_start": 4,
+    "page_end": 5,
+    "char_start": 0,
+    "char_end": 197,
+    "locator": "p-acc-2:Evaluation:p4",
+    "evidence_type": "result",
+    "confidence": "medium"
+  },
+  {
+    "id": "span-p-acc-2-limitation",
+    "paper_id": "p-acc-2",
+    "section_id": "sec-p-acc-2-limitations",
+    "quote": "Limitations section: deployment shift and source coverage remain unresolved for agent covert-channel detection; adjacent network covert channels evidence is only partial.",
+    "page_start": 6,
+    "page_end": 6,
+    "char_start": 0,
+    "char_end": 170,
+    "locator": "p-acc-2:Limitations:p6",
+    "evidence_type": "limitation",
+    "confidence": "medium"
+  },
+  {
+    "id": "span-p-acc-3-eval",
+    "paper_id": "p-acc-3",
+    "section_id": "sec-p-acc-3-eval",
+    "quote": "Evaluation section: communication trace monitor is tested on synthetic multi-agent transcript benchmark with covert-signal false alarm rate. The result is used only for offline GapForge evaluation.",
+    "page_start": 4,
+    "page_end": 5,
+    "char_start": 0,
+    "char_end": 197,
+    "locator": "p-acc-3:Evaluation:p4",
+    "evidence_type": "result",
+    "confidence": "medium"
+  },
+  {
+    "id": "span-p-acc-3-limitation",
+    "paper_id": "p-acc-3",
+    "section_id": "sec-p-acc-3-limitations",
+    "quote": "Limitations section: deployment shift and source coverage remain unresolved for agent covert-channel detection; adjacent network covert channels evidence is only partial.",
+    "page_start": 6,
+    "page_end": 6,
+    "char_start": 0,
+    "char_end": 170,
+    "locator": "p-acc-3:Limitations:p6",
+    "evidence_type": "limitation",
+    "confidence": "medium"
+  }
+]

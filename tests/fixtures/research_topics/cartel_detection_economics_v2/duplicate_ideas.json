@@ -1,0 +1,8 @@
+[
+  {
+    "id": "dup-cde-1",
+    "title": "Fixed-threshold benchmark for cartel detection",
+    "description": "Duplicate idea: repeat the same fixed-threshold benchmark for cartel detection already covered by p-cde-1.",
+    "expected_verdict": "reject"
+  }
+]

@@ -1,0 +1,12 @@
+[
+  {
+    "id": "bad-acc-1",
+    "title": "Use AI to improve agent covert-channel detection",
+    "type": "method gap",
+    "description": "Generic synthetic bad gap with no specific mechanism or evidence.",
+    "explicit_reason": "Included as a known bad fixture idea.",
+    "risk_that_gap_is_fake": "Too vague to evaluate.",
+    "confidence": "low",
+    "novelty_status": "likely_not_new"
+  }
+]

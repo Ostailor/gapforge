@@ -1,0 +1,173 @@
+[
+  {
+    "paper_id": "p-msf-1",
+    "citation_key": "p-msf-1",
+    "one_sentence_summary": "Synthetic fixture note: Fixed-threshold benchmark for medical screening discusses medical screening and specificity at fixed recall.",
+    "core_claims": [
+      "medical screening can be evaluated with explicit specificity at fixed recall controls."
+    ],
+    "method": [
+      "calibrated screening classifier"
+    ],
+    "datasets": [
+      "synthetic screening cohort"
+    ],
+    "metrics": [
+      "specificity at fixed recall"
+    ],
+    "main_results": [
+      "Synthetic result: calibrated screening classifier is evaluated with specificity at fixed recall."
+    ],
+    "assumptions": [
+      "synthetic screening cohort reflects enough of the target setting for a first-pass fixture."
+    ],
+    "stated_limitations": [
+      "Deployment shift remains unresolved for medical screening."
+    ],
+    "unstated_limitations": [
+      "The fixture cannot establish real-world validity for medical screening false positives."
+    ],
+    "what_it_cannot_answer": [
+      "Whether real literature already solves medical screening false positives."
+    ],
+    "useful_technical_tools": [
+      "calibrated screening classifier"
+    ],
+    "possible_connections": [
+      "industrial quality control"
+    ],
+    "relevance_to_topic": "high for synthetic offline evaluation",
+    "confidence": "medium",
+    "quotes_or_evidence_snippets": [
+      {
+        "source_id": "p-msf-1",
+        "quote": "Evaluation section: calibrated screening classifier is tested on synthetic screening cohort with specificity at fixed recall. The result is used only for offline GapForge evaluation.",
+        "locator": "p-msf-1:Evaluation:p4",
+        "confidence": "medium",
+        "source_paper_id": "p-msf-1"
+      }
+    ],
+    "created_by_skill": "eval-fixture",
+    "source_basis": "full text",
+    "sections_used": [
+      "sec-p-msf-1-intro",
+      "sec-p-msf-1-eval",
+      "sec-p-msf-1-limitations"
+    ],
+    "missing_sections": []
+  },
+  {
+    "paper_id": "p-msf-2",
+    "citation_key": "p-msf-2",
+    "one_sentence_summary": "Synthetic fixture note: Deployment limitations in medical screening discusses medical screening and specificity at fixed recall.",
+    "core_claims": [
+      "medical screening can be evaluated with explicit specificity at fixed recall controls."
+    ],
+    "method": [
+      "calibrated screening classifier"
+    ],
+    "datasets": [
+      "synthetic screening cohort"
+    ],
+    "metrics": [
+      "specificity at fixed recall"
+    ],
+    "main_results": [
+      "Synthetic result: calibrated screening classifier is evaluated with specificity at fixed recall."
+    ],
+    "assumptions": [
+      "synthetic screening cohort reflects enough of the target setting for a first-pass fixture."
+    ],
+    "stated_limitations": [
+      "Deployment shift remains unresolved for medical screening."
+    ],
+    "unstated_limitations": [
+      "The fixture cannot establish real-world validity for medical screening false positives."
+    ],
+    "what_it_cannot_answer": [
+      "Whether real literature already solves medical screening false positives."
+    ],
+    "useful_technical_tools": [
+      "calibrated screening classifier"
+    ],
+    "possible_connections": [
+      "industrial quality control"
+    ],
+    "relevance_to_topic": "high for synthetic offline evaluation",
+    "confidence": "medium",
+    "quotes_or_evidence_snippets": [
+      {
+        "source_id": "p-msf-2",
+        "quote": "Evaluation section: calibrated screening classifier is tested on synthetic screening cohort with specificity at fixed recall. The result is used only for offline GapForge evaluation.",
+        "locator": "p-msf-2:Evaluation:p4",
+        "confidence": "medium",
+        "source_paper_id": "p-msf-2"
+      }
+    ],
+    "created_by_skill": "eval-fixture",
+    "source_basis": "full text",
+    "sections_used": [
+      "sec-p-msf-2-intro",
+      "sec-p-msf-2-eval",
+      "sec-p-msf-2-limitations"
+    ],
+    "missing_sections": []
+  },
+  {
+    "paper_id": "p-msf-3",
+    "citation_key": "p-msf-3",
+    "one_sentence_summary": "Synthetic fixture note: Industrial Quality Control tools for low false alarms discusses medical screening and specificity at fixed recall.",
+    "core_claims": [
+      "medical screening can be evaluated with explicit specificity at fixed recall controls."
+    ],
+    "method": [
+      "calibrated screening classifier"
+    ],
+    "datasets": [
+      "synthetic screening cohort"
+    ],
+    "metrics": [
+      "specificity at fixed recall"
+    ],
+    "main_results": [
+      "Synthetic result: calibrated screening classifier is evaluated with specificity at fixed recall."
+    ],
+    "assumptions": [
+      "synthetic screening cohort reflects enough of the target setting for a first-pass fixture."
+    ],
+    "stated_limitations": [
+      "Deployment shift remains unresolved for medical screening."
+    ],
+    "unstated_limitations": [
+      "The fixture cannot establish real-world validity for medical screening false positives."
+    ],
+    "what_it_cannot_answer": [
+      "Whether real literature already solves medical screening false positives."
+    ],
+    "useful_technical_tools": [
+      "calibrated screening classifier"
+    ],
+    "possible_connections": [
+      "industrial quality control"
+    ],
+    "relevance_to_topic": "high for synthetic offline evaluation",
+    "confidence": "medium",
+    "quotes_or_evidence_snippets": [
+      {
+        "source_id": "p-msf-3",
+        "quote": "Evaluation section: calibrated screening classifier is tested on synthetic screening cohort with specificity at fixed recall. The result is used only for offline GapForge evaluation.",
+        "locator": "p-msf-3:Evaluation:p4",
+        "confidence": "medium",
+        "source_paper_id": "p-msf-3"
+      }
+    ],
+    "created_by_skill": "eval-fixture",
+    "source_basis": "full text",
+    "sections_used": [
+      "sec-p-msf-3-intro",
+      "sec-p-msf-3-eval",
+      "sec-p-msf-3-limitations"
+    ],
+    "missing_sections": []
+  }
+]
