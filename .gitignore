@@ -17,6 +17,8 @@ prompt_packs/
 **/llm_transcripts.md
 **/llm_usage.json
 **/dashboard/
+!src/gapforge/dashboard/
+!src/gapforge/dashboard/*.py
 **/paper_packages/
 **/safe_bundles/
 **/artifacts/papers/**/*.pdf
