@@ -1,0 +1,93 @@
+[
+  {
+    "paper_id": "p-lfc-1",
+    "citation_key": "p-lfc-1",
+    "one_sentence_summary": "We introduce a benchmark for collusion detection with fixed false-positive budgets and analyst review.",
+    "core_claims": [
+      "False-positive calibrated collusion detector benchmark"
+    ],
+    "method": [
+      "collusion",
+      "false-positive",
+      "benchmark"
+    ],
+    "datasets": [
+      "benchmark"
+    ],
+    "metrics": [
+      "false-positive-rate"
+    ],
+    "main_results": [],
+    "assumptions": [
+      "Available fixture metadata represents the paper."
+    ],
+    "stated_limitations": [],
+    "unstated_limitations": [
+      "Full text unavailable in fixture."
+    ],
+    "what_it_cannot_answer": [
+      "Cannot verify full experimental setup from fixture metadata."
+    ],
+    "confidence": "medium",
+    "source_basis": "metadata/abstract only",
+    "created_by_skill": "fixture"
+  },
+  {
+    "paper_id": "p-lfc-2",
+    "citation_key": "p-lfc-2",
+    "one_sentence_summary": "Selective anomaly detectors abstain under alert budgets but do not evaluate collusion-specific behavior.",
+    "core_claims": [
+      "Selective anomaly detection under alert budgets"
+    ],
+    "method": [
+      "anomaly detection",
+      "abstention"
+    ],
+    "datasets": [],
+    "metrics": [],
+    "main_results": [],
+    "assumptions": [
+      "Available fixture metadata represents the paper."
+    ],
+    "stated_limitations": [],
+    "unstated_limitations": [
+      "Full text unavailable in fixture."
+    ],
+    "what_it_cannot_answer": [
+      "Cannot verify full experimental setup from fixture metadata."
+    ],
+    "confidence": "medium",
+    "source_basis": "metadata/abstract only",
+    "created_by_skill": "fixture"
+  },
+  {
+    "paper_id": "p-lfc-3",
+    "citation_key": "p-lfc-3",
+    "one_sentence_summary": "Graph methods detect suspicious coordination on synthetic datasets but report limited deployment validity.",
+    "core_claims": [
+      "Graph collusion detection with synthetic labels"
+    ],
+    "method": [
+      "graph",
+      "synthetic"
+    ],
+    "datasets": [],
+    "metrics": [],
+    "main_results": [],
+    "assumptions": [
+      "Available fixture metadata represents the paper."
+    ],
+    "stated_limitations": [
+      "limited deployment validity"
+    ],
+    "unstated_limitations": [
+      "Full text unavailable in fixture."
+    ],
+    "what_it_cannot_answer": [
+      "Cannot verify full experimental setup from fixture metadata."
+    ],
+    "confidence": "medium",
+    "source_basis": "metadata/abstract only",
+    "created_by_skill": "fixture"
+  }
+]

@@ -1,0 +1,16 @@
+[
+  {
+    "id": "good-lex-1",
+    "title": "Interpretable lexical drift benchmark",
+    "type": "benchmark gap",
+    "description": "Drift monitors lack benchmarks that connect lexical substitutions to human-auditable semantic changes.",
+    "supporting_paper_ids": [
+      "p-lex-1",
+      "p-lex-3"
+    ],
+    "why_existing_work_does_not_solve_it": "Embedding metrics are not interpretable enough for substitution-level audits.",
+    "minimum_experiment_needed": "Compare substitution probes against embedding shift metrics on labeled drift cases.",
+    "risk_that_gap_is_fake": "NLP robustness datasets may already include substitution drift labels.",
+    "confidence": "medium"
+  }
+]

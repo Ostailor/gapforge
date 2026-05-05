@@ -1,0 +1,86 @@
+[
+  {
+    "paper_id": "p-qpo-1",
+    "citation_key": "p-qpo-1",
+    "one_sentence_summary": "We formulate portfolio optimization with transaction costs as a quadratic unconstrained binary optimization problem.",
+    "core_claims": [
+      "Quantum portfolio optimization with transaction costs"
+    ],
+    "method": [
+      "quantum",
+      "portfolio"
+    ],
+    "datasets": [],
+    "metrics": [],
+    "main_results": [],
+    "assumptions": [
+      "Available fixture metadata represents the paper."
+    ],
+    "stated_limitations": [],
+    "unstated_limitations": [
+      "Full text unavailable in fixture."
+    ],
+    "what_it_cannot_answer": [
+      "Cannot verify full experimental setup from fixture metadata."
+    ],
+    "confidence": "medium",
+    "source_basis": "metadata/abstract only",
+    "created_by_skill": "fixture"
+  },
+  {
+    "paper_id": "p-qpo-2",
+    "citation_key": "p-qpo-2",
+    "one_sentence_summary": "Classical mixed-integer solvers remain strong baselines for constrained portfolio selection.",
+    "core_claims": [
+      "Classical baselines for constrained portfolio selection"
+    ],
+    "method": [
+      "baseline",
+      "optimization"
+    ],
+    "datasets": [],
+    "metrics": [],
+    "main_results": [],
+    "assumptions": [
+      "Available fixture metadata represents the paper."
+    ],
+    "stated_limitations": [],
+    "unstated_limitations": [
+      "Full text unavailable in fixture."
+    ],
+    "what_it_cannot_answer": [
+      "Cannot verify full experimental setup from fixture metadata."
+    ],
+    "confidence": "medium",
+    "source_basis": "metadata/abstract only",
+    "created_by_skill": "fixture"
+  },
+  {
+    "paper_id": "p-qpo-3",
+    "citation_key": "p-qpo-3",
+    "one_sentence_summary": "Noisy annealing experiments are sensitive to scaling and transaction-cost encoding.",
+    "core_claims": [
+      "Noisy quantum annealing for finance"
+    ],
+    "method": [
+      "annealing",
+      "noise"
+    ],
+    "datasets": [],
+    "metrics": [],
+    "main_results": [],
+    "assumptions": [
+      "Available fixture metadata represents the paper."
+    ],
+    "stated_limitations": [],
+    "unstated_limitations": [
+      "Full text unavailable in fixture."
+    ],
+    "what_it_cannot_answer": [
+      "Cannot verify full experimental setup from fixture metadata."
+    ],
+    "confidence": "medium",
+    "source_basis": "metadata/abstract only",
+    "created_by_skill": "fixture"
+  }
+]

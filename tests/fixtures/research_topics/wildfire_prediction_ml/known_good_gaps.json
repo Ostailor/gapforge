@@ -1,0 +1,16 @@
+[
+  {
+    "id": "good-fire-1",
+    "title": "Sensor-outage robustness for wildfire prediction",
+    "type": "deployment gap",
+    "description": "Wildfire prediction models lack evaluation under realistic sensor outage patterns during emergency conditions.",
+    "supporting_paper_ids": [
+      "p-fire-1",
+      "p-fire-2"
+    ],
+    "why_existing_work_does_not_solve_it": "Missing-sensor forecasting is not tested against wildfire-specific false alarm and response constraints.",
+    "minimum_experiment_needed": "Mask weather stations and satellite features under outage scenarios and measure calibrated risk.",
+    "risk_that_gap_is_fake": "Operational wildfire systems may include proprietary outage evaluation.",
+    "confidence": "medium"
+  }
+]

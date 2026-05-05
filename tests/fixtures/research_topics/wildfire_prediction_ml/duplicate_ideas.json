@@ -1,0 +1,8 @@
+[
+  {
+    "id": "dup-fire-1",
+    "title": "Wildfire prediction with remote sensing and weather stations",
+    "description": "Predict wildfire risk from remote sensing and weather stations.",
+    "expected_verdict": "reject"
+  }
+]

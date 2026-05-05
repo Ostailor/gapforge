@@ -1,0 +1,12 @@
+[
+  {
+    "category": "metric",
+    "severity": "fatal",
+    "contains": "metrics"
+  },
+  {
+    "category": "dataset",
+    "severity": "major",
+    "contains": "dataset"
+  }
+]

@@ -1,0 +1,54 @@
+[
+  {
+    "id": "p-lfc-1",
+    "title": "False-positive calibrated collusion detector benchmark",
+    "authors": [
+      "Fixture Author"
+    ],
+    "abstract": "We introduce a benchmark for collusion detection with fixed false-positive budgets and analyst review.",
+    "year": 2024,
+    "venue": "FixtureConf",
+    "source": "fixture",
+    "url": "https://example.test/p-lfc-1",
+    "keywords": [
+      "collusion",
+      "false-positive",
+      "benchmark"
+    ],
+    "citation_count": 25
+  },
+  {
+    "id": "p-lfc-2",
+    "title": "Selective anomaly detection under alert budgets",
+    "authors": [
+      "Fixture Author"
+    ],
+    "abstract": "Selective anomaly detectors abstain under alert budgets but do not evaluate collusion-specific behavior.",
+    "year": 2024,
+    "venue": "FixtureConf",
+    "source": "fixture",
+    "url": "https://example.test/p-lfc-2",
+    "keywords": [
+      "anomaly detection",
+      "abstention"
+    ],
+    "citation_count": 25
+  },
+  {
+    "id": "p-lfc-3",
+    "title": "Graph collusion detection with synthetic labels",
+    "authors": [
+      "Fixture Author"
+    ],
+    "abstract": "Graph methods detect suspicious coordination on synthetic datasets but report limited deployment validity.",
+    "year": 2024,
+    "venue": "FixtureConf",
+    "source": "fixture",
+    "url": "https://example.test/p-lfc-3",
+    "keywords": [
+      "graph",
+      "synthetic"
+    ],
+    "citation_count": 25
+  }
+]

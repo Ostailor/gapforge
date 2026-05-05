@@ -1,0 +1,12 @@
+[
+  {
+    "category": "ethics",
+    "severity": "major",
+    "contains": "emergency"
+  },
+  {
+    "category": "metric",
+    "severity": "major",
+    "contains": "false alarm"
+  }
+]

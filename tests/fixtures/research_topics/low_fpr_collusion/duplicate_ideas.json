@@ -1,0 +1,8 @@
+[
+  {
+    "id": "dup-lfc-1",
+    "title": "False-positive calibrated collusion detector benchmark",
+    "description": "Build the same false-positive calibrated collusion detector benchmark.",
+    "expected_verdict": "reject"
+  }
+]

@@ -1,0 +1,10 @@
+[
+  {
+    "id": "bad-lex-1",
+    "title": "Better text monitoring",
+    "description": "Make text monitoring better with modern models.",
+    "supporting_paper_ids": [],
+    "risk_that_gap_is_fake": "",
+    "confidence": "high"
+  }
+]

@@ -1,0 +1,12 @@
+[
+  {
+    "category": "novelty",
+    "severity": "fatal",
+    "contains": "closest prior work"
+  },
+  {
+    "category": "baseline",
+    "severity": "fatal",
+    "contains": "baselines"
+  }
+]

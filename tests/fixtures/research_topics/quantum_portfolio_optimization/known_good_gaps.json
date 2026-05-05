@@ -1,0 +1,16 @@
+[
+  {
+    "id": "good-qpo-1",
+    "title": "Transaction-cost encoding robustness",
+    "type": "scalability gap",
+    "description": "Quantum portfolio studies rarely isolate whether transaction-cost encodings remain robust as asset count grows.",
+    "supporting_paper_ids": [
+      "p-qpo-1",
+      "p-qpo-3"
+    ],
+    "why_existing_work_does_not_solve_it": "Reported results often confound encoding choice with solver noise and scale.",
+    "minimum_experiment_needed": "Compare encodings against classical solvers across asset counts and noise levels.",
+    "risk_that_gap_is_fake": "A specialized quantum finance benchmark may already report this ablation.",
+    "confidence": "medium"
+  }
+]

@@ -1,0 +1,88 @@
+[
+  {
+    "paper_id": "p-fire-1",
+    "citation_key": "p-fire-1",
+    "one_sentence_summary": "We predict wildfire risk from remote sensing and weather stations but note missing sensor limitations.",
+    "core_claims": [
+      "Wildfire prediction with remote sensing and weather stations"
+    ],
+    "method": [
+      "wildfire",
+      "sensors"
+    ],
+    "datasets": [],
+    "metrics": [],
+    "main_results": [],
+    "assumptions": [
+      "Available fixture metadata represents the paper."
+    ],
+    "stated_limitations": [],
+    "unstated_limitations": [
+      "Full text unavailable in fixture."
+    ],
+    "what_it_cannot_answer": [
+      "Cannot verify full experimental setup from fixture metadata."
+    ],
+    "confidence": "medium",
+    "source_basis": "metadata/abstract only",
+    "created_by_skill": "fixture"
+  },
+  {
+    "paper_id": "p-fire-2",
+    "citation_key": "p-fire-2",
+    "one_sentence_summary": "Robust forecasting handles missing sensors but is not evaluated on wildfire spread prediction.",
+    "core_claims": [
+      "Robust forecasting under sensor outages"
+    ],
+    "method": [
+      "sensor outage",
+      "forecasting"
+    ],
+    "datasets": [],
+    "metrics": [],
+    "main_results": [],
+    "assumptions": [
+      "Available fixture metadata represents the paper."
+    ],
+    "stated_limitations": [],
+    "unstated_limitations": [
+      "Full text unavailable in fixture."
+    ],
+    "what_it_cannot_answer": [
+      "Cannot verify full experimental setup from fixture metadata."
+    ],
+    "confidence": "medium",
+    "source_basis": "metadata/abstract only",
+    "created_by_skill": "fixture"
+  },
+  {
+    "paper_id": "p-fire-3",
+    "citation_key": "p-fire-3",
+    "one_sentence_summary": "Wildfire risk maps require calibration and false alarm analysis for emergency response.",
+    "core_claims": [
+      "Calibration of wildfire risk maps"
+    ],
+    "method": [
+      "calibration",
+      "false alarm"
+    ],
+    "datasets": [],
+    "metrics": [
+      "false-positive-rate"
+    ],
+    "main_results": [],
+    "assumptions": [
+      "Available fixture metadata represents the paper."
+    ],
+    "stated_limitations": [],
+    "unstated_limitations": [
+      "Full text unavailable in fixture."
+    ],
+    "what_it_cannot_answer": [
+      "Cannot verify full experimental setup from fixture metadata."
+    ],
+    "confidence": "medium",
+    "source_basis": "metadata/abstract only",
+    "created_by_skill": "fixture"
+  }
+]

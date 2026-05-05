@@ -1,0 +1,29 @@
+[
+  {
+    "id": "good-lfc-1",
+    "title": "Alert-budget evaluation for collusion detectors",
+    "type": "measurement gap",
+    "description": "Existing collusion detectors rarely report recall at fixed false-positive alert budgets for analyst review.",
+    "supporting_paper_ids": [
+      "p-lfc-1",
+      "p-lfc-2"
+    ],
+    "why_existing_work_does_not_solve_it": "Closest work either benchmarks collusion broadly or studies abstention outside collusion.",
+    "minimum_experiment_needed": "Compare collusion detectors at matched false-positive alert budgets.",
+    "risk_that_gap_is_fake": "A specialized fraud detection benchmark may already include this setting.",
+    "confidence": "medium"
+  },
+  {
+    "id": "good-lfc-2",
+    "title": "Deployment validity for synthetic collusion labels",
+    "type": "deployment gap",
+    "description": "Synthetic collusion labels may not transfer to real analyst workflows.",
+    "supporting_paper_ids": [
+      "p-lfc-3"
+    ],
+    "why_existing_work_does_not_solve_it": "Synthetic-only evaluation does not establish deployment validity.",
+    "minimum_experiment_needed": "Stress test on public interaction logs with label audit.",
+    "risk_that_gap_is_fake": "Full text may contain real-world validation.",
+    "confidence": "low"
+  }
+]

@@ -1,0 +1,8 @@
+[
+  {
+    "id": "dup-qpo-1",
+    "title": "Quantum portfolio optimization with transaction costs",
+    "description": "Use quantum portfolio optimization with transaction costs.",
+    "expected_verdict": "reject"
+  }
+]

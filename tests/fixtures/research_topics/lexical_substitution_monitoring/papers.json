@@ -1,0 +1,53 @@
+[
+  {
+    "id": "p-lex-1",
+    "title": "Lexical substitution monitoring for semantic drift",
+    "authors": [
+      "Fixture Author"
+    ],
+    "abstract": "We monitor semantic drift through lexical substitution probes and report calibration limits.",
+    "year": 2024,
+    "venue": "FixtureConf",
+    "source": "fixture",
+    "url": "https://example.test/p-lex-1",
+    "keywords": [
+      "lexical substitution",
+      "drift"
+    ],
+    "citation_count": 25
+  },
+  {
+    "id": "p-lex-2",
+    "title": "Process mining for text model regressions",
+    "authors": [
+      "Fixture Author"
+    ],
+    "abstract": "Process mining detects regression events but lacks semantic substitution benchmarks.",
+    "year": 2024,
+    "venue": "FixtureConf",
+    "source": "fixture",
+    "url": "https://example.test/p-lex-2",
+    "keywords": [
+      "process mining",
+      "regression"
+    ],
+    "citation_count": 25
+  },
+  {
+    "id": "p-lex-3",
+    "title": "Embedding shift metrics for deployed classifiers",
+    "authors": [
+      "Fixture Author"
+    ],
+    "abstract": "Embedding shift metrics identify distribution changes but miss interpretable lexical evidence.",
+    "year": 2024,
+    "venue": "FixtureConf",
+    "source": "fixture",
+    "url": "https://example.test/p-lex-3",
+    "keywords": [
+      "embedding",
+      "shift"
+    ],
+    "citation_count": 25
+  }
+]

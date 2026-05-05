@@ -1,0 +1,88 @@
+[
+  {
+    "paper_id": "p-lex-1",
+    "citation_key": "p-lex-1",
+    "one_sentence_summary": "We monitor semantic drift through lexical substitution probes and report calibration limits.",
+    "core_claims": [
+      "Lexical substitution monitoring for semantic drift"
+    ],
+    "method": [
+      "lexical substitution",
+      "drift"
+    ],
+    "datasets": [],
+    "metrics": [],
+    "main_results": [],
+    "assumptions": [
+      "Available fixture metadata represents the paper."
+    ],
+    "stated_limitations": [],
+    "unstated_limitations": [
+      "Full text unavailable in fixture."
+    ],
+    "what_it_cannot_answer": [
+      "Cannot verify full experimental setup from fixture metadata."
+    ],
+    "confidence": "medium",
+    "source_basis": "metadata/abstract only",
+    "created_by_skill": "fixture"
+  },
+  {
+    "paper_id": "p-lex-2",
+    "citation_key": "p-lex-2",
+    "one_sentence_summary": "Process mining detects regression events but lacks semantic substitution benchmarks.",
+    "core_claims": [
+      "Process mining for text model regressions"
+    ],
+    "method": [
+      "process mining",
+      "regression"
+    ],
+    "datasets": [
+      "benchmark"
+    ],
+    "metrics": [],
+    "main_results": [],
+    "assumptions": [
+      "Available fixture metadata represents the paper."
+    ],
+    "stated_limitations": [],
+    "unstated_limitations": [
+      "Full text unavailable in fixture."
+    ],
+    "what_it_cannot_answer": [
+      "Cannot verify full experimental setup from fixture metadata."
+    ],
+    "confidence": "medium",
+    "source_basis": "metadata/abstract only",
+    "created_by_skill": "fixture"
+  },
+  {
+    "paper_id": "p-lex-3",
+    "citation_key": "p-lex-3",
+    "one_sentence_summary": "Embedding shift metrics identify distribution changes but miss interpretable lexical evidence.",
+    "core_claims": [
+      "Embedding shift metrics for deployed classifiers"
+    ],
+    "method": [
+      "embedding",
+      "shift"
+    ],
+    "datasets": [],
+    "metrics": [],
+    "main_results": [],
+    "assumptions": [
+      "Available fixture metadata represents the paper."
+    ],
+    "stated_limitations": [],
+    "unstated_limitations": [
+      "Full text unavailable in fixture."
+    ],
+    "what_it_cannot_answer": [
+      "Cannot verify full experimental setup from fixture metadata."
+    ],
+    "confidence": "medium",
+    "source_basis": "metadata/abstract only",
+    "created_by_skill": "fixture"
+  }
+]

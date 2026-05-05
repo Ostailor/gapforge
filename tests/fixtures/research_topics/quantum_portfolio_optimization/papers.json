@@ -1,0 +1,53 @@
+[
+  {
+    "id": "p-qpo-1",
+    "title": "Quantum portfolio optimization with transaction costs",
+    "authors": [
+      "Fixture Author"
+    ],
+    "abstract": "We formulate portfolio optimization with transaction costs as a quadratic unconstrained binary optimization problem.",
+    "year": 2024,
+    "venue": "FixtureConf",
+    "source": "fixture",
+    "url": "https://example.test/p-qpo-1",
+    "keywords": [
+      "quantum",
+      "portfolio"
+    ],
+    "citation_count": 25
+  },
+  {
+    "id": "p-qpo-2",
+    "title": "Classical baselines for constrained portfolio selection",
+    "authors": [
+      "Fixture Author"
+    ],
+    "abstract": "Classical mixed-integer solvers remain strong baselines for constrained portfolio selection.",
+    "year": 2024,
+    "venue": "FixtureConf",
+    "source": "fixture",
+    "url": "https://example.test/p-qpo-2",
+    "keywords": [
+      "baseline",
+      "optimization"
+    ],
+    "citation_count": 25
+  },
+  {
+    "id": "p-qpo-3",
+    "title": "Noisy quantum annealing for finance",
+    "authors": [
+      "Fixture Author"
+    ],
+    "abstract": "Noisy annealing experiments are sensitive to scaling and transaction-cost encoding.",
+    "year": 2024,
+    "venue": "FixtureConf",
+    "source": "fixture",
+    "url": "https://example.test/p-qpo-3",
+    "keywords": [
+      "annealing",
+      "noise"
+    ],
+    "citation_count": 25
+  }
+]

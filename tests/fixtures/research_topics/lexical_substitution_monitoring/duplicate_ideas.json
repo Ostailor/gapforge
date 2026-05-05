@@ -1,0 +1,8 @@
+[
+  {
+    "id": "dup-lex-1",
+    "title": "Lexical substitution monitoring for semantic drift",
+    "description": "Build lexical substitution monitoring for semantic drift.",
+    "expected_verdict": "reject"
+  }
+]

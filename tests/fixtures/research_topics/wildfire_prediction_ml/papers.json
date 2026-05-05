@@ -1,0 +1,53 @@
+[
+  {
+    "id": "p-fire-1",
+    "title": "Wildfire prediction with remote sensing and weather stations",
+    "authors": [
+      "Fixture Author"
+    ],
+    "abstract": "We predict wildfire risk from remote sensing and weather stations but note missing sensor limitations.",
+    "year": 2024,
+    "venue": "FixtureConf",
+    "source": "fixture",
+    "url": "https://example.test/p-fire-1",
+    "keywords": [
+      "wildfire",
+      "sensors"
+    ],
+    "citation_count": 25
+  },
+  {
+    "id": "p-fire-2",
+    "title": "Robust forecasting under sensor outages",
+    "authors": [
+      "Fixture Author"
+    ],
+    "abstract": "Robust forecasting handles missing sensors but is not evaluated on wildfire spread prediction.",
+    "year": 2024,
+    "venue": "FixtureConf",
+    "source": "fixture",
+    "url": "https://example.test/p-fire-2",
+    "keywords": [
+      "sensor outage",
+      "forecasting"
+    ],
+    "citation_count": 25
+  },
+  {
+    "id": "p-fire-3",
+    "title": "Calibration of wildfire risk maps",
+    "authors": [
+      "Fixture Author"
+    ],
+    "abstract": "Wildfire risk maps require calibration and false alarm analysis for emergency response.",
+    "year": 2024,
+    "venue": "FixtureConf",
+    "source": "fixture",
+    "url": "https://example.test/p-fire-3",
+    "keywords": [
+      "calibration",
+      "false alarm"
+    ],
+    "citation_count": 25
+  }
+]

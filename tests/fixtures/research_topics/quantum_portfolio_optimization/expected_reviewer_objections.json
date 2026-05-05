@@ -1,0 +1,12 @@
+[
+  {
+    "category": "baseline",
+    "severity": "fatal",
+    "contains": "classical"
+  },
+  {
+    "category": "scaling",
+    "severity": "major",
+    "contains": "scale"
+  }
+]
