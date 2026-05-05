@@ -2,6 +2,45 @@
 
 All notable project changes should be recorded here.
 
+## 0.3.0
+
+GapForge v0.3 extends the v0.2 full-text evidence system with project memory, hybrid retrieval, optional Codex/GPT-5.4 task-pack workflows, research direction maturation, and manuscript package exports. It is still not an exhaustive autonomous literature reviewer.
+
+### Project Memory and Retrieval
+
+- Added project-level memory for topics, corpus papers, rejected ideas, human decisions, memory records, and research directions.
+- Added a Python API layer for notebooks, scripts, and future UI surfaces without shelling out to the CLI.
+- Added project claim graphs with deterministic duplicate/contradiction detection and human resolution records.
+- Added hybrid lexical/local-semantic retrieval over papers, sections, evidence spans, notes, claims, gaps, dossiers, and project memory.
+- Added source policy profiles and coverage stopping assessments.
+- Added active-loop decision records and budget-aware stop conditions.
+
+### Codex/GPT-5.4 Agent Support
+
+- Added an optional provider LLM adapter with JSON guards, budget tracking, transcript redaction, and graceful provider-unavailable failures.
+- Added optional LLM-backed deep-reading, gap-mining, novelty-dossier, and reviewer workflows behind deterministic/fake/prompt-pack/provider modes.
+- Added `AgentClient` separately from `LLMClient`.
+- Added Codex-compatible task packs, strict schema validation, validated output import, fake-agent CI mode, and canary run profiles.
+- Added `gapforge run --v3 --mode deterministic|prompt-pack|fake-agent|llm-assisted`.
+- Added human review harness and release-gate status for actual Codex/GPT-5.4 canary acceptance.
+
+### Research Direction Workflow
+
+- Added related-work matrices, must-read lists, baseline candidates, experiment protocols, reproducibility checklists, review panels, rebuttal plans, and manuscript/paper package exports.
+- Added review queue and static dashboard for project/run inspection.
+- Added artifact safety auditing, redaction, safe-bundle export, and generated-artifact hygiene.
+
+### Full-Text and Evaluation
+
+- Added v0.3 PDF structure extraction hooks for references, tables, equations, captions, and OCR-status records.
+- Added v0.3 curated fixture layout and metrics for retrieval relevance, prior-work recall proxy, direction maturity, protocol completeness, manuscript honesty, contradiction detection, source-policy compliance, and LLM grounding.
+
+### Validation
+
+- Deterministic checks passed locally: `make format`, `make format-check`, `make lint`, `make typecheck`, `make test`, `make eval`, `gapforge eval --v2 --write-report`, `gapforge eval --v3 --write-report`, `make coverage`, `make v2-smoke`, and `make v3-smoke`.
+- Fake-agent canary `fake_agent_regression` passed.
+- Actual Codex/GPT-5.4 real-run acceptance was **not completed** because the real-run environment was unavailable. The release must not claim actual-run validation passed.
+
 ## 0.2.0
 
 GapForge v0.2 upgrades the project from an abstract/metadata-heavy smoke-test system into a full-text-aware, evidence-located research ideation system with conservative novelty checking. It is still not an exhaustive autonomous literature reviewer.

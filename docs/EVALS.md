@@ -1,44 +1,47 @@
 # Evaluations
 
-GapForge evaluations are offline and fixture-driven. They test whether the system identifies specific, evidence-backed, novelty-aware gaps instead of generic research ideas.
+GapForge evals are offline and fixture-driven. They test behavior: evidence linkage, duplicate rejection, novelty caution, source transparency, retrieval relevance, direction maturity, and export honesty. They do not prove real scientific quality.
 
-## Fixtures
+## Fixture Families
 
-Fixtures live under `tests/fixtures/research_topics/`:
+### v0.1 Synthetic Research Topics
+
+Located in `tests/fixtures/research_topics/`:
 
 - `low_fpr_collusion`
 - `lexical_substitution_monitoring`
 - `quantum_portfolio_optimization`
 - `wildfire_prediction_ml`
-- `low_fpr_collusion_v2`
-- `lexical_substitution_monitoring_v2`
-- `ai_agent_covert_channels_v2`
-- `medical_screening_false_positives_v2`
-- `cartel_detection_economics_v2`
 
-Each fixture contains:
+These check deterministic run behavior, generic gap quality, duplicate ideas, and reviewer objections.
 
-- `topic.md`
-- `papers.json`
-- `paper_notes.json`
-- `known_good_gaps.json`
-- `known_bad_gaps.json`
-- `duplicate_ideas.json`
-- `expected_reviewer_objections.json`
+### v0.2 Full-Text Fixtures
 
-v0.2 fixtures also include:
+Located in `tests/fixtures/research_topics/*_v2/`:
 
-- `paper_sections.json`
-- `evidence_spans.json`
-- `expected_novelty_dossiers.json`
-- `expected_gap_evidence_matrix.json`
-- `expected_source_coverage.json`
+- paper sections
+- evidence spans
+- expected novelty dossiers
+- gap evidence matrices
+- expected source coverage
 
-The fixtures intentionally include duplicate ideas, unsupported claims, and missing-baseline controls so the evaluator can check failure detection.
+These test section grounding, evidence spans, unsupported full-text claims, and dossier-aware novelty.
+
+### v0.3 Curated Real-World-Style Fixtures
+
+Located in `tests/fixtures/curated_v3/`:
+
+- `low_fpr_collusion`
+- `llm_monitor_evasion`
+- `medical_screening_specificity`
+- `cartel_detection_economics`
+- `physics_phase_transition_analogy`
+
+These are synthetic or metadata/short-excerpt fixtures designed to resemble real research workflows. They must not include copyrighted PDFs or present fixture conclusions as real literature findings.
 
 ## Metrics
 
-`src/gapforge/evals/metrics.py` implements:
+Core metrics:
 
 - `gap_specificity_score`
 - `evidence_linkage_score`
@@ -47,6 +50,9 @@ The fixtures intentionally include duplicate ideas, unsupported claims, and miss
 - `unsupported_claim_rate`
 - `experiment_completeness_score`
 - `reviewer_objection_quality_score`
+
+v0.2 metrics:
+
 - `full_text_coverage_score`
 - `evidence_span_precision_proxy`
 - `section_grounding_score`
@@ -56,44 +62,51 @@ The fixtures intentionally include duplicate ideas, unsupported claims, and miss
 - `human_review_respect_score`
 - `report_uncertainty_score`
 
-## Runner
+v0.3 metrics:
 
-Run all fixtures:
+- `retrieval_relevance_at_k`
+- `prior_work_recall_proxy`
+- `related_work_matrix_quality`
+- `direction_maturity_accuracy`
+- `protocol_completeness`
+- `manuscript_package_honesty`
+- `contradiction_detection_score`
+- `source_policy_compliance`
+- `llm_output_grounding_score`
+
+## Commands
 
 ```bash
 gapforge eval
-```
-
-Run one fixture:
-
-```bash
-gapforge eval --fixture low_fpr_collusion
-```
-
-Write the Markdown report:
-
-```bash
+gapforge eval --v2
+gapforge eval --v3
+gapforge eval --fixture low_fpr_collusion --v3
 gapforge eval --write-report
+make eval
 ```
 
-Run v0.2 fixtures:
+`make eval` runs offline and writes `eval_report.md`.
 
-```bash
-gapforge eval --v2 --write-report
-gapforge eval --fixture low_fpr_collusion_v2
-```
+## What Evals Should Catch
 
-The runner writes `eval_report.md` with scores by fixture, unsupported claims, accepted gaps, rejected gaps, novelty gate failures, missing baselines, and recommended improvements.
+- unsupported high-confidence claims
+- duplicate ideas not rejected by novelty gate
+- generic gaps without paper/evidence links
+- missing baselines in experiments
+- poor source coverage hidden in reports
+- full-text claims without locators
+- query-only analogies presented as conclusions
+- LLM outputs accepted without grounding
+- manuscript packages that imply fake results
 
-The eval report is not a scientific benchmark result. It is a regression harness for GapForge behavior: duplicate ideas should be rejected, unsupported claims should stay visible, and experiments should not pass reviewer simulation without baselines and falsification conditions.
+## Fixture Policy
 
-## Contract
+- Keep fixtures deterministic and small.
+- Prefer synthetic excerpts unless licensing permits real short excerpts.
+- Label synthetic content clearly.
+- Include negative controls: duplicate ideas, unsupported claims, poor coverage, missing baselines, and not-ready reasons.
+- Do not use live network or model calls.
 
-- Evals must not call live APIs.
-- Evals must not require API keys.
-- Fixture duplicate ideas should be rejected by the novelty gate.
-- Fixture unsupported claims should be visible in the report.
-- Missing baselines should be caught by reviewer simulation.
-- v0.2 fixtures should verify full-text coverage, evidence-span grounding, novelty dossier completeness, and source coverage transparency.
+## Interpreting Scores
 
-The eval harness is still synthetic. Passing evals means GapForge preserved key safety and quality behaviors on fixtures; it does not prove real-world research usefulness.
+Eval scores are regression signals. A passing eval means GapForge preserved safety and behavior on curated cases. It does not mean a generated research direction is novel, publishable, or exhaustive. Human expert review and additional source coverage remain required.

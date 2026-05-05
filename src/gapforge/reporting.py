@@ -22,8 +22,11 @@ from gapforge.models import (
     ReviewerSimulationSummary,
     to_plain,
 )
+from gapforge.redaction import redact_text
+from gapforge.retrieval.index_store import RetrievalIndexStore
 from gapforge.review.audit import is_rejected, review_summary
 from gapforge.sources.coverage import generate_source_coverage
+from gapforge.sources.stopping import assess_literature_coverage
 
 CONFIDENCE_RANK = {"high": 3, "medium": 2, "low": 1}
 NOVELTY_RANK = {"strong": 4, "medium": 3, "weak": 2, "unchecked": 1, "likely_not_new": 0}
@@ -38,11 +41,11 @@ def write_final_report(state: ResearchRunState, *, output_format: str = "markdow
     run_dir.mkdir(parents=True, exist_ok=True)
     if output_format == "markdown":
         path = run_dir / "final_report.md"
-        path.write_text(render_markdown_report(report), encoding="utf-8")
+        path.write_text(redact_text(render_markdown_report(report)), encoding="utf-8")
         return path
     if output_format == "json":
         path = run_dir / "final_report.json"
-        path.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+        path.write_text(redact_text(json.dumps(report, indent=2)) + "\n", encoding="utf-8")
         return path
     raise ValueError(f"Unsupported report format: {output_format}")
 
@@ -61,6 +64,7 @@ def build_final_report(state: ResearchRunState, *, strict: bool = False) -> dict
     top_gap = _top_gap(active_gaps, novelty_by_target, matrix_by_gap)
     top_experiment = _top_experiment(state.experiments, top_gap, novelty_by_target, objections_by_experiment)
     coverage = _search_coverage(state)
+    retrieval_coverage = _retrieval_coverage(state)
     evidence_index = _evidence_locator_index(state)
     top_direction = _top_direction_v2(
         top_gap,
@@ -90,6 +94,12 @@ def build_final_report(state: ResearchRunState, *, strict: bool = False) -> dict
     claim_summary = _claim_ledger_summary(state)
     rejected = _rejected_ideas(state)
     human_summary = review_summary(state)
+    review_queue_summary = _review_queue_summary(state)
+    agent_summary = _agent_execution_summary(state)
+    if strict and agent_summary["imported_without_validation"]:
+        top_direction.setdefault("blocking_reasons", []).append("Agent-backed outputs were imported without validation.")
+        top_direction["readiness"] = "not_ready"
+        top_direction["title"] = "No direction ready"
     uncertainty = _uncertainty_section(state, coverage, uncertain_claims, novelty_records)
     next_actions = _next_actions_v2(state, top_gap, top_experiment, coverage, top_direction, uncertainty)
     sections = {
@@ -102,6 +112,7 @@ def build_final_report(state: ResearchRunState, *, strict: bool = False) -> dict
         },
         "what_was_searched": _what_was_searched(coverage),
         "source_and_full_text_coverage": coverage,
+        "retrieval_coverage": retrieval_coverage,
         "field_map": _literature_map(state, paper_by_id),
         "important_paper_clusters": _top_paper_clusters(state, paper_by_id),
         "papers_read_deeply": deeply_read,
@@ -114,16 +125,20 @@ def build_final_report(state: ResearchRunState, *, strict: bool = False) -> dict
         "reviewer_simulation_and_blocking_issues": _reviewer_simulation(state),
         "claim_ledger_summary": claim_summary,
         "human_review_summary": human_summary,
+        "review_queue": review_queue_summary,
+        "agent_execution_provenance": agent_summary,
         "rejected_ideas": rejected,
         "what_remains_uncertain": uncertainty,
         "next_actions": next_actions,
     }
 
+    report_version = "v0.3" if state.config.get("v3") else "v0.2"
+
     return {
         "run_id": state.run_id,
         "topic": state.topic.text,
         "schema_version": state.config.get("schema_version", 1),
-        "report_version": "v0.2",
+        "report_version": report_version,
         "strict": strict,
         "generated_from": {
             "papers": len(state.papers),
@@ -136,10 +151,14 @@ def build_final_report(state: ResearchRunState, *, strict: bool = False) -> dict
             "paper_sections": len(state.paper_sections),
             "experiments": len(state.experiments),
             "reviewer_objections": len(state.reviewer_objections),
+            "retrieval_documents": retrieval_coverage.get("document_count", 0),
+            "agent_tasks": len(state.agent_task_specs),
+            "agent_imports": agent_summary["imported_count"],
         },
         "sections": sections,
         "evidence_locators": _all_evidence_locators(state),
         "source_coverage": coverage,
+        "retrieval_coverage": retrieval_coverage,
         "executive_summary": sections["executive_summary"],
         "broad_topic_interpretation": _topic_interpretation(state),
         "literature_map": sections["field_map"],
@@ -155,12 +174,14 @@ def build_final_report(state: ResearchRunState, *, strict: bool = False) -> dict
         "unsupported_or_uncertain_claims": [_claim_record(claim) for claim in uncertain_claims[:20]],
         "rejected_ideas": rejected,
         "human_review_summary": human_summary,
+        "review_queue": review_queue_summary,
+        "agent_execution_provenance": agent_summary,
         "next_actions": next_actions,
     }
 
 
 def render_markdown_report(report: dict[str, Any]) -> str:
-    """Render a v0.2 evidence-located research dossier as Markdown."""
+    """Render an evidence-located research dossier as Markdown."""
 
     sections = report.get("sections", {})
     summary = sections.get("executive_summary", report.get("executive_summary", {}))
@@ -227,15 +248,72 @@ def render_markdown_report(report: dict[str, Any]) -> str:
             f"- Source counts: {_format_counts(coverage.get('source_counts', {}))}",
             f"- Failed sources: {', '.join(coverage.get('failed_sources', [])) or 'none'}",
             f"- Papers with parsed full text: {coverage.get('papers_with_full_text', 0)}",
+            f"- Parsed references: {coverage.get('reference_count', 0)}",
+            f"- Parsed tables: {coverage.get('table_count', 0)}",
+            f"- Parsed equations: {coverage.get('equation_count', 0)}",
+            f"- Parsed captions: {coverage.get('caption_count', 0)}",
+            f"- OCR records: {coverage.get('ocr_attempt_count', 0)}",
             f"- Abstract-only notes: {coverage.get('abstract_only_notes', 0)}",
             f"- Fallback/offline papers: {coverage.get('fallback_paper_count', 0)}",
             f"- Fixture/fallback label: {coverage.get('fixture_or_fallback_label', 'not detected')}",
             f"- Coverage confidence: {coverage.get('confidence', 'low')}",
             f"- Coverage assessment: {coverage.get('coverage_assessment', 'unknown')}",
+            f"- Source policy profile: {coverage.get('policy_profile_id', 'generic')}",
+            f"- Policy enough for mapping: {str(coverage.get('policy_enough_for_mapping', False)).lower()}",
+            f"- Policy enough for gap mining: {str(coverage.get('policy_enough_for_gap_mining', False)).lower()}",
+            f"- Policy enough for novelty: {str(coverage.get('policy_enough_for_novelty', False)).lower()}",
+            f"- Policy enough for experiment design: {str(coverage.get('policy_enough_for_experiment_design', False)).lower()}",
             f"- Limitations: {coverage.get('limitations', 'No limitations recorded.')}",
             "",
         ]
     )
+    if coverage.get("policy_missing_requirements"):
+        lines.extend(["Policy missing requirements:"])
+        lines.extend([f"- {item}" for item in coverage.get("policy_missing_requirements", [])[:12]])
+        lines.append("")
+    if coverage.get("policy_recommended_queries"):
+        lines.extend(["Policy recommended next searches:"])
+        lines.extend([f"- {query}" for query in coverage.get("policy_recommended_queries", [])[:8]])
+        lines.append("")
+
+    _section(lines, "3a. Skill Execution Provenance")
+    agent_summary = sections.get("agent_execution_provenance", report.get("agent_execution_provenance", {}))
+    lines.extend(
+        [
+            f"- Deterministic completed skills: {', '.join(agent_summary.get('deterministic_skills', [])) or 'none recorded'}",
+            f"- LLM-backed notes: {agent_summary.get('llm_backed_note_count', 0)}",
+            f"- Codex agent task packs: {agent_summary.get('task_count', 0)}",
+            f"- Codex agent imported outputs: {agent_summary.get('imported_count', 0)}",
+            f"- Agent validation results: {agent_summary.get('validation_count', 0)}",
+        ]
+    )
+    if agent_summary.get("imported_without_validation"):
+        lines.append("- Warning: agent-backed outputs were imported without validation.")
+    for record in agent_summary.get("agent_records", [])[:8]:
+        lines.append(
+            f"- `{record.get('task_spec_id', 'unknown')}`: {record.get('status', 'unknown')} "
+            f"via {record.get('agent_name', 'agent')}/{record.get('model', 'model')} "
+            f"(validation={record.get('validation_result_id') or 'none'})"
+        )
+    lines.append("")
+
+    _section(lines, "3b. Retrieval Coverage")
+    retrieval = sections.get("retrieval_coverage", report.get("retrieval_coverage", {}))
+    lines.extend(
+        [
+            f"- Index available: {str(retrieval.get('available', False)).lower()}",
+            f"- Documents indexed: {retrieval.get('document_count', 0)}",
+            f"- Index type: {retrieval.get('index_type', 'none')}",
+            f"- Embedding model: {retrieval.get('embedding_model', 'none')}",
+            f"- Path: `{retrieval.get('path', 'none')}`",
+            "",
+        ]
+    )
+    for object_type, count in sorted(retrieval.get("document_type_counts", {}).items()):
+        lines.append(f"- {object_type}: {count}")
+    if not retrieval.get("available"):
+        lines.append("- No retrieval index was available for this report.")
+    lines.append("")
 
     _section(lines, "4. Field Map")
     literature_map = sections.get("field_map", {})
@@ -458,6 +536,16 @@ def render_markdown_report(report: dict[str, Any]) -> str:
         )
     if not human_review.get("recent_reviews"):
         lines.append("- none")
+    lines.extend(["", "Open review queue items:", ""])
+    review_queue = sections.get("review_queue", report.get("review_queue", {}))
+    for item in review_queue.get("open_items", []):
+        lines.append(
+            f"- `{item['id']}` {item['priority']} `{item['object_type']}:{item['object_id']}`"
+            + (f" run=`{item['run_id']}`" if item.get("run_id") else "")
+            + f": {item['reason']}"
+        )
+    if not review_queue.get("open_items"):
+        lines.append("- none")
     lines.append("")
 
     _section(lines, "16. Rejected Ideas")
@@ -571,6 +659,10 @@ def _top_direction_v2(
     blocking_reasons = []
     if coverage.get("coverage_assessment") == "poor":
         blocking_reasons.append("Source or full-text coverage is poor.")
+    if coverage.get("policy_assessment_active") and not coverage.get("policy_enough_for_novelty", False):
+        blocking_reasons.append("Field-specific source policy does not pass novelty coverage.")
+    if strict and coverage.get("policy_assessment_active") and not coverage.get("policy_enough_for_experiment_design", False):
+        blocking_reasons.append("Field-specific source policy does not pass experiment-design coverage.")
     if coverage.get("fallback_paper_count", 0):
         blocking_reasons.append("Some papers are fallback/offline artifacts.")
     if not evidence_locators:
@@ -836,6 +928,8 @@ def _search_coverage(state: ResearchRunState) -> dict[str, Any]:
         limitations.append("No explicit search limitation was recorded.")
     fixture_or_fallback = _fixture_or_fallback_label(state, coverage.fallback_paper_count)
     coverage_assessment = _coverage_assessment(coverage.confidence, len(coverage.query_records), len(coverage.papers_with_full_text))
+    policy_active = state.coverage_stopping_assessment is not None or bool(state.config.get("source_policy_profile"))
+    stopping = state.coverage_stopping_assessment or assess_literature_coverage(state)
     return {
         "paper_count": len(state.papers),
         "source_counts": dict(sorted(source_counts.items())),
@@ -857,12 +951,62 @@ def _search_coverage(state: ResearchRunState) -> dict[str, Any]:
         "papers_with_doi": sum(1 for paper in state.papers if paper.doi),
         "papers_with_pdf": len(coverage.papers_with_pdf),
         "papers_with_full_text": len(coverage.papers_with_full_text),
+        "reference_count": len(state.references),
+        "table_count": len(state.tables),
+        "equation_count": len(state.equations),
+        "caption_count": len(state.captions),
+        "ocr_attempt_count": len(state.ocr_attempts),
         "abstract_only_notes": abstract_only,
         "fallback_paper_count": coverage.fallback_paper_count,
         "fixture_or_fallback_label": fixture_or_fallback,
         "confidence": coverage.confidence,
         "coverage_assessment": coverage_assessment,
+        "policy_profile_id": stopping.profile_id,
+        "policy_assessment_active": policy_active,
+        "policy_enough_for_mapping": stopping.enough_for_mapping,
+        "policy_enough_for_gap_mining": stopping.enough_for_gap_mining,
+        "policy_enough_for_novelty": stopping.enough_for_novelty,
+        "policy_enough_for_experiment_design": stopping.enough_for_experiment_design,
+        "policy_missing_requirements": stopping.missing_requirements,
+        "policy_recommended_queries": stopping.recommended_queries,
+        "policy_confidence": stopping.confidence,
         "limitations": " ".join(limitations),
+    }
+
+
+def _retrieval_coverage(state: ResearchRunState) -> dict[str, Any]:
+    store = RetrievalIndexStore.for_run(state.run_dir)
+    if not store.exists():
+        return {
+            "available": False,
+            "document_count": 0,
+            "document_type_counts": {},
+            "index_type": "none",
+            "embedding_model": "none",
+            "path": "",
+        }
+    try:
+        manifest = store.load_manifest()
+        documents = store.load_documents()
+    except (FileNotFoundError, ValueError, OSError):
+        return {
+            "available": False,
+            "document_count": 0,
+            "document_type_counts": {},
+            "index_type": "unreadable",
+            "embedding_model": "unknown",
+            "path": str(store.index_dir),
+        }
+    counts = Counter(document.object_type for document in documents)
+    return {
+        "available": True,
+        "index_id": manifest.id,
+        "document_count": manifest.document_count,
+        "document_type_counts": dict(sorted(counts.items())),
+        "index_type": manifest.index_type,
+        "embedding_model": manifest.embedding_model,
+        "path": manifest.path,
+        "created_at": manifest.created_at,
     }
 
 
@@ -1184,6 +1328,80 @@ def _claim_record(claim: Claim) -> dict[str, Any]:
     }
 
 
+def _review_queue_summary(state: ResearchRunState) -> dict[str, Any]:
+    queue = state.review_queue
+    items = queue.items if queue is not None else []
+    status_counts = Counter(item.status for item in items)
+    open_items = [
+        {
+            "id": item.id,
+            "project_id": item.project_id,
+            "run_id": item.run_id,
+            "object_type": item.object_type,
+            "object_id": item.object_id,
+            "priority": item.priority,
+            "reason": item.reason,
+            "requested_by_skill": item.requested_by_skill,
+            "assigned_to": item.assigned_to,
+            "created_at": item.created_at,
+        }
+        for item in items
+        if item.status == "open"
+    ]
+    return {
+        "summary": queue.summary if queue is not None else "No review queue has been generated.",
+        "status_counts": dict(sorted(status_counts.items())),
+        "open_count": len(open_items),
+        "open_items": open_items[:20],
+    }
+
+
+def _agent_execution_summary(state: ResearchRunState) -> dict[str, Any]:
+    validation_ids = {result.id for result in state.agent_validation_results}
+    imported_records = [record for record in state.agent_run_records if record.status == "imported"]
+    imported_without_validation = [
+        record.id for record in imported_records if not record.validation_result_id or record.validation_result_id not in validation_ids
+    ]
+    llm_backed_notes = [
+        note.paper_id
+        for note in state.paper_notes
+        if "llm" in note.created_by_skill.lower() or "llm" in note.source_basis.lower() or "llm" in note.provenance.created_by_skill.lower()
+    ]
+    return {
+        "deterministic_skills": state.completed_skills,
+        "llm_backed_note_count": len(llm_backed_notes),
+        "llm_backed_note_paper_ids": llm_backed_notes[:20],
+        "task_count": len(state.agent_task_specs),
+        "run_record_count": len(state.agent_run_records),
+        "imported_count": len(imported_records),
+        "validation_count": len(state.agent_validation_results),
+        "imported_without_validation": imported_without_validation,
+        "agent_records": [
+            {
+                "id": record.id,
+                "agent_name": record.agent_name,
+                "model": record.model,
+                "task_spec_id": record.task_spec_id,
+                "status": record.status,
+                "validation_result_id": record.validation_result_id,
+                "output_paths": record.output_paths,
+            }
+            for record in state.agent_run_records
+        ],
+        "validation_records": [
+            {
+                "id": result.id,
+                "task_spec_id": result.task_spec_id,
+                "status": result.status,
+                "unsupported_claim_count": result.unsupported_claim_count,
+                "invalid_locator_count": result.invalid_locator_count,
+                "invalid_prior_work_count": result.invalid_prior_work_count,
+            }
+            for result in state.agent_validation_results
+        ],
+    }
+
+
 def _rejected_ideas(state: ResearchRunState) -> list[dict[str, Any]]:
     records = [{"id": item.id, "idea": item.idea, "reason": item.reason} for item in state.rejected_ideas]
     existing = {item["id"] for item in records}
@@ -1317,6 +1535,8 @@ def _uncertainty_section(
         coverage_warnings.append(f"Data label: {coverage.get('fixture_or_fallback_label')}.")
     if coverage.get("limitations"):
         coverage_warnings.append(coverage["limitations"])
+    if coverage.get("policy_missing_requirements"):
+        coverage_warnings.append("Field-specific source policy is missing: " + "; ".join(coverage["policy_missing_requirements"][:6]))
     return {
         "missing_searches": missing_searches,
         "coverage_warnings": _dedupe(coverage_warnings),
@@ -1341,6 +1561,8 @@ def _next_actions_v2(
         actions.append("Download and parse full text for Tier 1 and Tier 2 papers.")
     if uncertainty.get("missing_searches"):
         actions.append(f"Resolve missing novelty/source searches, starting with: {uncertainty['missing_searches'][0]}.")
+    if coverage.get("policy_recommended_queries"):
+        actions.append(f"Run policy-recommended search: {coverage['policy_recommended_queries'][0]}.")
     if top_gap is not None and not direction.get("evidence_locators"):
         actions.append(f"Add EvidenceSpan locators for the evidence supporting `{top_gap.id}`.")
     if top_experiment is not None and direction.get("readiness") != "not_ready":
@@ -1374,9 +1596,14 @@ def _next_actions(state: ResearchRunState, top_gap: Gap | None, top_experiment: 
 
 
 def _evidence_label(source_basis: str) -> str:
+    lower = source_basis.lower()
+    if lower.startswith("llm") and "full text" in lower:
+        return "LLM-backed full-text evidence"
+    if lower.startswith("llm") and "abstract" in lower:
+        return "LLM-backed abstract-only evidence"
     if source_basis == "full text":
         return "full-text evidence"
-    if "abstract" in source_basis:
+    if "abstract" in lower:
         return "abstract-only evidence"
     return source_basis or "unknown evidence basis"
 

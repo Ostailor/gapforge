@@ -12,11 +12,23 @@ htmlcov/
 *.egg-info/
 eval_report.md
 prompt_packs/
+**/prompt_packs/
+**/llm_transcripts.json
+**/llm_transcripts.md
+**/llm_usage.json
+**/dashboard/
+**/paper_packages/
+**/safe_bundles/
+**/artifacts/papers/**/*.pdf
+artifacts_audit.json
+artifacts_audit.md
 
 runs/*
 !runs/.gitkeep
 data/*
 !data/.gitkeep
+projects/*
+!projects/.gitkeep
 
 .omx/state/
 .omx/logs/

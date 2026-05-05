@@ -1,0 +1,28 @@
+[
+  {
+    "id": "v3-phys-prior-1",
+    "title": "Synthetic Phase Transition Metadata for Detection Thresholds",
+    "authors": ["Curated Fixture Author"],
+    "abstract": "Synthetic fixture metadata: a statistical physics threshold model describes abrupt detection changes, but it is not validated for collusion monitoring.",
+    "year": 2021,
+    "venue": "Synthetic Physics Venue",
+    "source": "curated-v3-fixture",
+    "url": "https://example.test/gapforge/v3-phys-prior-1",
+    "citation_count": 30,
+    "keywords": ["phase transition", "threshold", "detection"],
+    "roles": ["theory", "adjacent_field"]
+  },
+  {
+    "id": "v3-phys-prior-2",
+    "title": "Synthetic Control-Theory Robustness Notes",
+    "authors": ["Curated Fixture Author"],
+    "abstract": "Synthetic fixture metadata: robustness margins are used for monitoring instability, but mapping to research ideation detectors is only speculative.",
+    "year": 2023,
+    "venue": "Synthetic Control Workshop",
+    "source": "curated-v3-fixture",
+    "url": "https://example.test/gapforge/v3-phys-prior-2",
+    "citation_count": 11,
+    "keywords": ["robustness", "control", "monitoring"],
+    "roles": ["adjacent_field"]
+  }
+]

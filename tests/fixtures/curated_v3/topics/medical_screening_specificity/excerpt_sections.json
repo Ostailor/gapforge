@@ -1,0 +1,24 @@
+[
+  {
+    "id": "v3-med-sec-1",
+    "paper_id": "v3-med-prior-1",
+    "title": "Synthetic Evaluation Excerpt",
+    "normalized_title": "evaluation",
+    "section_type": "experiments",
+    "text": "Synthetic excerpt: the model reports sensitivity and AUROC, but specificity at rare-condition prevalence is not stress-tested.",
+    "page_start": 3,
+    "page_end": 3,
+    "confidence": "medium"
+  },
+  {
+    "id": "v3-med-sec-2",
+    "paper_id": "v3-med-prior-2",
+    "title": "Synthetic Discussion Excerpt",
+    "normalized_title": "discussion",
+    "section_type": "discussion",
+    "text": "Synthetic excerpt: subgroup-specific false-positive burden remains an open deployment concern for screening workflows.",
+    "page_start": 8,
+    "page_end": 8,
+    "confidence": "medium"
+  }
+]

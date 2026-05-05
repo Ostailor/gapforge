@@ -1,0 +1,17 @@
+[
+  {
+    "id": "v3-lme-gap-1",
+    "title": "Adaptive multi-turn monitor evasion with false-positive accounting",
+    "type": "evaluation gap",
+    "description": "Curated excerpts suggest monitor evaluations underrepresent paraphrased multi-turn evasion and benign false-positive costs.",
+    "supporting_paper_ids": ["v3-lme-prior-1", "v3-lme-prior-2"],
+    "why_existing_work_does_not_solve_it": "Existing synthetic prior work uses toy prompts and omits adaptive user behavior.",
+    "why_it_matters": "Safety monitors can look effective on direct attacks while failing under adaptive evasion or overblocking benign users.",
+    "possible_research_questions": ["Which monitor designs preserve detection under paraphrased multi-turn attacks without high benign false positives?"],
+    "minimum_experiment_needed": "Construct an adaptive prompt suite with benign controls and compare monitor variants against attack success and false-positive cost.",
+    "risk_that_gap_is_fake": "A broader real AI safety search may already contain adaptive multi-turn benchmarks.",
+    "confidence": "medium",
+    "novelty_status": "unchecked",
+    "closest_prior_work": ["v3-lme-prior-1"]
+  }
+]

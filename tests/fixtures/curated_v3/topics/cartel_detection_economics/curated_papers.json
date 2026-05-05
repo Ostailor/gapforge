@@ -1,0 +1,28 @@
+[
+  {
+    "id": "v3-cartel-prior-1",
+    "title": "Synthetic Screening Metadata for Cartel Detection",
+    "authors": ["Curated Fixture Author"],
+    "abstract": "Synthetic fixture metadata: a price-screening method flags suspicious coordination but relies on strong stationarity assumptions.",
+    "year": 2022,
+    "venue": "Synthetic Economics Venue",
+    "source": "curated-v3-fixture",
+    "url": "https://example.test/gapforge/v3-cartel-prior-1",
+    "citation_count": 21,
+    "keywords": ["cartel", "screening", "stationarity"],
+    "roles": ["seminal", "method"]
+  },
+  {
+    "id": "v3-cartel-prior-2",
+    "title": "Synthetic Identification Notes for Collusion Screens",
+    "authors": ["Curated Fixture Author"],
+    "abstract": "Synthetic fixture metadata: identification is discussed through natural experiments, but transfer to high-frequency platform data is unresolved.",
+    "year": 2024,
+    "venue": "Synthetic Industrial Organization Workshop",
+    "source": "curated-v3-fixture",
+    "url": "https://example.test/gapforge/v3-cartel-prior-2",
+    "citation_count": 4,
+    "keywords": ["identification", "natural experiment", "platform data"],
+    "roles": ["frontier"]
+  }
+]

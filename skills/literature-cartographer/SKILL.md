@@ -1,77 +1,75 @@
 ---
 name: literature-cartographer
-description: Use when mapping a research topic into clusters, methods, datasets, assumptions, venues, saturated areas, and underexplored areas from papers.
+description: Use when mapping a research topic into clusters, methods, datasets, assumptions, venues, saturation signals, and underexplored areas from a paper set.
 ---
 
 # Literature Cartographer
 
 ## Purpose
-Build a structured map of a research field from a topic and paper set. This skill is not a summary skill: it identifies clusters, subproblems, assumptions, evaluation practices, saturation signals, contradictions, and early gap candidates.
+Build a structured field map. This is not summarization; it identifies clusters, subproblems, evaluation habits, shared assumptions, contradictions, saturated areas, and early gap candidates.
 
 ## When To Use
-- Use after initial paper search, or when new papers have been added and the field map needs refreshing.
-- Use before paper triage, gap mining, analogy generation, or experiment design.
+- After search or manual ingestion.
+- After analogy or citation expansion adds papers.
+- Before triage, gap mining, novelty checking, or final reporting.
 - CLI: `gapforge map "topic"` or `gapforge map --run-id RUN_ID`.
 
 ## Inputs
 - `ResearchTopic`
-- normalized `Paper` records in `papers.json`
-- optional existing `ResearchRunState`
-- source metadata, venue, abstract, keywords, year, and provenance
+- `papers.json`
+- optional `paper_sections.json`, `paper_notes.json`, retrieval results, source coverage, and project memory context
 
 ## Outputs
 - `FieldMap`
 - `field_map.json`
 - `field_map.md`
-- nontrivial claim ledger entries for map-level statements
+- claim ledger entries for nontrivial field statements
 
 ## Required Artifacts
-- `papers.json` must exist before meaningful mapping.
-- `field_map.json` and `field_map.md` must be written.
-- Any claim about field structure must be recorded in `claims.json` with provenance.
+- `papers.json`
+- `field_map.json`
+- `field_map.md`
+- `claims.json` for map-level claims
 
 ## Procedure
-1. Inspect title, abstract, venue, keywords, source, and year for each paper.
-2. Group papers by recurring technical vocabulary and evaluation vocabulary.
-3. Name clusters using domain-specific terms, not generic labels like "Cluster 1".
-4. For each cluster, record representative papers, newest papers, dominant methods, open questions, and why the cluster matters.
-5. Extract field-level concerns: major questions, common datasets, common metrics, assumptions, contradictions, and adjacent fields.
-6. Mark saturated areas only when many papers share methods, datasets, or assumptions.
-7. Mark underexplored areas conservatively when evidence is sparse or indirect.
-8. Add claim ledger entries for nontrivial field statements.
-9. Store concise public reasoning summaries only; do not store hidden chain-of-thought.
+1. Inspect titles, abstracts, venues, keywords, years, roles, and available notes/sections.
+2. Cluster papers by recurring problem, method, dataset, metric, venue, and assumption signals.
+3. Name clusters with domain terms, not generic labels.
+4. Record representative and newest papers for each cluster.
+5. Extract major questions, dominant methods, common datasets, common metrics, assumptions, contradictions, adjacent fields, and limitations.
+6. Mark saturated areas only when several papers share methods, datasets, or assumptions.
+7. Mark underexplored areas conservatively and link supporting paper IDs.
+8. Add claim ledger entries for nontrivial statements.
+9. Store concise public reasoning summaries only.
 
-## Quality Bar
-- Every cluster must link to paper IDs.
-- Heuristic map signals must be phrased as uncertain unless evidence is strong.
-- Do not hallucinate citations, venues, datasets, or results.
-- Preserve source IDs and URLs for auditability.
-- Separate "papers suggest" from "the field has proven".
+## Citation and Evidence Rules
+- Cite paper IDs for every cluster and field-level claim.
+- Do not invent venues, datasets, metrics, citations, or results.
+- If source coverage is fallback/offline, label findings as preliminary.
+- Prefer EvidenceSpan locators when field claims use full-text sections.
 
-## Failure Modes
-- Overclaiming saturation from a small paper set.
-- Treating source fallback metadata as authoritative literature coverage.
-- Creating clusters that are only keyword buckets with no useful research interpretation.
-- Inventing datasets, methods, or venues not present in metadata.
-- Hiding uncertainty instead of recording limitations.
+## Uncertainty Rules
+- Weak paper sets imply low or medium confidence.
+- Saturation and underexploration are hypotheses unless coverage is strong.
+- Missing source families should appear in limitations.
 
 ## Validation Checklist
-- [ ] `field_map.json` and `field_map.md` exist.
-- [ ] Each cluster has `paper_ids` and a useful description.
-- [ ] Saturated and underexplored areas include uncertainty-aware wording.
-- [ ] Nontrivial claims were added to the claim ledger.
-- [ ] No invented citations, datasets, results, or venues appear.
-- [ ] Provenance and reasoning summaries are concise and public.
+- [ ] Every cluster links paper IDs.
+- [ ] Saturated and underexplored areas state evidence basis.
+- [ ] Nontrivial claims are in the claim ledger.
+- [ ] Coverage limitations are visible.
+- [ ] No hidden chain-of-thought is stored.
+- [ ] No fabricated citations/results appear.
+
+## Failure Modes
+- Treating keyword buckets as meaningful clusters.
+- Overclaiming from abstracts or fallback metadata.
+- Hiding contradictions.
+- Forgetting that a field map is not a novelty assessment.
 
 ## Examples
-Run mapping on a topic:
-
 ```bash
 gapforge map "low false positive collusion detection"
-```
-
-Refresh mapping for an existing run:
-
-```bash
-gapforge map --run-id 20260505T002206Z-low-false-positive-collusion-detection
+gapforge map --run-id 20260505T000000Z-low-false-positive-collusion-detection
+gapforge run "topic" --v3 --build-index
 ```

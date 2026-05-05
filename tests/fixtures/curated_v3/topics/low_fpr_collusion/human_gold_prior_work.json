@@ -1,0 +1,7 @@
+[
+  {
+    "paper_id": "v3-lfc-prior-1",
+    "relationship": "partially_solves",
+    "reason": "Covers aggregate false-positive evaluation but not workload-aware deployment shift."
+  }
+]

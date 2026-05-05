@@ -78,6 +78,15 @@ def test_final_report_json_from_fixture_state(tmp_path: Path) -> None:
     assert payload["rejected_ideas"][0]["id"] == "rejected-dup-lfc-1"
 
 
+def test_final_report_uses_v3_label_for_v3_runs(tmp_path: Path) -> None:
+    state = _fixture_report_state(tmp_path)
+    state.config["v3"] = True
+
+    report = build_final_report(state)
+
+    assert report["report_version"] == "v0.3"
+
+
 def test_build_final_report_distinguishes_claims_from_hypotheses(tmp_path: Path) -> None:
     state = _fixture_report_state(tmp_path)
 

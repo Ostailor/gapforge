@@ -6,10 +6,13 @@ from gapforge.config import GapForgeConfig
 from gapforge.skills import (
     CrossDomainAnalogy,
     DeepReading,
+    DeepReadingLLM,
     ExperimentDesigner,
     GapMining,
+    GapMiningLLM,
     LiteratureCartographer,
     NoveltyGate,
+    NoveltyGateLLM,
     PaperTriage,
     ReviewerSimulation,
 )
@@ -37,9 +40,12 @@ class SkillRegistry:
             "literature-cartographer": LiteratureCartographer(sources),
             "paper-triage": PaperTriage(),
             "deep-reading": DeepReading(),
+            "deep-reading-llm": DeepReadingLLM(),
             "gap-mining": GapMining(),
+            "gap-mining-llm": GapMiningLLM(),
             "cross-domain-analogy": CrossDomainAnalogy(sources),
             "novelty-gate": NoveltyGate(sources),
+            "novelty-gate-llm": NoveltyGateLLM(),
             "experiment-designer": ExperimentDesigner(),
             "reviewer-simulation": ReviewerSimulation(),
         }

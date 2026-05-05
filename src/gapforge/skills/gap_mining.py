@@ -18,6 +18,7 @@ from gapforge.models import (
     Provenance,
     ResearchRunState,
 )
+from gapforge.retrieval.hybrid import retrieval_candidates_for_state
 from gapforge.review.audit import locked_object_ids
 from gapforge.skills.base import Skill
 from gapforge.state import utc_now_iso
@@ -447,6 +448,7 @@ def _build_gap_evidence_matrix(state: ResearchRunState, gap: Gap) -> GapEvidence
     rows.extend(_span_rows_for_gap(gap, gap_terms, state.evidence_spans, section_by_id))
     rows.extend(_claim_rows_for_gap(gap, state.claims))
     rows.extend(_counter_rows_for_gap(gap, state.paper_notes, state.evidence_spans, section_by_id))
+    rows.extend(_retrieval_counter_rows_for_gap(state, gap))
     rows = _dedupe_rows(rows)
     support_papers = _dedupe([row.paper_id for row in rows if row.supports_or_counters == "supports"])
     counter_papers = _dedupe([row.paper_id for row in rows if row.supports_or_counters == "counters"])
@@ -479,6 +481,55 @@ def _build_gap_evidence_matrix(state: ResearchRunState, gap: Gap) -> GapEvidence
             timestamp=utc_now_iso(),
             reasoning_summary="Built evidence matrix from paper notes, evidence spans, claims, and counterevidence heuristics.",
         ),
+    )
+
+
+def _retrieval_counter_rows_for_gap(state: ResearchRunState, gap: Gap) -> list[GapEvidenceRow]:
+    query = f"prior work already solves addresses {gap.title or gap.description} {gap.minimum_experiment_needed}"
+    try:
+        results, _paper_ids = retrieval_candidates_for_state(state, query, top_k=8)
+    except (FileNotFoundError, ValueError, OSError, RuntimeError):
+        return []
+    support_ids = set(gap.supporting_paper_ids or gap.linked_paper_ids)
+    rows: list[GapEvidenceRow] = []
+    for result in results:
+        if not result.paper_id or result.paper_id in support_ids:
+            continue
+        if result.object_type not in {"evidence_span", "paper_section", "paper_note", "claim", "novelty_dossier"}:
+            continue
+        if not _retrieval_result_is_counterevidence(result):
+            continue
+        rows.append(
+            GapEvidenceRow(
+                paper_id=result.paper_id,
+                claim_or_note_id=f"retrieval:{result.object_id}",
+                evidence_span_id=result.object_id if result.object_type == "evidence_span" else "",
+                evidence_type="counterevidence",
+                text=result.text_snippet,
+                supports_or_counters="counters",
+                section_type=str(result.metadata.get("section_type", "")),
+                locator=result.locator or result.document_id,
+            )
+        )
+    return rows[:3]
+
+
+def _retrieval_result_is_counterevidence(result: object) -> bool:
+    metadata = getattr(result, "metadata", {})
+    if isinstance(metadata, dict) and metadata.get("verdict") in {"reject", "revise"}:
+        return True
+    text = str(getattr(result, "text_snippet", "")).lower()
+    return any(
+        marker in text
+        for marker in [
+            "already solves",
+            "already addresses",
+            "covers the gap",
+            "counterevidence",
+            "not a gap",
+            "duplicate",
+            "closest prior work",
+        ]
     )
 
 

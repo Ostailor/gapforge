@@ -1,0 +1,24 @@
+[
+  {
+    "id": "v3-lme-span-1",
+    "paper_id": "v3-lme-prior-1",
+    "section_id": "v3-lme-sec-1",
+    "quote": "paraphrased multi-turn evasion is represented by only twelve toy prompts",
+    "page_start": 5,
+    "page_end": 5,
+    "locator": "v3-lme-prior-1:Results:p5",
+    "evidence_type": "limitation",
+    "confidence": "medium"
+  },
+  {
+    "id": "v3-lme-span-2",
+    "paper_id": "v3-lme-prior-2",
+    "section_id": "v3-lme-sec-2",
+    "quote": "does not quantify false-positive costs for benign ambiguous requests",
+    "page_start": 7,
+    "page_end": 7,
+    "locator": "v3-lme-prior-2:Limitations:p7",
+    "evidence_type": "limitation",
+    "confidence": "medium"
+  }
+]

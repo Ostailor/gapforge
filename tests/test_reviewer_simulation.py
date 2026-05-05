@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 
 from gapforge.config import GapForgeConfig
-from gapforge.models import ExperimentPlan, NoveltyAssessment, PaperNote
+from gapforge.models import BaselineCandidate, ExperimentPlan, ExperimentProtocol, NoveltyAssessment, PaperNote, ReproducibilityChecklist
 from gapforge.skills.reviewer_simulation import ReviewerSimulation
 from gapforge.state import ResearchStateManager
 
@@ -139,4 +139,30 @@ def _review_state(tmp_path: Path, manager: ResearchStateManager | None = None):
         )
     ]
     state.paper_notes = [PaperNote(paper_id="paper-1", source_basis="full text", metrics=["false-positive-rate"])]
+    state.experiment_protocols = [
+        ExperimentProtocol(
+            id="protocol-1",
+            direction_id="gap-1",
+            linked_experiment_plan_id="experiment-1",
+            objective="Test false-positive calibrated collusion detection.",
+            hypothesis="False-positive calibrated review improves collusion detection at fixed alert budgets.",
+            datasets=["synthetic-collusion-graphs", "public interaction logs"],
+            baselines=[
+                BaselineCandidate(
+                    paper_id="paper-1",
+                    baseline_name="closest prior work baseline",
+                    why_required="Closest prior work must be compared.",
+                )
+            ],
+            metrics=["false-positive-rate", "recall-at-fixed-fpr", "precision-at-alert-budget"],
+            statistical_tests=["bootstrap confidence intervals"],
+            expected_artifacts=["metrics_summary.csv"],
+            evaluation_script_outline=["run baselines", "compute metrics"],
+            reproducibility_checklist=ReproducibilityChecklist(
+                metric_definitions=["false-positive-rate"],
+                negative_controls=["no-collusion control"],
+                error_analysis_plan="Inspect false positives and false negatives.",
+            ),
+        )
+    ]
     return state

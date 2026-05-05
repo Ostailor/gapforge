@@ -1,0 +1,23 @@
+[
+  {
+    "direction_id": "v3-lfc-gap-1",
+    "coverage_summary": "Synthetic curated matrix: one benchmark-like paper and one deployment-shift note are enough for behavior tests, not real coverage.",
+    "missing_categories": ["survey/background", "independent deployment study"],
+    "must_read_paper_ids": ["v3-lfc-prior-1"],
+    "baseline_paper_ids": ["v3-lfc-prior-1"],
+    "entries": [
+      {
+        "direction_id": "v3-lfc-gap-1",
+        "paper_id": "v3-lfc-prior-1",
+        "relationship": "partially_solves",
+        "relevance_score": 0.84,
+        "evidence_span_ids": ["v3-lfc-span-1"],
+        "what_it_contributes": "A benchmark-like low-FPR detector evaluation.",
+        "what_it_does_not_solve": "It does not audit fixed-budget operator workload.",
+        "must_cite": true,
+        "baseline_candidate": true,
+        "reviewer_risk_if_omitted": "Reviewers would ask why the closest benchmark is not used as a baseline."
+      }
+    ]
+  }
+]

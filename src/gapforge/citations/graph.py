@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from gapforge.citations.resolvers import MetadataReferenceResolver, reference_label
-from gapforge.models import CitationEdge, CitationGraph, Paper, Provenance, ResearchRunState
+from gapforge.models import CitationEdge, CitationGraph, Paper, Provenance, ReferenceRecord, ResearchRunState
 
 
 class CitationGraphBuilder:
@@ -45,6 +45,13 @@ class CitationGraphBuilder:
                 _add_identifier_edges(edges, paper, state.papers, attr="doi", edge_type="same_doi")
             if paper.arxiv_id:
                 _add_identifier_edges(edges, paper, state.papers, attr="arxiv_id", edge_type="same_arxiv")
+        for record in state.references:
+            if record.resolved_paper_id:
+                edges.append(
+                    _edge(record.paper_id, record.resolved_paper_id, "cites", "parsed references", 0.7, [record.paper_id, record.id])
+                )
+            else:
+                unresolved.append(f"{record.paper_id} cites unresolved parsed reference: {_reference_record_label(record)}")
         graph = CitationGraph(
             paper_ids=[paper.id for paper in state.papers],
             edges=_dedupe_edges(edges),
@@ -65,6 +72,10 @@ def _metadata_list(paper: Paper, key: str) -> list[dict[str, Any]]:
     if not isinstance(value, list):
         return []
     return [item for item in value if isinstance(item, dict)]
+
+
+def _reference_record_label(record: ReferenceRecord) -> str:
+    return record.parsed_title or record.doi or record.arxiv_id or record.raw_reference[:120]
 
 
 def _edge(

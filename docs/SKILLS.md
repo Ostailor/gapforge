@@ -3,72 +3,73 @@
 GapForge skills exist in two forms:
 
 - Python implementations under `src/gapforge/skills/`
-- Codex-readable skill packages under `skills/*/SKILL.md`
+- Codex-readable packages under `skills/*/SKILL.md`
 
-The Python implementations transform `ResearchRunState`. The local skill packages tell Codex how to perform the same research ability safely and consistently.
+The Python skills transform `ResearchRunState`. The Codex skill packages tell a future agent how to perform the same work safely, with provenance, evidence, and uncertainty discipline.
 
-## Built-In Skills
+## Skill Set by Version
 
-| Skill | Python module | Codex package | CLI |
-| --- | --- | --- | --- |
-| Literature Cartographer | `gapforge.skills.literature_cartographer` | `skills/literature-cartographer/` | `gapforge map` |
-| Paper Triage | `gapforge.skills.paper_triage` | `skills/paper-triage/` | `gapforge triage` |
-| Deep Reading | `gapforge.skills.deep_reading` | `skills/deep-reading/` | `gapforge read` |
-| Gap Mining | `gapforge.skills.gap_mining` | `skills/gap-mining/` | `gapforge mine-gaps` |
-| Cross-Domain Analogy | `gapforge.skills.cross_domain_analogy` | `skills/cross-domain-analogy/` | `gapforge analogies` |
-| Novelty Gate | `gapforge.skills.novelty_gate` | `skills/novelty-gate/` | `gapforge novelty-check` |
-| Experiment Designer | `gapforge.skills.experiment_designer` | `skills/experiment-designer/` | `gapforge design-experiments` |
-| Reviewer Simulation | `gapforge.skills.reviewer_simulation` | `skills/reviewer-simulation/` | `gapforge review` |
+| Skill | v0.1 | v0.2 | v0.3 | CLI |
+| --- | --- | --- | --- | --- |
+| Literature Cartographer | field map | refreshed maps | retrieval/project context aware | `gapforge map` |
+| Paper Triage | tiering | role-aware ranking | source/full-text/retrieval-aware prioritization | `gapforge triage`, `gapforge rank-papers` |
+| Deep Reading | abstract notes | full-text sections and evidence spans | optional LLM reading with locator validation | `gapforge read`, `gapforge read-llm` |
+| Gap Mining | heuristic gaps | evidence matrices | retrieval-backed counterevidence and optional LLM synthesis | `gapforge mine-gaps`, `gapforge mine-gaps-llm` |
+| Cross-Domain Analogy | query suggestions | transfer candidates | evidence-backed adjacent-field promotion | `gapforge analogies` |
+| Novelty Gate | lexical novelty | novelty dossiers | retrieval/citation/project-memory and optional LLM comparison | `gapforge novelty-check`, `gapforge novelty-check-llm` |
+| Experiment Designer | experiment plans | novelty-gated plans | executable protocols and baseline candidates | `gapforge design-experiments`, `gapforge experiment-protocol` |
+| Reviewer Simulation | objections | readiness summary | review panel and rebuttal planning | `gapforge review`, `gapforge review-panel` |
+| Project Memory | - | - | cross-run corpus, decisions, directions | `gapforge init-project`, `gapforge sync-project-memory` |
+| Hybrid Retrieval | - | - | local retrieval index | `gapforge build-index`, `gapforge search-index` |
+| Related-Work Matrix | - | - | prior-work taxonomy per direction | `gapforge related-work-matrix` |
+| Direction Maturation | - | - | seed to manuscript-ready gates | `gapforge create-direction`, `gapforge mature-direction` |
+| Manuscript Export | - | - | paper package and BibTeX | `gapforge export-paper-package` |
 
 ## Shared Rules
 
-- Do not hallucinate citations, results, venues, datasets, or metrics.
-- Separate abstract-only notes from full-text notes.
-- Use the claim ledger for nontrivial claims.
-- Store concise public reasoning summaries, not hidden chain-of-thought.
+- Do not invent citations, quotes, datasets, metrics, results, or venues.
+- Separate metadata/abstract-only notes from full-text notes.
+- Use EvidenceSpan locators whenever full-text evidence exists.
+- Add claim ledger entries for nontrivial claims.
+- Store concise public reasoning summaries only; never store hidden chain-of-thought.
 - Mark uncertainty explicitly.
 - Find closest prior work before claiming novelty.
+- Preserve rejected ideas and human decisions.
 - Prefer decisive experiments over vague ideas.
-- Attack ideas before recommending them.
+- Attack an idea before recommending it.
 
-## v0.2 Skill Behavior
+## Optional LLM Skills
 
-v0.2 keeps deterministic skills as the default but gives them richer state:
+LLM-backed skills are optional and disabled by default.
 
-- Deep Reading automatically uses `PaperSection` objects when available and falls back to abstract-only notes when not.
-- Gap Mining uses `PaperNote`, `EvidenceSpan`, claim ledger, field map, and coverage signals to build `GapEvidenceMatrix` artifacts.
-- Cross-Domain Analogy separates query-only analogies from evidence-backed transfer candidates.
-- Novelty Gate can run in deep mode and produce closest-prior-work dossiers.
-- Experiment Designer skips rejected or human-rejected gaps by default.
-- Reviewer Simulation treats unsupported novelty and missing baselines as blocking issues.
+Modes:
 
-Common v0.2 commands:
+- `GAPFORGE_LLM_MODE=off`: deterministic path only
+- `prompt-pack`: write prompts, make no model calls
+- `fake`: deterministic fake client for tests
+- `provider`: opt-in real provider adapter
 
-```bash
-gapforge run "topic" --v2 --max-papers 20
-gapforge read --run-id <run-id> --fulltext-only
-gapforge mine-gaps --run-id <run-id> --min-confidence medium
-gapforge analogies --run-id <run-id> --search --promote-evidence-only
-gapforge novelty-check --run-id <run-id> --deep
-gapforge novelty-dossier --run-id <run-id> --gap-id <gap-id>
-gapforge report --run-id <run-id> --strict
-```
+LLM outputs must be schema-valid before state changes. Unsupported model claims are rejected, downgraded, or marked uncertain. Model-generated citations are not trusted unless resolved to known paper IDs or recorded source results.
 
-The skill contract remains the same: do not convert weak coverage into confident claims. If no full-text evidence is available, outputs should say so.
-
-## Skill Package Requirements
+## Codex Skill Package Requirements
 
 Every `skills/*/SKILL.md` must include:
 
-- YAML frontmatter with `name` and `description`
-- skill purpose
-- when to use it
-- inputs and outputs
+- purpose
+- when to use
+- inputs
+- outputs
 - required artifacts
 - procedure
-- quality bar
-- failure modes
 - validation checklist
-- examples with relevant GapForge CLI commands
+- failure modes
+- examples
+- citation/evidence rules
+- uncertainty rules
+- no hidden chain-of-thought storage
 
-The orchestrator may run skills more than once during a recursive research loop. Python skills should therefore be idempotent or replace/update their own artifacts by stable IDs.
+Skill frontmatter descriptions must say when to load the skill, not summarize the workflow.
+
+## Idempotence
+
+The orchestrator may run skills multiple times after new papers, citation expansion, or project-memory sync. Skills should update stable IDs or replace their own artifacts, not blindly duplicate records.

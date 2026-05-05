@@ -1,0 +1,17 @@
+[
+  {
+    "id": "v3-phys-gap-1",
+    "title": "Validated state variables for phase-transition analogies in monitor failure",
+    "type": "cross-domain gap",
+    "description": "Curated excerpts support a cautious analogy: phase-transition tools may describe abrupt monitor failure only if a validated state variable exists.",
+    "supporting_paper_ids": ["v3-phys-prior-1", "v3-phys-prior-2"],
+    "why_existing_work_does_not_solve_it": "The adjacent-field theory provides a threshold mechanism, but the mapping to agent-monitor failure is not validated.",
+    "why_it_matters": "Shallow analogies can mislead experiment design unless the transferred variable is measurable.",
+    "possible_research_questions": ["Can a measurable monitor-load variable predict abrupt false-negative transitions?"],
+    "minimum_experiment_needed": "Define candidate state variables and test whether monitor failure changes abruptly under controlled noise or evasion pressure.",
+    "risk_that_gap_is_fake": "The analogy may be fake if no transferable state variable exists.",
+    "confidence": "low",
+    "novelty_status": "unchecked",
+    "closest_prior_work": ["v3-phys-prior-1"]
+  }
+]

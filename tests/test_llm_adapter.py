@@ -7,8 +7,12 @@ import sys
 from pathlib import Path
 
 from gapforge.config import GapForgeConfig
+from gapforge.llm.config import LLMRuntimeConfig
 from gapforge.llm.fake import FakeLLMClient
+from gapforge.llm.json_guard import JSONGuard, JSONGuardError, extract_json
 from gapforge.llm.prompt_pack import PromptPackBuilder, write_prompt_pack
+from gapforge.llm.providers import ProviderLLMClient, ProviderUnavailableError, llm_status
+from gapforge.llm.transcripts import LLMTranscriptLogger
 from gapforge.models import EvidenceSpan, Gap, NoveltyAssessment, Paper, PaperNote, PaperSection
 from gapforge.state import ResearchStateManager
 
@@ -33,6 +37,27 @@ def test_config_llm_mode_defaults_off_and_reads_prompt_pack_env(tmp_path: Path, 
 
     monkeypatch.setenv("GAPFORGE_LLM_MODE", "prompt-pack")
     assert GapForgeConfig.from_cwd(tmp_path).llm_mode == "prompt-pack"
+
+    monkeypatch.setenv("GAPFORGE_LLM_MODE", "provider")
+    assert GapForgeConfig.from_cwd(tmp_path).llm_mode == "provider"
+
+
+def test_llm_runtime_config_reads_provider_env(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    monkeypatch.setenv("GAPFORGE_LLM_MODE", "provider")
+    monkeypatch.setenv("GAPFORGE_LLM_PROVIDER", "openai")
+    monkeypatch.setenv("GAPFORGE_LLM_MODEL", "test-model")
+    monkeypatch.setenv("GAPFORGE_LLM_MAX_TOKENS", "123")
+    monkeypatch.setenv("GAPFORGE_LLM_BUDGET_USD", "0.01")
+    monkeypatch.setenv("GAPFORGE_LLM_TIMEOUT_SECONDS", "7.5")
+
+    config = LLMRuntimeConfig.from_env()
+
+    assert config.mode == "provider"
+    assert config.provider == "openai"
+    assert config.model == "test-model"
+    assert config.max_tokens == 123
+    assert config.budget_usd == 0.01
+    assert config.timeout_seconds == 7.5
 
 
 def test_prompt_pack_generation_for_deep_reading(tmp_path: Path) -> None:
@@ -120,6 +145,145 @@ def test_prompt_pack_mode_generates_prompts_without_replacing_deterministic_read
     notes = json.loads((run_dir / "paper_notes.json").read_text(encoding="utf-8"))
     assert notes
     assert (run_dir / "prompt_packs" / "deep-reading.md").exists()
+
+
+def test_fake_mode_writes_usage_and_transcripts(tmp_path: Path) -> None:
+    manager = ResearchStateManager(GapForgeConfig.from_cwd(tmp_path))
+    state = _prompt_state(tmp_path, manager=manager)
+    client = FakeLLMClient(run_dir=state.run_dir, skill_name="novelty-gate", prompt_pack_id="pack-1")
+
+    payload = client.complete_json("Target ID: gap-1", schema_name="novelty-gate")
+
+    assert payload["target_id"] == "gap-1"
+    usage = json.loads((Path(state.run_dir) / "llm_usage.json").read_text(encoding="utf-8"))
+    assert usage["calls"] == 1
+    transcripts = json.loads((Path(state.run_dir) / "llm_transcripts.json").read_text(encoding="utf-8"))
+    assert transcripts[0]["skill_name"] == "novelty-gate"
+    assert transcripts[0]["prompt_pack_id"] == "pack-1"
+    assert "Deterministic fake" in transcripts[0]["reasoning_summary"]
+
+
+def test_provider_mode_without_package_or_key_fails_gracefully(tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    monkeypatch.setenv("GAPFORGE_LLM_MODE", "provider")
+    monkeypatch.setenv("GAPFORGE_LLM_PROVIDER", "openai")
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    config = LLMRuntimeConfig.from_env()
+    client = ProviderLLMClient(config=config, run_dir=tmp_path, skill_name="llm-test")
+
+    try:
+        client.complete("hello")
+    except ProviderUnavailableError as exc:
+        assert "OPENAI_API_KEY" in str(exc)
+    else:  # pragma: no cover
+        raise AssertionError("Provider mode should fail without OPENAI_API_KEY.")
+
+    transcripts = json.loads((tmp_path / "llm_transcripts.json").read_text(encoding="utf-8"))
+    assert transcripts[0]["response_status"] == "failed"
+    assert llm_status(config)["provider_ready"] is False
+
+
+def test_json_guard_extracts_and_rejects_invalid_schema() -> None:
+    valid = extract_json(
+        "prefix ```json\n"
+        '{"target_id":"gap-1","closest_prior_work":[],"verdict":"unknown",'
+        '"novelty_strength":"unknown","missing_searches":[],"reasoning_summary":"No claim."}\n'
+        "```"
+    )
+
+    assert valid["target_id"] == "gap-1"
+    guard = JSONGuard()
+    try:
+        guard.parse_and_validate('{"target_id":"gap-1","verdict":"unknown"}', schema_name="novelty-gate")
+    except JSONGuardError as exc:
+        assert "missing required fields" in str(exc)
+    else:  # pragma: no cover
+        raise AssertionError("Invalid schema should be rejected.")
+
+    try:
+        guard.parse_and_validate(
+            '{"target_id":"gap-1","closest_prior_work":[],"verdict":"unknown","novelty_strength":"unknown","missing_searches":[],"reasoning_summary":"x","extra":true}',
+            schema_name="novelty-gate",
+        )
+    except JSONGuardError as exc:
+        assert "unknown fields" in str(exc)
+    else:  # pragma: no cover
+        raise AssertionError("Unknown fields should be rejected.")
+
+
+def test_budget_warning_triggers(tmp_path: Path) -> None:
+    client = FakeLLMClient(
+        run_dir=tmp_path,
+        config=LLMRuntimeConfig(mode="fake", budget_usd=0.0),
+    )
+
+    client.complete("large prompt " * 100)
+
+    usage = json.loads((tmp_path / "llm_usage.json").read_text(encoding="utf-8"))
+    assert usage["warnings"]
+    assert "budget exceeded" in usage["warnings"][0].lower()
+
+
+def test_transcripts_redact_secrets(tmp_path: Path) -> None:
+    client = FakeLLMClient(run_dir=tmp_path)
+
+    client.complete("Use api_key: sk-THISSECRET123456789 in prompt")
+
+    transcript_text = (tmp_path / "llm_transcripts.json").read_text(encoding="utf-8")
+    markdown = LLMTranscriptLogger(tmp_path).render_markdown()
+    assert "sk-THISSECRET" not in transcript_text
+    assert "[REDACTED]" in transcript_text
+    assert "[REDACTED]" in markdown
+
+
+def test_llm_cli_status_test_usage_and_transcripts(tmp_path: Path) -> None:
+    manager = ResearchStateManager(GapForgeConfig.from_cwd(tmp_path))
+    state = _prompt_state(tmp_path, manager=manager)
+    manager.save_run(state)
+    env = {**os.environ, "GAPFORGE_DISABLE_NETWORK": "1", "PYTHONPATH": str(Path(__file__).resolve().parents[1] / "src")}
+
+    status = subprocess.run(
+        [sys.executable, "-m", "gapforge.cli", "llm-status"],
+        cwd=tmp_path,
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert status.returncode == 0, status.stderr
+    assert json.loads(status.stdout)["mode"] in {"off", "prompt-pack", "fake", "provider"}
+
+    test = subprocess.run(
+        [sys.executable, "-m", "gapforge.cli", "llm-test", "--fake", "--run-id", state.run_id],
+        cwd=tmp_path,
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert test.returncode == 0, test.stderr
+    assert json.loads(test.stdout)["verdict"] == "unknown"
+
+    usage = subprocess.run(
+        [sys.executable, "-m", "gapforge.cli", "llm-usage", "--run-id", state.run_id],
+        cwd=tmp_path,
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert usage.returncode == 0, usage.stderr
+    assert json.loads(usage.stdout)["calls"] == 1
+
+    transcripts = subprocess.run(
+        [sys.executable, "-m", "gapforge.cli", "llm-transcripts", "--run-id", state.run_id],
+        cwd=tmp_path,
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert transcripts.returncode == 0, transcripts.stderr
+    assert "LLM Transcripts" in transcripts.stdout
 
 
 def _prompt_state(tmp_path: Path, manager: ResearchStateManager | None = None):

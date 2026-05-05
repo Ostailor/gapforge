@@ -1,0 +1,24 @@
+[
+  {
+    "id": "v3-cartel-span-1",
+    "paper_id": "v3-cartel-prior-1",
+    "section_id": "v3-cartel-sec-1",
+    "quote": "assumes stable demand and flags synchronized price changes",
+    "page_start": 4,
+    "page_end": 4,
+    "locator": "v3-cartel-prior-1:Method:p4",
+    "evidence_type": "method",
+    "confidence": "medium"
+  },
+  {
+    "id": "v3-cartel-span-2",
+    "paper_id": "v3-cartel-prior-2",
+    "section_id": "v3-cartel-sec-2",
+    "quote": "platform-wide shocks can mimic collusive price synchronization",
+    "page_start": 9,
+    "page_end": 9,
+    "locator": "v3-cartel-prior-2:Limitations:p9",
+    "evidence_type": "counterevidence",
+    "confidence": "medium"
+  }
+]

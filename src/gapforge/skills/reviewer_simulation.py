@@ -5,6 +5,7 @@ from __future__ import annotations
 from gapforge.models import (
     Claim,
     ExperimentPlan,
+    ExperimentProtocol,
     NoveltyAssessment,
     PaperNote,
     Provenance,
@@ -25,6 +26,7 @@ class ReviewerSimulation(Skill):
     def review(self, state: ResearchRunState, *, experiment_id: str | None = None) -> ResearchRunState:
         experiments = [item for item in state.experiments if experiment_id is None or item.id == experiment_id]
         novelty_by_target = {item.target_gap_or_hypothesis_id: item for item in state.novelty_assessments}
+        protocols_by_experiment = {item.linked_experiment_plan_id: item for item in state.experiment_protocols}
         objections: list[ReviewerObjection] = []
         summaries: list[ReviewerSimulationSummary] = []
 
@@ -34,6 +36,7 @@ class ReviewerSimulation(Skill):
             experiment_objections.extend(_reviewer_1_technical(experiment, state.claims))
             experiment_objections.extend(_reviewer_2_novelty(experiment, novelty, state.claims))
             experiment_objections.extend(_reviewer_3_empirical(experiment, state.paper_notes))
+            experiment_objections.extend(_reviewer_protocol_completeness(experiment, protocols_by_experiment.get(experiment.id)))
             experiment_objections.extend(_area_chair_positioning(experiment, novelty))
             objections.extend(experiment_objections)
             summaries.append(_summary_for(experiment, experiment_objections))
@@ -290,6 +293,82 @@ def _reviewer_3_empirical(experiment: ExperimentPlan, notes: list[PaperNote]) ->
                 fix="Deep-read the full text for Tier 1 prior work before finalizing baselines.",
                 blocks=False,
                 confidence="medium",
+            )
+        )
+    return objections
+
+
+def _reviewer_protocol_completeness(experiment: ExperimentPlan, protocol: ExperimentProtocol | None) -> list[ReviewerObjection]:
+    objections: list[ReviewerObjection] = []
+    if protocol is None:
+        objections.append(
+            _objection(
+                experiment,
+                reviewer_role="Reviewer 3: empirical rigor and baselines",
+                severity="fatal" if experiment.paper_ready else "major",
+                category="reproducibility",
+                objection="The experiment has no executable protocol.",
+                why=(
+                    "The plan is not concrete enough to audit implementation modules, artifacts, statistical analysis, and reproducibility."
+                ),
+                evidence=["No ExperimentProtocol linked to this experiment."],
+                fix=(
+                    "Run `gapforge experiment-protocol` and revise the protocol until baselines, metrics, artifacts, "
+                    "and checks are explicit."
+                ),
+                blocks=True,
+                confidence="high",
+            )
+        )
+        return objections
+    if not any(candidate.paper_id or candidate.implementation_available for candidate in protocol.baselines):
+        objections.append(
+            _objection(
+                experiment,
+                reviewer_role="Reviewer 3: empirical rigor and baselines",
+                severity="major",
+                category="baseline",
+                objection="The protocol lacks a strong related-work baseline candidate.",
+                why="A baseline named only generically is weaker than a paper-linked or implementation-backed comparison.",
+                evidence=[candidate.baseline_name for candidate in protocol.baselines] or ["No protocol baselines."],
+                fix="Use the related-work matrix to add closest-prior-work or benchmark-provider baselines.",
+                blocks=True,
+            )
+        )
+    if not protocol.expected_artifacts or not protocol.evaluation_script_outline:
+        objections.append(
+            _objection(
+                experiment,
+                reviewer_role="Reviewer 1: technical correctness",
+                severity="major",
+                category="reproducibility",
+                objection="The protocol does not specify expected artifacts or evaluation script steps.",
+                why="Without concrete outputs, replication and debugging cannot be audited.",
+                evidence=[
+                    f"expected_artifacts={len(protocol.expected_artifacts)}",
+                    f"evaluation_script_outline={len(protocol.evaluation_script_outline)}",
+                ],
+                fix="List exact output files and the evaluation script sequence before running experiments.",
+                blocks=True,
+            )
+        )
+    checklist = protocol.reproducibility_checklist
+    if not checklist.metric_definitions or not checklist.negative_controls or not checklist.error_analysis_plan:
+        objections.append(
+            _objection(
+                experiment,
+                reviewer_role="Reviewer 3: empirical rigor and baselines",
+                severity="major",
+                category="reproducibility",
+                objection="The reproducibility checklist is incomplete.",
+                why="A serious empirical paper needs metric definitions, negative controls, and error analysis before implementation.",
+                evidence=[
+                    f"metric_definitions={len(checklist.metric_definitions)}",
+                    f"negative_controls={len(checklist.negative_controls)}",
+                    f"error_analysis_plan={'present' if checklist.error_analysis_plan else 'missing'}",
+                ],
+                fix="Complete the reproducibility checklist and rerun reviewer simulation.",
+                blocks=True,
             )
         )
     return objections

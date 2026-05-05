@@ -1,78 +1,76 @@
 ---
 name: cross-domain-analogy
-description: Use when searching adjacent fields for skeptical analogies, transferable concepts, and new source-search queries for candidate research gaps.
+description: Use when searching adjacent fields for skeptical transfer candidates, analogy queries, or mechanisms relevant to candidate gaps.
 ---
 
 # Cross-Domain Analogy
 
 ## Purpose
-Generate skeptical cross-domain analogies that may suggest useful concepts, search queries, or hypothesis seeds. Analogies are not evidence; they are prompts for further search and testing.
+Find adjacent-field concepts that might transfer into a target gap, while explicitly testing what breaks. Analogies are hypotheses for search, not conclusions.
 
 ## When To Use
-- Use after gap mining.
-- Use when a gap may benefit from adjacent fields such as medicine, cybersecurity, economics, control theory, statistics, information theory, or epidemiology.
-- CLI: `gapforge analogies --run-id RUN_ID`.
+- After gap mining.
+- When a gap may benefit from medicine, cybersecurity, economics, game theory, control theory, statistics, information theory, physics, biology, or software provenance.
+- CLI: `gapforge analogies --run-id RUN_ID --search --promote-evidence-only`.
 
 ## Inputs
-- `ResearchTopic`
-- `Gap` records
-- `FieldMap`
-- `PaperNote` records
+- topic
+- gaps
+- field map
+- paper notes/sections/evidence
+- source coverage
+- optional adjacent-field papers and retrieval index
 
 ## Outputs
-- `CrossDomainAnalogy` records
+- `CrossDomainAnalogy`
+- `CrossDomainTransferCandidate`
 - `cross_domain_analogies.json`
 - `cross_domain_analogies.md`
-- optional hypothesis seeds
-- adjacent-field search queries for source connectors
+- `cross_domain_transfers.json`
+- `cross_domain_transfers.md`
+- adjacent-field search queries
 
 ## Required Artifacts
 - `gaps.json`
-- `field_map.json`
 - `cross_domain_analogies.json`
 - `cross_domain_analogies.md`
+- `cross_domain_transfers.json` when candidates are promoted
 
 ## Procedure
-1. Read gap titles, descriptions, risks, and minimum experiments.
-2. Match the core constraint to adjacent fields, not surface vocabulary alone.
-3. For each analogy, record:
-   - source field
-   - source concept
-   - target gap ID
-   - why it maps
-   - what breaks in the mapping
-   - technical transfer candidate
-   - papers or sources to search
-   - possible experiment
-   - risk of fake analogy
-4. Generate search queries for adjacent-field papers.
-5. Do not claim the analogy is valid until evidence is found.
-6. Store concise public reasoning summaries only.
+1. Map the target gap constraint to adjacent-field patterns.
+2. Generate query-only analogies with explicit "what breaks."
+3. Search adjacent fields when allowed.
+4. Triage/read adjacent-field papers when available.
+5. Promote transfer candidates only when a source paper supports a technical mechanism.
+6. Reject or leave query-only analogies when evidence is absent.
+7. Never present query-only analogies as conclusions.
 
-## Quality Bar
-- Every analogy must include "what breaks in the mapping".
-- Every analogy must include fake-analogy risk.
-- No analogy may be used as proof of novelty or feasibility.
-- Search queries must be concrete enough for source connectors.
-- Prefer fewer skeptical analogies over many shallow analogies.
+## Citation and Evidence Rules
+- Promoted transfer candidates require source paper IDs.
+- Use EvidenceSpan locators when available.
+- Do not fabricate adjacent-field papers or mechanisms.
+- Analogy evidence does not prove novelty.
+
+## Uncertainty Rules
+- Default confidence is low.
+- Evidence-backed transfer can be medium.
+- High confidence requires strong source evidence and target-domain validation.
+
+## Validation Checklist
+- [ ] Every analogy has target gap ID.
+- [ ] Every analogy states why it maps and what breaks.
+- [ ] Query-only, evidence-found, promoted, and rejected statuses are separated.
+- [ ] Promoted candidates cite source papers/evidence.
+- [ ] No hidden chain-of-thought is stored.
 
 ## Failure Modes
 - Shallow metaphor matching.
-- Assuming transfer works without evidence.
-- Ignoring domain-specific constraints that break the analogy.
-- Creating hypotheses without linked gap IDs.
-
-## Validation Checklist
-- [ ] `cross_domain_analogies.json` and `.md` exist.
-- [ ] Each analogy links a target gap ID.
-- [ ] Each analogy states why it maps and what breaks.
-- [ ] Each analogy lists adjacent-field search queries.
-- [ ] No citation or result is invented.
-- [ ] Confidence is low or medium unless evidence supports more.
+- Treating analogy as proof.
+- Ignoring domain constraints.
+- Inventing adjacent-field citations.
 
 ## Examples
-Generate analogies for a run:
-
 ```bash
-gapforge analogies --run-id 20260505T002206Z-low-false-positive-collusion-detection
+gapforge analogies --run-id RUN_ID
+gapforge analogies --run-id RUN_ID --search --promote-evidence-only
 ```

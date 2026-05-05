@@ -1,0 +1,7 @@
+[
+  {
+    "paper_id": "v3-med-prior-1",
+    "relationship": "partially_solves",
+    "reason": "Reports screening metrics but not specificity stress tests at low prevalence."
+  }
+]

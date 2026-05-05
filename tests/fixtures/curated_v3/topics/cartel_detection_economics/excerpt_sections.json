@@ -1,0 +1,24 @@
+[
+  {
+    "id": "v3-cartel-sec-1",
+    "paper_id": "v3-cartel-prior-1",
+    "title": "Synthetic Method Excerpt",
+    "normalized_title": "method",
+    "section_type": "method",
+    "text": "Synthetic excerpt: the cartel screen assumes stable demand and flags synchronized price changes as suspicious coordination.",
+    "page_start": 4,
+    "page_end": 4,
+    "confidence": "medium"
+  },
+  {
+    "id": "v3-cartel-sec-2",
+    "paper_id": "v3-cartel-prior-2",
+    "title": "Synthetic Limitations Excerpt",
+    "normalized_title": "limitations",
+    "section_type": "limitations",
+    "text": "Synthetic excerpt: without an identification strategy, platform-wide shocks can mimic collusive price synchronization.",
+    "page_start": 9,
+    "page_end": 9,
+    "confidence": "medium"
+  }
+]

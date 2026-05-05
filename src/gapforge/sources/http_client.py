@@ -24,7 +24,7 @@ class CachedHttpClient:
         *,
         timeout: float = 10.0,
         retries: int = 2,
-        user_agent: str = "GapForge/0.1 (+https://example.local/gapforge)",
+        user_agent: str = "GapForge/0.3 (+https://example.local/gapforge)",
     ) -> None:
         self.cache_dir = cache_dir
         self.timeout = timeout

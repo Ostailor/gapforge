@@ -1,78 +1,72 @@
 ---
 name: paper-triage
-description: Use when deciding which research papers deserve deep reading, method/results reading, skimming, or metadata-only treatment.
+description: Use when deciding which papers deserve deep reading, method/results reading, skimming, metadata-only treatment, or novelty/related-work attention.
 ---
 
 # Paper Triage
 
 ## Purpose
-Rank papers into reading tiers so GapForge spends deep-reading effort where it matters. Triage is prioritization metadata, not a factual claim about paper quality.
+Prioritize reading effort. Triage ranks papers into tiers and roles; it is not a factual claim about paper correctness.
 
 ## When To Use
-- Use after search and literature mapping.
-- Use when many papers exist and not all should be read equally.
-- CLI: `gapforge triage --run-id RUN_ID` or `gapforge triage "topic" --max-tier1 20`.
+- After search and field mapping.
+- Before PDF download, full-text parsing, deep reading, and novelty dossiers.
+- CLI: `gapforge triage --run-id RUN_ID`, `gapforge triage "topic" --max-tier1 20`, `gapforge rank-papers --run-id RUN_ID`.
 
 ## Inputs
 - `ResearchTopic`
-- normalized `Paper` records
-- optional `FieldMap`
-- venue, year, citation count, title, abstract, source, keywords
+- `Paper` records
+- optional `FieldMap`, source coverage, citation graph, retrieval index, project corpus, paper roles
 
 ## Outputs
 - `PaperTriageResult`
-- `PaperTriageDecision` records
+- `PaperTriageDecision`
 - `paper_triage.json`
 - `paper_triage.md`
-- abstract-only preliminary notes for Tier 1 and Tier 2 papers
-- at most a small number of claim ledger entries about the triage set
+- optional `paper_ranking.json` and `.md`
 
 ## Required Artifacts
 - `papers.json`
 - `paper_triage.json`
 - `paper_triage.md`
-- updated `paper_notes.json` only for selected high-priority papers
+- `paper_ranking.json` when v0.2/v0.3 ranking is used
 
 ## Procedure
-1. Score papers for topic relevance, directness, recency, venue authority, citation signal, benchmark signal, method novelty, limitation/open-problem signal, and source diversity.
-2. Assign tiers:
-   - Tier 1: must read deeply
-   - Tier 2: read method/results/limitations
-   - Tier 3: skim related work
-   - Tier 4: metadata only
-3. Enforce diversity so one source or venue does not dominate when comparable papers exist.
-4. Record reasons and concerns for each decision.
-5. Create preliminary abstract-only notes only for selected papers.
-6. Add ledger claims only for actual claims, such as the composition of the Tier 1 reading set, not every score.
+1. Score topic relevance, directness, recency, citation signal, venue/source authority, benchmark importance, method novelty, limitation/open-problem signal, full-text availability, and source diversity.
+2. Assign roles: frontier, seminal, survey, benchmark, dataset, method, theory, negative result, adjacent field, or unclear.
+3. Assign tiers: Tier 1 deep read, Tier 2 method/results/limitations, Tier 3 skim, Tier 4 metadata only.
+4. Preserve source and role diversity.
+5. Flag papers important for novelty checking, cross-domain transfer, or baselines.
+6. Recommend whether full text should be downloaded.
+7. Add claim ledger entries only for actual claims about the set, not every score.
 
-## Quality Bar
-- Directly relevant recent papers should outrank weakly related old papers.
-- Low-citation papers should not be excluded automatically.
-- Metadata gaps must be listed as concerns, not silently ignored.
-- Do not invent results or citations from a score.
+## Citation and Evidence Rules
+- Do not infer results from citation count, venue, or title.
+- A triage score is not evidence of quality.
+- Use paper IDs in every decision.
+- Label missing abstracts, missing PDFs, and fallback records as concerns.
 
-## Failure Modes
-- Popularity bias from citation counts.
-- Source monoculture in Tier 1.
-- Treating a scoring decision as a research finding.
-- Promoting abstract-only notes to high confidence.
+## Uncertainty Rules
+- Metadata-only decisions should stay provisional.
+- Older survey/seminal papers may remain high priority.
+- Full-text availability can boost reading priority but must not dominate relevance.
 
 ## Validation Checklist
-- [ ] `paper_triage.json` and `paper_triage.md` exist.
-- [ ] Every decision has tier, score, reasons, concerns, and recommended reading depth.
-- [ ] Tier 1 includes source or venue diversity when possible.
-- [ ] Abstract-only notes are labeled as abstract-only.
-- [ ] No invented claims or citations appear.
+- [ ] Each decision has paper ID, title, tier, score, reasons, concerns, role, and reading depth.
+- [ ] Tier 1 is not dominated by one source when alternatives exist.
+- [ ] Survey/seminal papers are not discarded solely for age.
+- [ ] No fabricated paper claims appear.
+- [ ] No hidden chain-of-thought is stored.
+
+## Failure Modes
+- Citation-count popularity bias.
+- Source monoculture.
+- Treating role guesses as facts.
+- Promoting abstract-only notes to high confidence.
 
 ## Examples
-Triage an existing run:
-
 ```bash
-gapforge triage --run-id 20260505T002206Z-low-false-positive-collusion-detection
-```
-
-Limit Tier 1 size:
-
-```bash
+gapforge triage --run-id RUN_ID
 gapforge triage "low false positive collusion detection" --max-tier1 12
+gapforge rank-papers --run-id RUN_ID
 ```

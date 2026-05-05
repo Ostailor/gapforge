@@ -1,86 +1,80 @@
 ---
 name: novelty-gate
-description: Use when checking candidate gaps, hypotheses, or experiment ideas against closest prior work before claiming novelty or designing paper-ready experiments.
+description: Use when checking gaps, hypotheses, or directions against closest prior work before novelty claims, experiments, or manuscript export.
 ---
 
 # Novelty Gate
 
 ## Purpose
-Try to kill candidate ideas by finding closest prior work. The novelty gate prevents GapForge from proposing experiments that are already solved, too incremental, or insufficiently searched.
+Try to kill the idea by finding closest prior work. The novelty gate is stricter than gap mining and must preserve missing searches.
 
 ## When To Use
-- Use after gap mining and analogy generation.
-- Use before experiment design or any novelty claim.
-- CLI: `gapforge novelty-check --run-id RUN_ID` or `gapforge novelty-check --gap-id GAP_ID`.
+- After gap mining and related/citation expansion.
+- Before experiment design, direction maturation, or manuscript export.
+- CLI: `gapforge novelty-check --run-id RUN_ID --deep`, `gapforge novelty-check-llm --run-id RUN_ID --all --fake`.
 
 ## Inputs
-- `Gap` records
-- `Hypothesis` records when available
-- `PaperNote` records
-- `FieldMap`
-- existing `Paper` store
-- optional source connectors
+- gaps or hypotheses
+- paper store and paper notes
+- field map
+- citation graph
+- retrieval candidates
+- source coverage and policy assessment
+- project memory
 
 ## Outputs
-- `NoveltyAssessment` records
+- `NoveltyAssessment`
+- `NoveltyDossier`
 - `novelty_gate.json`
 - `novelty_gate.md`
-- updated gap `novelty_status`
-- `rejected_ideas.json` for duplicates or weak ideas
-- source-linked novelty claims when closest prior work exists
+- `novelty_dossiers.json`
+- `novelty_dossiers.md`
+- updated gap novelty status
+- rejected ideas
 
 ## Required Artifacts
 - `gaps.json`
 - `papers.json`
-- `paper_notes.json`
 - `novelty_gate.json`
-- `novelty_gate.md`
+- `novelty_dossiers.json`
 - `rejected_ideas.json`
 
 ## Procedure
-1. Generate search queries for each target gap or hypothesis.
-2. Search existing paper store before using new sources.
-3. Identify closest prior work by title, abstract, note content, DOI/arXiv IDs, and lexical/semantic overlap where available.
-4. Compare the idea to closest prior work.
-5. Record what is new, what is not new, reviewer objection, decisive difference needed, searches used, and missing searches.
-6. Verdicts:
-   - `reject`: closest prior work appears to cover the idea.
-   - `revise`: idea may be incremental or needs sharper differentiation.
-   - `pursue`: related prior work exists, but the gap may still be testable.
-   - `unknown`: source coverage is insufficient.
-7. Never mark strong novelty unless closest prior work is recorded.
-8. Add claim ledger entries for novelty claims with prior-work links.
+1. Generate exact phrase, method/metric, benchmark/dataset, failure-mode, limitation, adjacent-field, and citation-neighborhood queries.
+2. Search existing run/project memory first.
+3. Use retrieval and citation graph candidates when available.
+4. Compare problem, method, dataset, metric, contribution, limitation, and evaluation overlap.
+5. Record closest prior work, what is new, what is not new, decisive difference, reviewer objection, missing searches, and verdict.
+6. Reject duplicates, revise near misses, pursue only when coverage supports it, and use unknown when coverage is weak.
+7. In LLM mode, refine only from known paper IDs and recorded search results.
 
-## Quality Bar
-- No novelty claim without closest prior work.
-- Unknown is preferable to false certainty.
-- Missing searches must be explicit.
-- Do not hallucinate citations, DOIs, or prior-work results.
-- Rejected ideas should be written to `rejected_ideas.json`.
+## Citation and Evidence Rules
+- No novelty claim without closest prior work or explicit missing-search reason.
+- Strong novelty requires adequate source policy coverage, retrieval/citation expansion, closest prior work, and no blocking missing searches.
+- Model-generated prior work must resolve to known paper IDs.
+- Do not invent DOI/arXiv IDs or paper claims.
 
-## Failure Modes
-- Treating absence from the current run as novelty.
-- Using vague prior-work labels instead of paper IDs or citations.
-- Marking weak ideas as pursue because they sound promising.
-- Forgetting to update gap `novelty_status`.
+## Uncertainty Rules
+- Poor coverage forces unknown or weak novelty.
+- Deterministic/LLM disagreement should become contested unless evidence resolves it.
+- Absence from current run is not novelty.
 
 ## Validation Checklist
-- [ ] `novelty_gate.json` and `.md` exist.
-- [ ] Each assessment has closest prior work or missing searches.
-- [ ] Strong novelty has closest prior work.
-- [ ] Rejected ideas are recorded.
-- [ ] Gap novelty statuses are updated.
-- [ ] Novelty ledger claims include closest prior work.
+- [ ] Every dossier lists candidates considered and closest prior work or missing searches.
+- [ ] Duplicate ideas are rejected.
+- [ ] Strong novelty has prior work and coverage support.
+- [ ] Rejected ideas are preserved.
+- [ ] No hidden chain-of-thought is stored.
+
+## Failure Modes
+- Treating lexical difference as novelty.
+- Ignoring project-memory rejected ideas.
+- Allowing LLMs to invent prior work.
+- Hiding missing searches.
 
 ## Examples
-Check all gaps:
-
 ```bash
-gapforge novelty-check --run-id 20260505T002206Z-low-false-positive-collusion-detection
-```
-
-Check one gap:
-
-```bash
-gapforge novelty-check --run-id 20260505T002206Z-low-false-positive-collusion-detection --gap-id gap-12345
+gapforge novelty-check --run-id RUN_ID --deep
+gapforge novelty-dossier --run-id RUN_ID --gap-id GAP_ID
+GAPFORGE_LLM_MODE=fake gapforge novelty-check-llm --run-id RUN_ID --all --fake
 ```

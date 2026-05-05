@@ -8,10 +8,12 @@ from dataclasses import dataclass
 from gapforge.models import (
     Claim,
     ExperimentPlan,
+    ExperimentProtocol,
     Gap,
     GapEvidenceMatrix,
     NoveltyAssessment,
     NoveltyDossier,
+    RelatedWorkMatrix,
     ResearchRunState,
     ReviewerObjection,
 )
@@ -51,6 +53,15 @@ class EvalScores:
     source_coverage_transparency_score: float | None = None
     human_review_respect_score: float | None = None
     report_uncertainty_score: float | None = None
+    retrieval_relevance_at_k: float | None = None
+    prior_work_recall_proxy: float | None = None
+    related_work_matrix_quality: float | None = None
+    direction_maturity_accuracy: float | None = None
+    protocol_completeness: float | None = None
+    manuscript_package_honesty: float | None = None
+    contradiction_detection_score: float | None = None
+    source_policy_compliance: float | None = None
+    llm_output_grounding_score: float | None = None
 
     def overall(self) -> float:
         positive = [
@@ -73,6 +84,23 @@ class EvalScores:
             self.source_coverage_transparency_score,
             self.human_review_respect_score,
             self.report_uncertainty_score,
+        ]
+        present = [value for value in values if value is not None]
+        if not present:
+            return None
+        return round(sum(present) / len(present), 3)
+
+    def v3_overall(self) -> float | None:
+        values = [
+            self.retrieval_relevance_at_k,
+            self.prior_work_recall_proxy,
+            self.related_work_matrix_quality,
+            self.direction_maturity_accuracy,
+            self.protocol_completeness,
+            self.manuscript_package_honesty,
+            self.contradiction_detection_score,
+            self.source_policy_compliance,
+            self.llm_output_grounding_score,
         ]
         present = [value for value in values if value is not None]
         if not present:
@@ -326,6 +354,141 @@ def report_uncertainty_score(state: ResearchRunState) -> float:
     uncertainty_signals += sum(1 for note in state.paper_notes if note.source_basis != "full text")
     denominator = max(1, len(state.claims) + len(state.gaps) + len(state.novelty_dossiers) + len(state.paper_notes))
     return round(min(1.0, uncertainty_signals / denominator), 3)
+
+
+def retrieval_relevance_at_k(retrieved_paper_ids: list[str], relevant_paper_ids: list[str], *, k: int = 5) -> float:
+    if not relevant_paper_ids:
+        return 1.0
+    retrieved = set(retrieved_paper_ids[:k])
+    relevant = set(relevant_paper_ids)
+    return round(len(retrieved & relevant) / min(len(relevant), k), 3)
+
+
+def prior_work_recall_proxy(dossiers: list[NoveltyDossier], human_gold_prior_work: list[dict[str, object]]) -> float:
+    expected = {str(item.get("paper_id", "")) for item in human_gold_prior_work if item.get("paper_id")}
+    if not expected:
+        return 1.0
+    found = {paper_id for dossier in dossiers for paper_id in [*dossier.top_prior_work, *dossier.candidates_considered]}
+    found.update(str(row.get("paper_id", "")) for dossier in dossiers for row in dossier.comparison_table)
+    return round(len(expected & found) / len(expected), 3)
+
+
+def related_work_matrix_quality(matrices: list[RelatedWorkMatrix], gold_matrices: list[RelatedWorkMatrix]) -> float:
+    gold_entries = {(entry.paper_id, entry.relationship) for matrix in gold_matrices for entry in matrix.entries}
+    if not gold_entries:
+        return 1.0
+    actual_entries = {(entry.paper_id, entry.relationship) for matrix in matrices for entry in matrix.entries}
+    must_cite_gold = {entry.paper_id for matrix in gold_matrices for entry in matrix.entries if entry.must_cite}
+    must_cite_actual = {entry.paper_id for matrix in matrices for entry in matrix.entries if entry.must_cite}
+    baseline_gold = {entry.paper_id for matrix in gold_matrices for entry in matrix.entries if entry.baseline_candidate}
+    baseline_actual = {entry.paper_id for matrix in matrices for entry in matrix.entries if entry.baseline_candidate}
+    relation_score = len(gold_entries & actual_entries) / len(gold_entries)
+    cite_score = len(must_cite_gold & must_cite_actual) / max(1, len(must_cite_gold))
+    baseline_score = len(baseline_gold & baseline_actual) / max(1, len(baseline_gold))
+    return round((0.5 * relation_score) + (0.25 * cite_score) + (0.25 * baseline_score), 3)
+
+
+def direction_maturity_accuracy(actual_maturity: str, expected_not_ready_reasons: list[str]) -> float:
+    should_be_ready = not expected_not_ready_reasons
+    if should_be_ready:
+        return 1.0 if actual_maturity in {"experiment_ready", "manuscript_ready"} else 0.4
+    if actual_maturity in {"seed", "candidate", "validated_gap"}:
+        return 1.0
+    if actual_maturity == "experiment_ready":
+        return 0.5
+    return 0.3
+
+
+def protocol_completeness(protocols: list[ExperimentProtocol]) -> float:
+    if not protocols:
+        return 0.0
+    required = [
+        "objective",
+        "hypothesis",
+        "datasets",
+        "baselines",
+        "metrics",
+        "statistical_tests",
+        "power_or_sample_size_notes",
+        "ablations",
+        "implementation_modules",
+        "expected_artifacts",
+        "evaluation_script_outline",
+        "failure_modes",
+        "reproducibility_checklist",
+        "compute_budget",
+        "timeline",
+    ]
+    scores = []
+    for protocol in protocols:
+        present = 0
+        for field_name in required:
+            value = getattr(protocol, field_name)
+            present += bool(value)
+        checklist = protocol.reproducibility_checklist
+        checklist_score = (
+            sum(
+                bool(value)
+                for value in [
+                    checklist.random_seeds,
+                    checklist.dataset_versioning,
+                    checklist.environment_spec,
+                    checklist.logging_plan,
+                    checklist.metric_definitions,
+                    checklist.negative_controls,
+                    checklist.error_analysis_plan,
+                ]
+            )
+            / 7
+        )
+        scores.append(((present / len(required)) * 0.75) + (checklist_score * 0.25))
+    return round(sum(scores) / len(scores), 3)
+
+
+def manuscript_package_honesty(markdown_texts: list[str]) -> float:
+    if not markdown_texts:
+        return 0.0
+    text = "\n".join(markdown_texts).lower()
+    fake_result_phrases = ["we found", "our results show", "we demonstrate", "significantly outperforms"]
+    bad = sum(1 for phrase in fake_result_phrases if phrase in text)
+    honesty_signals = sum(1 for phrase in ["hypothetical", "not run", "expected", "missing", "uncertain"] if phrase in text)
+    return round(max(0.0, min(1.0, (honesty_signals / 5) - (bad * 0.25) + 0.4)), 3)
+
+
+def contradiction_detection_score(unresolved_contradictions: list[str], expected_contradictions: list[str] | None = None) -> float:
+    expected = expected_contradictions or []
+    if not expected:
+        return 1.0 if not unresolved_contradictions else 0.7
+    matched = sum(1 for item in expected if any(_overlap(item.lower(), actual.lower()) >= 0.35 for actual in unresolved_contradictions))
+    return round(matched / len(expected), 3)
+
+
+def source_policy_compliance(state: ResearchRunState, required_sources: list[str] | None = None) -> float:
+    coverage = state.source_coverage
+    if coverage is None:
+        return 0.0
+    required = set(required_sources or [])
+    searched = set(coverage.searched_sources)
+    required_score = len(required & searched) / len(required) if required else 1.0
+    full_text_score = 1.0 if coverage.papers_with_full_text else 0.0
+    warning_score = 1.0 if coverage.confidence in {"medium", "high"} or coverage.coverage_warnings else 0.0
+    return round((0.5 * required_score) + (0.25 * full_text_score) + (0.25 * warning_score), 3)
+
+
+def llm_output_grounding_score(outputs: list[dict[str, object]], known_locators: list[str]) -> float:
+    if not outputs:
+        return 1.0
+    known = set(known_locators)
+    grounded = 0
+    total = 0
+    for output in outputs:
+        locators = output.get("evidence_locators", [])
+        if isinstance(locators, list):
+            total += 1
+            grounded += bool(locators) and all(str(locator) in known for locator in locators)
+    if total == 0:
+        return 0.0
+    return round(grounded / total, 3)
 
 
 def _tokens(text: str) -> list[str]:

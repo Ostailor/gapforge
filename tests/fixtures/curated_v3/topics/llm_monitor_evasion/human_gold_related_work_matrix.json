@@ -1,0 +1,23 @@
+[
+  {
+    "direction_id": "v3-lme-gap-1",
+    "coverage_summary": "Synthetic curated matrix: monitor evaluation prior work is present, but source breadth and adversarial coverage are insufficient.",
+    "missing_categories": ["adaptive attack benchmark", "benign false-positive dataset"],
+    "must_read_paper_ids": ["v3-lme-prior-1", "v3-lme-prior-2"],
+    "baseline_paper_ids": ["v3-lme-prior-1"],
+    "entries": [
+      {
+        "direction_id": "v3-lme-gap-1",
+        "paper_id": "v3-lme-prior-1",
+        "relationship": "partially_solves",
+        "relevance_score": 0.8,
+        "evidence_span_ids": ["v3-lme-span-1"],
+        "what_it_contributes": "A monitor benchmark for direct and toy paraphrased attacks.",
+        "what_it_does_not_solve": "It does not cover adaptive multi-turn evasion.",
+        "must_cite": true,
+        "baseline_candidate": true,
+        "reviewer_risk_if_omitted": "Omitting it would miss the closest monitor baseline."
+      }
+    ]
+  }
+]

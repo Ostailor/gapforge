@@ -1,72 +1,81 @@
 ---
 name: gap-mining
-description: Use when identifying evidence-backed research gaps from field maps, paper notes, limitations, contradictions, missing benchmarks, or repeated assumptions.
+description: Use when identifying evidence-backed research gaps from paper notes, evidence spans, field maps, contradictions, missing metrics, or repeated limitations.
 ---
 
 # Gap Mining
 
 ## Purpose
-Identify real research gaps supported by patterns in the literature. This skill should not generate random ideas; it should surface gaps that can be traced to papers, notes, claims, contradictions, or explicit indirect evidence.
+Find real gap candidates supported by patterns in papers and notes. Gap mining should not generate random ideas or novelty claims.
 
 ## When To Use
-- Use after literature mapping and deep reading.
-- Use before analogy generation, novelty checking, and experiment design.
-- CLI: `gapforge mine-gaps --run-id RUN_ID`.
+- After literature mapping and deep reading.
+- Before novelty gate, experiment design, and direction maturation.
+- CLI: `gapforge mine-gaps --run-id RUN_ID`, `gapforge mine-gaps-llm --run-id RUN_ID --fake`.
 
 ## Inputs
 - `FieldMap`
-- `PaperNote` records
-- claim ledger
-- research topic
+- `PaperNote`
+- `PaperSection`
+- `EvidenceSpan`
+- `ClaimLedger`
+- `SourceCoverageReport`
+- retrieval index when available
+- project memory context when attached
 
 ## Outputs
-- `Gap` records
+- `Gap`
 - `gaps.json`
 - `gaps.md`
-- uncertainty-aware gap claims in the claim ledger
+- `GapEvidenceMatrix`
+- `gap_evidence_matrix.json`
+- `gap_evidence_matrix.md`
+- claim ledger entries
 
 ## Required Artifacts
 - `paper_notes.json`
-- `field_map.json`
 - `claims.json`
 - `gaps.json`
+- `gap_evidence_matrix.json`
 - `gaps.md`
 
 ## Procedure
-1. Look for repeated limitations across notes.
-2. Identify missing or inconsistent metrics.
-3. Identify absent, synthetic-only, or underspecified datasets.
-4. Find assumptions repeated by multiple papers.
-5. Convert field-map contradictions into theory or evaluation gaps.
-6. Note deployment, reproducibility, scalability, negative-result, and measurement gaps when supported.
-7. Link every gap to supporting paper IDs or explain why evidence is indirect.
-8. Add `risk_that_gap_is_fake` for every gap.
-9. Leave `novelty_status` as unchecked, weak, or provisional until the novelty gate runs.
+1. Search notes/spans for repeated stated limitations, missing metrics, missing datasets, unrealistic assumptions, benchmark absence, evaluation mismatch, reproducibility issues, theory gaps, deployment gaps, negative-result gaps, and contradictions.
+2. Retrieve counterevidence for each candidate when an index exists.
+3. Build a GapEvidenceMatrix with supporting, countering, and contextual rows.
+4. Include why existing work does not solve the gap and why it matters.
+5. Include minimum experiment and risk that the gap is fake.
+6. Keep `novelty_status` unchecked until novelty gate.
+7. Reject or downgrade gaps without support.
+8. In LLM mode, accept only JSON candidates with locators or explicit abstract-only reasons.
 
-## Quality Bar
-- A gap must explain why existing work does not solve it.
-- No high-confidence gap without supporting papers or claims.
-- Do not claim novelty here; novelty belongs to the novelty gate.
-- Do not hallucinate citations, results, datasets, or missing-work claims.
-- Use the claim ledger for nontrivial gap statements.
-- Mark uncertainty explicitly.
+## Citation and Evidence Rules
+- Every gap must link papers/evidence or state an explicit indirect-evidence reason.
+- High confidence requires multiple supporting papers or strong full-text evidence plus counterevidence search.
+- Do not claim novelty.
+- Do not invent missing metrics, datasets, or limitations.
 
-## Failure Modes
-- Generating vague "more research is needed" ideas.
-- Calling a gap real because one abstract omitted details.
-- Ignoring counterevidence or closest prior work.
-- Forgetting the risk that the gap is fake.
+## Uncertainty Rules
+- Poor source/full-text coverage lowers confidence.
+- Abstract-only gaps cannot be high confidence.
+- Counterevidence must be represented, not ignored.
 
 ## Validation Checklist
-- [ ] `gaps.json` and `gaps.md` exist.
-- [ ] Each gap has a type, description, support, and fake-gap risk.
-- [ ] Each gap links papers/claims or gives an explicit indirect-evidence reason.
-- [ ] No gap is marked high confidence without support.
-- [ ] No unsupported novelty claim is made.
+- [ ] Each gap has type, support, counterevidence field, fake-gap risk, and minimum experiment.
+- [ ] Each gap has an evidence matrix or explicit absence reason.
+- [ ] No high-confidence gap lacks supporting evidence.
+- [ ] Human-rejected gaps are respected.
+- [ ] No hidden chain-of-thought is stored.
+
+## Failure Modes
+- Generic "more research needed" gaps.
+- Ignoring papers that solve the gap.
+- Treating a missing abstract detail as a real gap.
+- LLM-specific ideas without evidence.
 
 ## Examples
-Mine gaps for an existing run:
-
 ```bash
-gapforge mine-gaps --run-id 20260505T002206Z-low-false-positive-collusion-detection
+gapforge mine-gaps --run-id RUN_ID --min-confidence medium
+gapforge build-index --run-id RUN_ID
+GAPFORGE_LLM_MODE=fake gapforge mine-gaps-llm --run-id RUN_ID --fake
 ```

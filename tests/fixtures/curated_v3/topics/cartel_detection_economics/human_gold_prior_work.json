@@ -1,0 +1,7 @@
+[
+  {
+    "paper_id": "v3-cartel-prior-1",
+    "relationship": "partially_solves",
+    "reason": "Provides a screening method but not shock-robust identification."
+  }
+]

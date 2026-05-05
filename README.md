@@ -1,23 +1,31 @@
 # GapForge
 
-GapForge v0.2 is a Codex-powered Research Ideation OS for turning a broad research topic into evidence-linked, experiment-ready research directions.
+GapForge is a Codex-powered Research Ideation OS. It turns a broad topic into auditable research state: papers, notes, claims, evidence, gaps, novelty dossiers, experiment plans, reviewer objections, and reports.
 
-GapForge v0.2 is still not an exhaustive autonomous literature reviewer. It is now a full-text-aware, evidence-located research ideation system with conservative novelty checking. The default skills remain deterministic and heuristic, using source metadata, abstracts, parsed local/PDF text when available, local fixtures, claim ledger evidence, and explicit uncertainty.
+GapForge v0.3 is a semantic, project-memory-aware, optionally LLM-assisted research ideation system. It is still not an exhaustive autonomous literature reviewer. It is full-text-aware and evidence-located, with hybrid retrieval, conservative novelty checking, and manuscript package export. Deterministic and offline-safe paths remain the default.
+
+## Version Lineage
+
+- **v0.1**: deterministic research OS foundation with run state, source connectors, skill orchestration, claim ledger, novelty gate, evals, and reports.
+- **v0.2**: full-text evidence and novelty dossier upgrade with PDF artifacts, sections, evidence spans, source coverage, citation graph, gap evidence matrices, human review, and strict reports.
+- **v0.3**: semantic plus LLM-assisted plus multi-run project-memory upgrade with hybrid retrieval, source policy profiles, active loop decisions, related-work matrices, direction maturation, protocols, review queues, dashboard, and paper packages.
 
 ## Why Not Just Summarization?
 
-A summarizer compresses papers. GapForge tracks a research state.
+A summarizer compresses papers. GapForge tracks beliefs, evidence, uncertainty, and rejected ideas.
 
 GapForge keeps:
 
-- a persistent run directory with machine-readable artifacts
-- normalized papers and abstract/full-text-aware paper notes
-- a claim ledger with supporting evidence, counterevidence, confidence, and verification status
-- provenance for skill-created objects
-- field maps, gaps, novelty assessments, experiments, reviewer objections, and rejected ideas
-- a final report that separates evidence-backed claims from hypotheses
+- durable run and project directories
+- normalized paper metadata, local artifacts, parsed sections, and evidence spans
+- a claim ledger with support, counterevidence, confidence, and verification state
+- source coverage and stopping assessments
+- closest-prior-work novelty dossiers
+- human review records and review queues
+- research directions that mature from seed to manuscript-ready or rejected
+- final reports that distinguish evidence-backed claims from hypotheses
 
-The system is intentionally skeptical. It should attack an idea before recommending it, and it should not claim novelty until closest prior work has been checked.
+The system is intentionally skeptical. It should attack an idea before recommending it, and it should not claim novelty until closest prior work and missing searches are explicit.
 
 ## Installation
 
@@ -31,292 +39,217 @@ source .venv/bin/activate
 make install
 ```
 
-Equivalent direct install:
+Equivalent:
 
 ```bash
 python -m pip install -e ".[dev]"
 ```
 
-## Quickstart
+## v0.3 Quickstart
 
-Run the v0.2 offline-safe smoke path:
+Run a deterministic, offline-safe v0.3 smoke workflow:
 
 ```bash
 export GAPFORGE_DISABLE_NETWORK=1
-gapforge run "low false positive collusion detection" --v2 --max-papers 8
+gapforge run "low false positive collusion detection" --v3 --max-papers 8 --build-index
 gapforge report --strict
 gapforge coverage
 ```
 
-Strict mode should be conservative in this smoke path: because the run uses fallback metadata and has no parsed full text, the final report should say that no direction is ready rather than claiming novelty.
-
-The run writes artifacts under `runs/<timestamp-topic>/`, including:
-
-- `state.json`
-- `papers.json`
-- `source_coverage.md`
-- `full_text_coverage.md`
-- `field_map.md`
-- `paper_triage.md`
-- `paper_notes.md`
-- `gaps.md`
-- `gap_evidence_matrix.md`
-- `novelty_dossiers.md`
-- `novelty_gate.md`
-- `experiments.md`
-- `reviewer_simulation.md`
-- `run_report.md`
-- `final_report.md`
-
-Open the final report:
+Run the full project-level offline v0.3 smoke target:
 
 ```bash
-latest_run=$(ls -td runs/* | head -1)
-sed -n '1,160p' "$latest_run/final_report.md"
+make v3-smoke
 ```
 
-## v0.2 Workflows
-
-### Offline Smoke Quickstart
-
-Use this to verify the orchestration loop without live APIs:
-
-```bash
-export GAPFORGE_DISABLE_NETWORK=1
-gapforge run "low false positive collusion detection" --v2 --max-papers 8
-gapforge report --strict
-gapforge coverage
-```
+`make v3-smoke` initializes a temporary project, runs the staged v0.3 path offline with a small budget, builds the project retrieval index, writes the project report, and generates the static dashboard. It checks for `project_report.md`, `source_coverage.md`, `final_report.md`, `direction_maturity_report.md`, `related_work_matrix.md`, `review_queue.md`, and `dashboard/index.html`. Active-loop decisions are generated only by `gapforge run --v3 --active` and are written to `active_decisions.md`.
 
 Expected behavior:
 
-- PDF download, analogy search, and related-work expansion are skipped with coverage warnings.
-- `source_coverage.md` labels fallback/offline records.
-- `full_text_coverage.md` reports zero parsed full text.
-- `final_report.md` does not recommend a top direction as novel.
+- network PDF/search expansion steps skip with coverage warnings
+- retrieval index artifacts are built from fallback/offline state
+- strict report remains conservative and may refuse a top direction
+- outputs are smoke-test artifacts, not real literature conclusions
 
-### Manual Local PDF Ingestion
+Current verification status from the May 5, 2026 local pass:
 
-Use this when you already have a paper PDF:
+- Deterministic checks passed: `make format`, `make format-check`, `make lint`, `make typecheck`, `make test`, `make eval`, `gapforge eval --v2 --write-report`, `gapforge eval --v3 --write-report`, `make coverage`, `make v2-smoke`, and `make v3-smoke`.
+- Fake-agent canary passed with valid schema validation.
+- Actual Codex/GPT-5.4 canaries did not run because `GAPFORGE_ENABLE_REAL_RUNS` and agent settings were not configured in the environment.
+- Real-run acceptance is therefore **not complete** and must not be claimed until a human-reviewed actual Codex/GPT-5.4 canary is accepted.
 
-```bash
-gapforge init-topic "my research topic"
-run_id=$(ls -td runs/* | head -1 | xargs basename)
-gapforge add-pdf --run-id "$run_id" /path/to/paper.pdf --title "Paper Title" --authors "A. Author;B. Author" --year 2024 --parse
-gapforge read --run-id "$run_id" --fulltext-only
-gapforge mine-gaps --run-id "$run_id"
-gapforge novelty-check --run-id "$run_id" --deep
-gapforge report --run-id "$run_id" --strict
-```
+## Project Memory Workflow
 
-Local PDFs are copied into the run artifact store, hashed, parsed into sections when possible, and used by deep reading to create locator-backed evidence spans.
-
-### Full-Text Parsing Workflow
-
-For searched papers with reliable `pdf_url` or arXiv IDs:
+Use project memory when several runs belong to one research program:
 
 ```bash
-gapforge run "topic" --v2 --download-pdfs --parse-fulltext --max-papers 20
+gapforge init-project "monitoring collusion research"
+gapforge run "low false positive collusion detection" --v3 --project-id monitoring-collusion-research --max-papers 20
+gapforge sync-project-memory --project-id monitoring-collusion-research
+gapforge project-status --project-id monitoring-collusion-research
+gapforge project-report --project-id monitoring-collusion-research
 ```
 
-Or run the stages manually:
+Project memory deduplicates papers across runs, preserves rejected ideas and human decisions, and stores research directions that can mature over time. Prior project memory is context, not newly verified evidence.
+
+## Hybrid Retrieval Workflow
+
+Build and inspect a local hybrid lexical/semantic index:
 
 ```bash
-gapforge search "topic" --max-results 20 --sources arxiv,crossref
-run_id=$(ls -td runs/* | head -1 | xargs basename)
-gapforge triage --run-id "$run_id"
-gapforge download-pdfs --run-id "$run_id" --max-papers 10 --skip-existing
-gapforge parse-fulltext --run-id "$run_id"
-gapforge read --run-id "$run_id" --tier 1
+gapforge build-index --run-id <run-id>
+gapforge search-index --run-id <run-id> "low false positive evaluation benchmark" --top-k 20
+gapforge explain-retrieval --run-id <run-id> "closest prior work low FPR"
 ```
 
-If downloads or parsing fail, GapForge records the failure and continues. A missing PDF must not become a fabricated full-text claim.
-
-### Novelty Dossier Workflow
-
-Generate closest-prior-work dossiers before treating an idea as research-ready:
+For project memory:
 
 ```bash
-gapforge mine-gaps --run-id "$run_id"
-gapforge build-citation-graph --run-id "$run_id"
-gapforge expand-related-work --run-id "$run_id" --max-new-papers 30
-gapforge novelty-check --run-id "$run_id" --deep
-gapforge novelty-dossier --run-id "$run_id" --gap-id <gap-id>
+gapforge build-index --project-id <project-id>
+gapforge search-index --project-id <project-id> "monitor evasion limitation" --top-k 20
 ```
 
-The dossier records query plans, candidates considered, closest prior work, missing searches, reviewer objections, and the decisive difference needed. A strong novelty claim should not appear unless closest prior work has been checked.
+The default semantic path uses deterministic local hash embeddings. Live embedding APIs are not required.
 
-### Strict Report Mode
+## Optional LLM Workflow
+
+LLM-backed skills are opt-in. Tests and default runs do not require live model calls.
 
 ```bash
-gapforge report --run-id "$run_id" --strict
+export GAPFORGE_LLM_MODE=prompt-pack   # off|prompt-pack|fake|provider
+gapforge prompt-pack --run-id <run-id> --skill deep-reading
+gapforge read-llm --run-id <run-id> --tier 1 --dry-run-prompts
 ```
 
-Strict mode refuses to recommend a top direction when source coverage is poor, no full-text evidence spans exist, novelty dossiers are missing or unresolved, or reviewer blocking issues remain.
-
-## Example Run
+Fake mode is deterministic:
 
 ```bash
-make example
+export GAPFORGE_LLM_MODE=fake
+gapforge read-llm --run-id <run-id> --tier 1 --fake
+gapforge mine-gaps-llm --run-id <run-id> --fake
+gapforge novelty-check-llm --run-id <run-id> --all --fake
 ```
 
-`make example` disables live network access, runs the default low-FPR collusion topic, and writes a final report. In offline mode, source connectors use deterministic fallback metadata where needed. Treat the output as a smoke test of the research OS, not as a real literature review.
+Provider mode is optional and must validate JSON before state is updated. Model outputs must cite paper IDs and EvidenceSpan locators when source-backed. Hidden chain-of-thought must not be requested or stored.
 
-More topic seeds are in `examples/`:
+## Codex/GPT-5.4 Agent Run Modes
 
-- `examples/low_fpr_collusion.md`
-- `examples/lexical_substitution_monitoring.md`
-- `examples/quantum_portfolio_optimization.md`
+`gapforge run --v3` supports explicit execution modes:
 
-## Common CLI Commands
+```bash
+gapforge run "topic" --v3 --mode deterministic
+gapforge run "topic" --v3 --mode prompt-pack --agent codex --llm-novelty
+gapforge run "topic" --v3 --mode fake-agent --agent fake --llm-gaps
+gapforge run "topic" --v3 --mode llm-assisted --agent codex --model gpt-5.4 --require-real-agent
+```
+
+Deterministic mode is the default. Prompt-pack mode writes Codex task packs without live calls. Fake-agent mode is CI-safe and validates task-pack/schema plumbing. `llm-assisted --agent codex --require-real-agent` requires `GAPFORGE_ENABLE_REAL_RUNS=1`; otherwise the run fails rather than pretending actual validation passed.
+
+## Deterministic Tests vs Actual Runs
+
+GapForge separates automated validation from actual research-agent validation:
+
+- **Level 0 deterministic tests**: no LLM, CI-safe, validates code, schemas, persistence, reports, and evals.
+- **Level 1 offline smoke tests**: no LLM and no network, validates orchestration safety.
+- **Level 2 fake LLM tests**: fake model only, validates JSON guards and evidence gates.
+- **Level 3 prompt-pack dry runs**: no live calls, validates Codex/GPT-5.4 prompts and schemas.
+- **Level 4 Codex/GPT-5.4 canary runs**: real model/agent, private/manual, validates actual LLM-assisted research skills.
+- **Level 5 human-reviewed acceptance**: human review of canary outputs and recorded decisions.
+
+CI must not require Codex/GPT-5.4. Actual Codex/GPT-5.4 assisted runs are required before a v0.3 release can claim real-run validation, but they are not part of normal automated tests. If Codex/GPT-5.4 is unavailable, actual-run validation has not passed. Never fake a canary pass.
+
+See:
+
+- `docs/V0_3_REAL_RUN_ACCEPTANCE.md`
+- `docs/V0_3_CANARY_RUNS.md`
+- `docs/CODEX_RESEARCH_AGENT.md`
+- `docs/REAL_RUN_REVIEW_CHECKLIST.md`
+- `docs/releases/v0.3.0-real-run-acceptance.md`
+
+## Manuscript Package Workflow
+
+Manuscript exports are starter kits, not finished papers:
+
+```bash
+gapforge create-direction --project-id <project-id> --gap-id <gap-id>
+gapforge related-work-matrix --project-id <project-id> --direction-id <direction-id>
+gapforge mature-direction --project-id <project-id> --direction-id <direction-id>
+gapforge experiment-protocol --project-id <project-id> --direction-id <direction-id>
+gapforge review-panel --project-id <project-id> --direction-id <direction-id>
+gapforge export-paper-package --project-id <project-id> --direction-id <direction-id>
+```
+
+Exports include outlines, related-work matrix, protocol, limitations, reviewer objections, rebuttal plan, bibliography, claim ledger, and evidence index. They must not invent results.
+
+## Active v0.3 Loop
+
+Use the active loop when GapForge should decide whether to search, parse, read, expand citations, check novelty, request human review, or stop:
+
+```bash
+gapforge run "low false positive collusion detection" --v3 --active --budget small --source-profile ai_safety
+gapforge active-decisions --run-id <run-id>
+```
+
+Every decision is written to `active_decisions.md`.
+
+## Common CLI
 
 ```bash
 gapforge --help
-gapforge init-topic "low false positive collusion detection"
-gapforge search "low false positive collusion detection" --max-results 50 --sources arxiv,crossref
-gapforge map --run-id <run-id>
-gapforge triage --run-id <run-id>
-gapforge read --run-id <run-id> --tier 1
-gapforge mine-gaps --run-id <run-id>
-gapforge analogies --run-id <run-id>
-gapforge coverage --run-id <run-id>
-gapforge download-pdfs --run-id <run-id> --max-papers 10
-gapforge parse-fulltext --run-id <run-id>
-gapforge build-citation-graph --run-id <run-id>
-gapforge expand-related-work --run-id <run-id> --max-new-papers 30
-gapforge novelty-check --run-id <run-id> --deep
-gapforge design-experiments --run-id <run-id>
-gapforge review --run-id <run-id>
-gapforge report --run-id <run-id> --strict
-gapforge validate-state
-gapforge cache-info
-gapforge eval --write-report
+gapforge init-topic "topic"
+gapforge run "topic"
+gapforge run "topic" --v2 --max-papers 20
+gapforge run "topic" --v3 --project-id <project-id> --build-index --mature-directions
+gapforge dashboard --run-id <run-id>
+gapforge review-queue --run-id <run-id>
+gapforge audit-artifacts --run-id <run-id>
 ```
-
-Use `gapforge report` without `--run-id` to report on the latest run.
 
 ## Architecture
 
-GapForge has four main layers:
+Core layers:
 
-1. **Sources**: arXiv, CrossRef, DBLP, OpenReview, Semantic Scholar, and generic web placeholders normalize metadata into the shared `Paper` model. Networked connectors cache responses under `.gapforge_cache/` and degrade gracefully without API keys.
-2. **Skills**: modular research abilities transform `ResearchRunState`. Skills can run individually or through the orchestrator.
-3. **State and provenance**: every run persists JSON and Markdown artifacts under `runs/`. Claims, evidence, gaps, experiments, and reviewer objections keep IDs and provenance links.
-4. **Evaluator harness**: offline fixtures test whether GapForge produces specific, evidence-linked, novelty-aware gaps rather than generic ideas.
+- `src/gapforge/models.py`: typed run, project, evidence, retrieval, review, and export models
+- `src/gapforge/state.py`: durable run persistence and validation
+- `src/gapforge/project_memory.py`: multi-run project memory
+- `src/gapforge/orchestrator.py`: v0.1/v0.2/v0.3 orchestration
+- `src/gapforge/orchestration/`: active loop decisions and budgets
+- `src/gapforge/sources/`: source connectors, coverage, ranking, and policies
+- `src/gapforge/skills/`: deterministic and optional LLM-backed skills
+- `src/gapforge/retrieval/`: local hybrid retrieval
+- `src/gapforge/reporting.py`: conservative Markdown/JSON reports
 
-See:
-
-- `docs/ARCHITECTURE.md`
-- `docs/RESEARCH_STATE.md`
-- `docs/CLAIM_LEDGER.md`
-- `docs/SOURCES.md`
-- `docs/SKILLS.md`
-- `docs/EVALS.md`
-- `docs/KNOWN_LIMITATIONS.md`
-- `docs/V0_2_ROADMAP.md`
-
-## Skill List
-
-- Literature Cartographer: clusters papers and maps methods, datasets, metrics, saturation, and underexplored areas.
-- Paper Triage: ranks papers into reading tiers.
-- Deep Reading: creates structured notes while marking abstract-only limitations.
-- Gap Mining: identifies evidence-linked research gaps from field maps and notes.
-- Cross-Domain Analogy: proposes skeptical adjacent-field search directions.
-- Novelty Gate: checks candidate ideas against closest prior work and rejects duplicates.
-- Experiment Designer: converts non-rejected gaps into falsifiable experiment plans.
-- Reviewer Simulation: attacks experiments from technical, novelty, empirical-rigor, and area-chair perspectives.
-
-Each skill also has a Codex-readable package under `skills/*/SKILL.md`.
+See `docs/ARCHITECTURE.md`.
 
 ## Evaluation Philosophy
 
-GapForge evals are offline and fixture-driven. They include known good gaps, known bad gaps, duplicate ideas, unsupported claims, and expected reviewer objections.
-
-The current metrics include:
-
-- gap specificity
-- evidence linkage
-- novelty gate accuracy
-- duplicate detection
-- unsupported claim rate
-- experiment completeness
-- reviewer objection quality
-
-Run:
+Evals are offline and fixture-driven. They measure behavior such as specificity, evidence linkage, duplicate rejection, source coverage transparency, retrieval relevance, direction maturity, and manuscript honesty. They do not prove real scientific usefulness.
 
 ```bash
 make eval
+gapforge eval --v2
+gapforge eval --v3
 ```
 
-This writes `eval_report.md`.
+## Limitations and Safety Notes
 
-## Configuration and Caching
+- GapForge does not perform exhaustive literature review.
+- Offline fallback outputs are smoke tests.
+- Semantic retrieval is a ranking aid, not proof of novelty.
+- LLM outputs are untrusted until schema-valid and evidence-located.
+- PDFs, transcripts, and generated dashboards may be unsafe to commit.
+- Human review is required before treating any direction as research-ready.
 
-Environment variables:
-
-- `GAPFORGE_ROOT`: override the workspace root for CLI runs.
-- `GAPFORGE_CACHE_DIR`: override the source response cache directory.
-- `GAPFORGE_DISABLE_NETWORK=1`: force offline-safe behavior.
-
-Cache diagnostics:
+Use:
 
 ```bash
-gapforge cache-info
+gapforge audit-artifacts --run-id <run-id>
+gapforge export-safe-bundle --project-id <project-id>
 ```
-
-## Development
-
-```bash
-make install
-make format-check
-make format
-make lint
-make typecheck
-make test
-make eval
-make coverage
-make v2-smoke
-```
-
-Run the full local CI gate with:
-
-```bash
-make ci
-```
-
-Tooling is configured in `pyproject.toml` for `pytest`, `pytest-cov`, `ruff`, and `mypy`. See `docs/CONTRIBUTING.md` and `docs/TESTING.md` for contributor and verification details.
-
-## Limitations
-
-- v0.2 still uses deterministic heuristics, not a full paper-understanding model.
-- Most notes are abstract/metadata-only unless PDFs are manually ingested or successfully downloaded and parsed.
-- Source connectors do not require API keys, so metadata coverage varies by source and network state.
-- Novelty checks are conservative but not exhaustive. A `pursue` verdict means "worth investigating," not "definitely novel."
-- Fixture and offline fallback outputs are smoke-test artifacts, not real research conclusions.
-
-See `docs/KNOWN_LIMITATIONS.md` for the current limitation contract.
 
 ## Roadmap
 
-v0.2 is planned as the full-text and stronger-novelty release. The goal is to reduce v0.1's abstract/metadata-heavy risk, not to claim exhaustive literature review capability.
-
-v0.2 targets:
-
-- full-text PDF and manual paper ingestion
-- section-level paper parsing
-- evidence spans with page and section locators
-- full-text-aware deep reading
-- citation graph and related-work expansion
-- closest-prior-work dossiers for the novelty gate
-- source coverage reports that distinguish live source coverage from offline fallback mode
-- human-in-the-loop review/edit commands
-- stronger eval fixtures, including full-text fixture papers or excerpts
-- report sections that make full-text coverage, fallback mode, and unresolved novelty searches visible
-
-Future v0.3 work may include LLM-backed full-text synthesis, OCR, multi-run project memory, collaborative review workflows, and export formats for manuscript or rebuttal planning.
-
-See:
-
-- `docs/V0_2_ROADMAP.md`
-- `docs/V0_2_ACCEPTANCE_CRITERIA.md`
-- `docs/RELEASE_PROCESS.md`
+- v0.1: deterministic research OS foundation
+- v0.2: full-text evidence and novelty dossier upgrade
+- v0.3: semantic, optional LLM-assisted, multi-run project-memory upgrade
+- Future: stronger real-world evaluations, richer layout/OCR extraction, external reference-manager integration, experiment execution adapters, and collaborative review workflows

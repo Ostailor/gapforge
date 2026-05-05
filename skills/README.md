@@ -1,25 +1,35 @@
 # GapForge Codex Skills
 
-This directory contains Codex-readable skill packages for GapForge research workflows. Each skill mirrors a Python implementation under `src/gapforge/skills/` and provides operational instructions for agents working with the repository.
+This directory contains Codex-readable skills for GapForge research workflows. Each package is a `SKILL.md` file that future agents can load when performing a specific research ability.
 
-Available skills:
+v0.1/v0.2 skills:
 
-- `literature-cartographer`: map papers into clusters, methods, assumptions, and underexplored areas.
-- `paper-triage`: rank papers into reading-depth tiers.
-- `deep-reading`: create grounded paper notes and source-linked claims.
-- `gap-mining`: identify evidence-backed research gaps.
-- `cross-domain-analogy`: generate skeptical adjacent-field analogies and search queries.
-- `novelty-gate`: check closest prior work before claiming novelty.
-- `experiment-designer`: create falsifiable experiment plans.
-- `reviewer-simulation`: attack experiments before recommending them.
+- `literature-cartographer`
+- `paper-triage`
+- `deep-reading`
+- `gap-mining`
+- `cross-domain-analogy`
+- `novelty-gate`
+- `experiment-designer`
+- `reviewer-simulation`
+
+v0.3 skills:
+
+- `project-memory`
+- `hybrid-retrieval`
+- `related-work-matrix`
+- `research-direction-maturation`
+- `manuscript-export`
 
 Shared rules:
 
-- Do not hallucinate citations, results, venues, datasets, or metrics.
+- Do not hallucinate citations, results, venues, datasets, metrics, quotes, or bibliography entries.
 - Separate abstract-only notes from full-text notes.
+- Use EvidenceSpan locators for full-text evidence.
 - Use the claim ledger for nontrivial claims.
-- Store concise public reasoning summaries, not hidden chain-of-thought.
+- Store concise public reasoning summaries only; never store hidden chain-of-thought.
 - Mark uncertainty explicitly.
 - Find closest prior work before claiming novelty.
+- Preserve rejected ideas and human decisions.
 - Prefer decisive experiments over vague ideas.
 - Attack ideas before recommending them.

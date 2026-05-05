@@ -1,74 +1,106 @@
 # GapForge Architecture
 
-GapForge is a skills-based research ideation OS, not a rigid one-pass pipeline.
+GapForge is a skills-based research ideation OS. It is not a rigid one-pass summarizer; it is a durable research state machine with evidence, uncertainty, and review gates.
 
-The current foundation has four layers:
+## Versioned Architecture
 
-1. **Orchestrator** in `src/gapforge/orchestrator.py`
-   - Coordinates research as a resumable loop rather than a single pipeline.
-   - Persists an `OrchestratorPlan`, per-step statuses, an `OrchestratorResult`, and a run log after every stage.
-   - Supports `gapforge run`, `gapforge resume`, and `gapforge status`.
-   - Source failures are logged and isolated so one connector failure does not kill the run.
-   - v0.1 keeps the shorter loop for compatibility.
-   - v0.2 adds source coverage, PDF download, full-text parsing, citation graph construction, related-work expansion, and closest-prior-work dossiers.
-   - Analogy-generated and related-work search queries can add papers, then refresh mapping, triage, reading, and gap mining before novelty checks.
+- **v0.1 foundation**: run-local state, source connectors, deterministic skills, claim ledger, novelty gate, evaluator harness, CLI, and reports.
+- **v0.2 evidence layer**: PDF artifacts, parsed sections, EvidenceSpan locators, source coverage, citation graph, related-work expansion, novelty dossiers, gap evidence matrices, human review, and strict reports.
+- **v0.3 project and retrieval layer**: project memory across runs, hybrid retrieval, source policy profiles, active loop decisions, optional LLM-backed skills, related-work matrices, direction maturation, experiment protocols, review queues, dashboards, and manuscript packages.
 
-2. **Sources** in `src/gapforge/sources/`
-   - Implement a common `ResearchSource.search(query, *, max_results, sort, date_from, date_to)` interface.
-   - Networked connectors use cached HTTP with timeouts, retries, and graceful degradation.
-   - See `docs/SOURCES.md` for the current connector contract and extension guide.
+## Core Layers
 
-3. **Skills** in `src/gapforge/skills/`
-   - Each skill receives and returns `ResearchRunState`.
-   - Skills are composable and registered in `SkillRegistry`.
-   - The initial order is literature mapping, triage, deep reading, gap mining, analogy, novelty gate, experiment design, and reviewer simulation.
-   - The literature cartographer is deterministic today: it uses keyword/metadata heuristics and writes uncertainty-aware claims. A future LLM implementation should keep the same `FieldMap` interface.
-   - The novelty gate is deliberately adversarial: it searches the current paper store first, records closest-prior-work comparisons, rejects duplicate ideas, and leaves missing searches explicit instead of upgrading uncertain ideas.
-   - The experiment designer consumes novelty assessments and skips rejected ideas by default. Its output is scoped around falsifiable experiments, baseline strength, implementation steps, and reviewer-facing decisive results.
-   - The reviewer simulation attacks experiments from technical, novelty, empirical-rigor, and area-chair perspectives, then converts objections into blocking issues, required fixes, and submission readiness recommendations.
+1. **Models**: `src/gapforge/models.py`
+   - Dataclass models for runs, projects, papers, artifacts, sections, evidence spans, claims, gaps, novelty dossiers, retrieval documents, directions, protocols, review panels, dashboards, and export packages.
 
-4. **Persistent state** in `runs/<timestamp-topic>/`
-   - Every run writes JSON artifacts and a Markdown report.
-   - State remains inspectable and testable outside the CLI process.
-   - The state manager writes `run_report.md` for operational status. The reporting layer writes `final_report.md` or `final_report.json` for researcher-facing synthesis.
+2. **Run state**: `src/gapforge/state.py`
+   - Writes `runs/<timestamp-topic>/`.
+   - Persists JSON and Markdown artifacts after each skill/stage.
+   - Validates evidence links, supported claims, novelty claims, experiments, human review locks, and source policy gates.
 
-## v0.2 Orchestration Loop
+3. **Project memory**: `src/gapforge/project_memory.py`
+   - Writes `projects/<project-id>/`.
+   - Deduplicates corpus papers across runs.
+   - Preserves rejected ideas, human decisions, claims, gaps, and research directions.
+   - Project memory is context, not proof. Reports must distinguish current-run evidence from prior-run memory.
 
-`gapforge run "topic" --v2` builds a resumable plan with these stages:
+4. **Sources and coverage**: `src/gapforge/sources/`
+   - Source connectors normalize external metadata into `Paper`.
+   - `CachedHttpClient` provides timeouts, retries, user-agent, and cache.
+   - Query ledger and source coverage make every search auditable.
+   - Source policy profiles evaluate whether coverage is enough for mapping, gap mining, novelty, or experiment design.
+
+5. **Skills**: `src/gapforge/skills/`
+   - Skills transform `ResearchRunState`.
+   - Deterministic skills remain default.
+   - Optional LLM-backed variants use prompt packs, fake clients, or provider clients only when configured.
+   - All skills must cite paper IDs/evidence locators for source-backed claims and store public reasoning summaries only.
+
+6. **Retrieval**: `src/gapforge/retrieval/`
+   - Builds local hybrid indexes over papers, sections, evidence spans, notes, claims, gaps, novelty dossiers, and project memory.
+   - Combines deterministic lexical scoring with local hash embeddings by default.
+   - Retrieval improves candidate finding; it does not prove novelty.
+
+7. **Orchestration**: `src/gapforge/orchestrator.py`
+   - Supports v0.1, v0.2, and v0.3 paths.
+   - `gapforge run "topic"` keeps the original deterministic path.
+   - `gapforge run "topic" --v2` adds full-text/prior-work stages.
+   - `gapforge run "topic" --v3` adds source policy, project memory, retrieval, direction/review/export hooks.
+   - `gapforge run "topic" --v3 --active` uses the active decision loop.
+
+8. **Active loop**: `src/gapforge/orchestration/`
+   - Decides among search more, parse more, read more, expand citations, check novelty, design experiment, request human review, and stop.
+   - Every decision records reason, evidence, expected value, and cost estimate.
+   - Budget limits and stopping criteria prevent unbounded expansion.
+
+9. **Reports and exports**
+   - `src/gapforge/reporting.py` renders conservative Markdown/JSON reports.
+   - `src/gapforge/export/` writes manuscript starter packages.
+   - Reports must show source coverage, evidence locators, unsupported claims, rejected ideas, and uncertainty.
+
+## v0.3 Staged Loop
+
+`gapforge run "topic" --v3` may run:
 
 ```text
 search
--> source-coverage
+-> source coverage
+-> source policy assessment
 -> map
 -> triage
--> download-pdfs
--> parse-fulltext
--> deep-read
--> mine-gaps
+-> download PDFs
+-> parse full text
+-> deep read
+-> build retrieval index
+-> mine gaps
 -> analogies
--> analogy-search
--> refresh-after-new-papers
--> citation-graph
--> related-work-expansion
--> refresh-after-expanded-papers
--> novelty-dossiers
--> experiments
--> reviewer-simulation
--> final-report
+-> analogy search
+-> citation graph
+-> related-work expansion
+-> refresh retrieval index
+-> novelty dossiers
+-> optional LLM novelty
+-> experiments when coverage permits
+-> reviewer simulation
+-> project memory sync
+-> related-work matrices
+-> optional direction maturation/protocols/package/dashboard
+-> review queue
+-> final report
 ```
 
-Network-dependent steps skip cleanly when `GAPFORGE_DISABLE_NETWORK=1`, and those skips are preserved in source coverage warnings. Failed PDF downloads and parser failures are recorded as warnings rather than fatal errors.
+Network-dependent steps skip cleanly when `GAPFORGE_DISABLE_NETWORK=1`.
 
-The v0.2 loop remains conservative. If coverage is weak, the final report should recommend next search/full-text steps instead of presenting an idea as novel.
+## v0.3 Active Loop
 
-5. **Evaluation harness** in `src/gapforge/evals/`
-   - Provides a small benchmark API and metrics model.
-   - Future evaluators should test provenance coverage, novelty quality, and experiment readiness.
+`gapforge run "topic" --v3 --active --budget small` creates an active-loop run. The active loop evaluates current state, source policy, evidence coverage, novelty dossiers, review queue, and budget before selecting the next action. It can stop because coverage is sufficient, budget is exhausted, no new papers are found, or human review is needed.
 
-The CLI in `src/gapforge/cli.py` is intentionally thin. It delegates behavior to `Orchestrator`, which keeps command handling separate from research logic.
+## Safety Invariants
 
-## Final Reporting
-
-`src/gapforge/reporting.py` builds a structured report dictionary and renders Markdown or JSON from the same data. The v0.2 report reads as an evidence-located dossier: it includes source coverage, full-text coverage, evidence locators, gap evidence matrices, closest-prior-work dossiers, rejected ideas, human review summaries, and unresolved uncertainty.
-
-Strict report mode refuses to recommend a top direction when coverage, evidence, novelty, or reviewer gates are weak. It deliberately uses conservative language: `pursue` is not proof of novelty, missing searches remain visible, and rejected ideas are included instead of silently discarded.
+- No fabricated citations, quotes, datasets, metrics, results, or venues.
+- No hidden chain-of-thought in persisted artifacts.
+- Supported claims require evidence.
+- Strong novelty requires closest prior work and adequate source coverage.
+- Full-text claims should use EvidenceSpan locators.
+- Rejected or locked human decisions must be respected.
+- Offline/fallback data must be labeled as such.

@@ -1,85 +1,79 @@
 ---
 name: deep-reading
-description: Use when producing source-grounded structured notes that distinguish paper claims, demonstrated evidence, assumptions, limitations, and topic connections.
+description: Use when producing source-grounded paper notes from abstracts or parsed full text while separating claims, evidence, assumptions, results, and limitations.
 ---
 
 # Deep Reading
 
 ## Purpose
-Produce structured paper notes that separate what a paper claims from what it demonstrates. This skill protects GapForge from hallucinated results and unsupported literature claims.
+Create structured notes that distinguish what a paper claims from what it demonstrates. Deep reading is evidence extraction, not creative completion.
 
 ## When To Use
-- Use after paper triage for Tier 1 and Tier 2 papers.
-- Use when a specific paper needs grounded extraction.
-- CLI: `gapforge read --run-id RUN_ID --tier 1` or `gapforge read --paper-id PAPER_ID`.
+- After triage for Tier 1/Tier 2 papers.
+- After parsing full text.
+- When a specific paper needs locator-backed notes.
+- CLI: `gapforge read --run-id RUN_ID --tier 1`, `gapforge read-llm --run-id RUN_ID --tier 1 --dry-run-prompts`.
 
 ## Inputs
 - selected `Paper` records
-- optional full text
-- `PaperTriageDecision` records
-- research topic
+- `PaperSection` records when available
+- `EvidenceSpan` records
+- triage decisions
+- topic and optional retrieval context
 
 ## Outputs
-- `PaperNote` records
+- `PaperNote`
 - `paper_notes.json`
 - `paper_notes.md`
-- evidence-backed claim ledger entries
+- new EvidenceSpan records where extraction finds quote locators
+- claim ledger entries
+- optional `deep_reading_llm.md` and transcripts in LLM modes
 
 ## Required Artifacts
+- `papers.json`
 - `paper_notes.json`
 - `paper_notes.md`
-- source-linked evidence snippets for supported claims
+- `evidence_spans.json` when full-text evidence exists
 
 ## Procedure
-1. Identify whether the note is based on full text or metadata/abstract only.
-2. Extract only what is present in the available source text.
-3. Separate:
-   - core claims
-   - method
-   - datasets
-   - metrics
-   - main results
-   - assumptions
-   - stated limitations
-   - unstated limitations
-   - what the paper cannot answer
-   - useful technical tools
-   - possible connections to the topic
-4. Add quotes or evidence snippets with source IDs and locators.
-5. Add claim ledger entries only for source-grounded claims.
-6. Mark abstract-only notes as low or medium confidence, not high.
-7. Store concise public reasoning summaries only; do not store hidden chain-of-thought.
+1. State source basis: full text, abstract-only, or metadata-only.
+2. Use sections when available: abstract/introduction for claims, method for methods, experiments/results for datasets/metrics/results, discussion/limitations/conclusion for limitations.
+3. Extract only present text.
+4. Main results require result/evaluation/conclusion evidence or an abstract quote.
+5. Methods require method/approach evidence when full text exists.
+6. Limitations require direct limitation/discussion/conclusion evidence or must be labeled inferred.
+7. Add claim ledger entries only with paper IDs and evidence.
+8. If using LLM mode, validate JSON and drop unsupported locators.
+9. Store public reasoning summaries only.
 
-## Quality Bar
-- Do not fabricate main results when no result statement exists.
-- Do not infer datasets, metrics, or equations from title alone.
-- Abstract-only notes must clearly say `metadata/abstract only`.
-- Every supported claim must have evidence and paper ID.
-- Speculation belongs in limitations or possible connections, not main results.
+## Citation and Evidence Rules
+- No invented citations, quotes, datasets, equations, benchmarks, or results.
+- Full-text claims should cite EvidenceSpan locators.
+- Abstract-only notes cannot become high confidence.
+- Model output without valid locators must be downgraded or dropped.
 
-## Failure Modes
-- Turning an abstract claim into a demonstrated result.
-- Treating future-work language as an achieved contribution.
-- Dropping locators, making later audit impossible.
-- Mixing unstated limitations with author-stated limitations.
+## Uncertainty Rules
+- Missing sections should be recorded.
+- Unstated limitations are uncertain.
+- If evidence is abstract-only, confidence is low or medium.
 
 ## Validation Checklist
-- [ ] Each note has `paper_id`.
-- [ ] Source basis is explicit: full text or metadata/abstract only.
-- [ ] Main results appear only when supported by source text.
-- [ ] Evidence snippets have source IDs and locators.
-- [ ] Confidence is not high for abstract-only notes.
-- [ ] Claim ledger entries are source-linked.
+- [ ] Every note has `paper_id`.
+- [ ] Source basis is explicit.
+- [ ] Results have evidence.
+- [ ] Claims have paper IDs and locators where available.
+- [ ] Missing sections are visible.
+- [ ] No hidden chain-of-thought is stored.
+
+## Failure Modes
+- Turning author claims into demonstrated results.
+- Inferring datasets/metrics from title alone.
+- Dropping locators.
+- Trusting malformed LLM JSON.
 
 ## Examples
-Read all Tier 1 papers:
-
 ```bash
-gapforge read --run-id 20260505T002206Z-low-false-positive-collusion-detection --tier 1
-```
-
-Read one paper:
-
-```bash
-gapforge read --paper-id arxiv-low-false-positive-collusion-detection-1
+gapforge read --run-id RUN_ID --tier 1
+gapforge read --run-id RUN_ID --paper-id PAPER_ID --fulltext-only
+GAPFORGE_LLM_MODE=prompt-pack gapforge read-llm --run-id RUN_ID --tier 1 --dry-run-prompts
 ```

@@ -6,10 +6,13 @@ import subprocess
 import sys
 from pathlib import Path
 
+REPO_ROOT = Path(__file__).resolve().parents[1]
+
 
 def run_cli(cwd: Path, *args: str) -> subprocess.CompletedProcess[str]:
     env = os.environ.copy()
     env["GAPFORGE_DISABLE_NETWORK"] = "1"
+    env["PYTHONPATH"] = str(REPO_ROOT / "src")
     return subprocess.run(
         [sys.executable, "-m", "gapforge.cli", *args],
         cwd=cwd,
@@ -23,7 +26,7 @@ def run_cli(cwd: Path, *args: str) -> subprocess.CompletedProcess[str]:
 def test_help_works() -> None:
     result = subprocess.run(
         [sys.executable, "-m", "gapforge.cli", "--help"],
-        env={**os.environ, "GAPFORGE_DISABLE_NETWORK": "1"},
+        env={**os.environ, "GAPFORGE_DISABLE_NETWORK": "1", "PYTHONPATH": str(REPO_ROOT / "src")},
         text=True,
         capture_output=True,
         check=False,
@@ -170,6 +173,33 @@ def test_v2_dry_run_cli(tmp_path: Path) -> None:
     assert any(step["name"] == "novelty-dossiers" for step in plan["steps"])
 
 
+def test_v3_dry_run_cli(tmp_path: Path) -> None:
+    dry = run_cli(
+        tmp_path,
+        "run",
+        "low false positive collusion detection",
+        "--v3",
+        "--dry-run",
+        "--project-id",
+        "cli-v3-project",
+        "--source-profile",
+        "ai_safety",
+        "--build-index",
+    )
+    assert dry.returncode == 0, dry.stderr
+    run_dir = sorted((tmp_path / "runs").iterdir())[-1]
+    plan = json.loads((run_dir / "orchestrator_plan.json").read_text(encoding="utf-8"))
+    config = json.loads((run_dir / "config.json").read_text(encoding="utf-8"))
+
+    assert plan["dry_run"] is True
+    assert config["v3"] is True
+    assert config["project_id"] == "cli-v3-project"
+    assert config["source_policy_profile"] == "ai_safety"
+    assert any(step["name"] == "source-policy-assessment" for step in plan["steps"])
+    assert any(step["name"] == "build-retrieval-index" for step in plan["steps"])
+    assert any(step["name"] == "project-memory-sync" for step in plan["steps"])
+
+
 def test_v2_offline_smoke_cli(tmp_path: Path) -> None:
     result = run_cli(tmp_path, "run", "low false positive collusion detection", "--v2", "--max-papers", "8")
 
@@ -186,6 +216,101 @@ def test_v2_offline_smoke_cli(tmp_path: Path) -> None:
     assert "source_coverage.md" in coverage_latest.stdout
     refreshed_coverage = json.loads((run_dir / "source_coverage.json").read_text(encoding="utf-8"))
     assert any("Network disabled" in warning for warning in refreshed_coverage["coverage_warnings"])
+
+
+def test_v3_offline_smoke_cli_with_project_and_index(tmp_path: Path) -> None:
+    result = run_cli(
+        tmp_path,
+        "run",
+        "low false positive collusion detection",
+        "--v3",
+        "--max-papers",
+        "8",
+        "--project-id",
+        "cli-v3-project",
+        "--build-index",
+    )
+
+    assert result.returncode == 0, result.stderr
+    run_dir = sorted((tmp_path / "runs").iterdir())[-1]
+    outcome = json.loads((run_dir / "orchestrator_result.json").read_text(encoding="utf-8"))
+    project = json.loads((tmp_path / "projects" / "cli-v3-project" / "project.json").read_text(encoding="utf-8"))
+
+    assert outcome["status"] == "complete"
+    assert run_dir.name in project["run_ids"]
+    assert (run_dir / "retrieval" / "retrieval_coverage.md").exists()
+    assert (run_dir / "review_queue.md").exists()
+
+
+def test_v3_prompt_pack_cli_writes_agent_tasks(tmp_path: Path) -> None:
+    result = run_cli(
+        tmp_path,
+        "run",
+        "low false positive collusion detection",
+        "--v3",
+        "--max-papers",
+        "8",
+        "--mode",
+        "prompt-pack",
+        "--agent",
+        "codex",
+        "--model",
+        "gpt-5.4",
+        "--llm-novelty",
+    )
+
+    assert result.returncode == 0, result.stderr
+    run_dir = sorted((tmp_path / "runs").iterdir())[-1]
+    state = json.loads((run_dir / "state.json").read_text(encoding="utf-8"))
+    report = (run_dir / "final_report.md").read_text(encoding="utf-8")
+
+    assert state["config"]["run_mode"] == "prompt-pack"
+    assert state["agent_task_specs"]
+    assert any(record["status"] == "planned" for record in state["agent_run_records"])
+    assert "Codex agent task packs:" in report
+
+
+def test_v3_require_real_agent_cli_fails_without_env(tmp_path: Path) -> None:
+    result = run_cli(
+        tmp_path,
+        "run",
+        "low false positive collusion detection",
+        "--v3",
+        "--max-papers",
+        "8",
+        "--mode",
+        "llm-assisted",
+        "--agent",
+        "codex",
+        "--llm-novelty",
+        "--require-real-agent",
+    )
+
+    assert result.returncode == 1
+    run_dir = sorted((tmp_path / "runs").iterdir())[-1]
+    outcome = json.loads((run_dir / "orchestrator_result.json").read_text(encoding="utf-8"))
+    assert outcome["status"] == "failed"
+
+
+def test_v3_record_canary_cli(tmp_path: Path) -> None:
+    result = run_cli(
+        tmp_path,
+        "run",
+        "low false positive collusion detection",
+        "--v3",
+        "--max-papers",
+        "8",
+        "--record-canary",
+        "--canary-profile",
+        "fake_agent_regression",
+    )
+
+    assert result.returncode == 0, result.stderr
+    canaries = list((tmp_path / "data" / "canaries").glob("*/canary_record.json"))
+    assert canaries
+    payload = json.loads(canaries[0].read_text(encoding="utf-8"))
+    assert payload["profile_id"] == "fake_agent_regression"
+    assert payload["run_id"]
 
 
 def test_cache_info_cli(tmp_path: Path) -> None:

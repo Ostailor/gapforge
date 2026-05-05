@@ -1,0 +1,7 @@
+[
+  {
+    "category": "dataset",
+    "severity": "fatal",
+    "expected_contains": "medical source coverage is insufficient"
+  }
+]

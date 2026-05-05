@@ -1,0 +1,23 @@
+[
+  {
+    "direction_id": "v3-med-gap-1",
+    "coverage_summary": "Synthetic curated matrix: medical screening metadata is present, but no PubMed-like source coverage is included.",
+    "missing_categories": ["clinical validation", "PubMed-like source coverage"],
+    "must_read_paper_ids": ["v3-med-prior-1"],
+    "baseline_paper_ids": ["v3-med-prior-1"],
+    "entries": [
+      {
+        "direction_id": "v3-med-gap-1",
+        "paper_id": "v3-med-prior-1",
+        "relationship": "benchmark_dataset_provider",
+        "relevance_score": 0.78,
+        "evidence_span_ids": ["v3-med-span-1"],
+        "what_it_contributes": "A screening benchmark with standard sensitivity-style metrics.",
+        "what_it_does_not_solve": "It does not stress-test specificity at rare-condition prevalence.",
+        "must_cite": true,
+        "baseline_candidate": true,
+        "reviewer_risk_if_omitted": "Medical reviewers would ask for comparison to the standard screening metric setup."
+      }
+    ]
+  }
+]

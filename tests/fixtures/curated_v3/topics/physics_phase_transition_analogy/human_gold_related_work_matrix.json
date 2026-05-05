@@ -1,0 +1,23 @@
+[
+  {
+    "direction_id": "v3-phys-gap-1",
+    "coverage_summary": "Synthetic curated matrix: adjacent-field mechanism exists, but transfer evidence is weak and should remain not ready.",
+    "missing_categories": ["direct application paper", "validated state variable", "negative transfer study"],
+    "must_read_paper_ids": ["v3-phys-prior-1", "v3-phys-prior-2"],
+    "baseline_paper_ids": [],
+    "entries": [
+      {
+        "direction_id": "v3-phys-gap-1",
+        "paper_id": "v3-phys-prior-1",
+        "relationship": "cross-domain analogy",
+        "relevance_score": 0.7,
+        "evidence_span_ids": ["v3-phys-span-1"],
+        "what_it_contributes": "A candidate threshold mechanism.",
+        "what_it_does_not_solve": "It does not validate the mapping to monitor failure.",
+        "must_cite": true,
+        "baseline_candidate": false,
+        "reviewer_risk_if_omitted": "Omitting it would hide the technical source of the analogy."
+      }
+    ]
+  }
+]

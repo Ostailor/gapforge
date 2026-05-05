@@ -1,0 +1,7 @@
+[
+  {
+    "paper_id": "v3-lme-prior-1",
+    "relationship": "partially_solves",
+    "reason": "Covers direct violation monitoring and a small paraphrase test, but not adaptive multi-turn evaluation."
+  }
+]

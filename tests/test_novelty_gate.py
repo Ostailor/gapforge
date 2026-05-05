@@ -7,7 +7,17 @@ import sys
 from pathlib import Path
 
 from gapforge.config import GapForgeConfig
-from gapforge.models import ExperimentPlan, Gap, Hypothesis, NoveltyAssessment, Paper, PaperSection, SearchQueryRecord, SourceCoverageReport
+from gapforge.models import (
+    ExperimentPlan,
+    ExperimentProtocol,
+    Gap,
+    Hypothesis,
+    NoveltyAssessment,
+    Paper,
+    PaperSection,
+    SearchQueryRecord,
+    SourceCoverageReport,
+)
 from gapforge.novelty.comparator import PriorWorkComparator
 from gapforge.skills.novelty_gate import NoveltyGate
 from gapforge.state import ResearchStateManager
@@ -235,6 +245,20 @@ def test_novelty_gate_writes_artifacts_and_validates_paper_ready_experiments(tmp
             closest_prior_work=["p1: Related work (similarity 0.30)"],
             novelty_strength="medium",
             verdict="pursue",
+        )
+    )
+    state.experiment_protocols.append(
+        ExperimentProtocol(
+            id="protocol-1",
+            direction_id="hypothesis-1",
+            linked_experiment_plan_id="experiment-1",
+            objective="Validate the paper-ready hypothesis.",
+            hypothesis="A test hypothesis",
+            baselines=[],
+            metrics=["effect-size"],
+            statistical_tests=["bootstrap confidence intervals"],
+            expected_artifacts=["metrics_summary.csv"],
+            evaluation_script_outline=["run baseline", "compute effect-size"],
         )
     )
     manager.save_run(state)

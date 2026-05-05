@@ -4,10 +4,12 @@ from gapforge.fulltext.artifact_store import ArtifactStore
 from gapforge.fulltext.downloader import PdfDownloader, infer_pdf_url
 from gapforge.fulltext.pdf_parser import FullTextParser, ParsedPage, PdfTextExtractor
 from gapforge.fulltext.sectionizer import Sectionizer, create_evidence_span_from_quote
+from gapforge.fulltext.structure import FullTextStructureParser
 
 __all__ = [
     "ArtifactStore",
     "FullTextParser",
+    "FullTextStructureParser",
     "ParsedPage",
     "PdfDownloader",
     "PdfTextExtractor",

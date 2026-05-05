@@ -1,0 +1,7 @@
+[
+  {
+    "category": "baseline",
+    "severity": "major",
+    "expected_contains": "closest benchmark baseline"
+  }
+]

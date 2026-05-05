@@ -1,0 +1,28 @@
+[
+  {
+    "id": "v3-lfc-sec-1",
+    "paper_id": "v3-lfc-prior-1",
+    "title": "Synthetic Evaluation Excerpt",
+    "normalized_title": "evaluation",
+    "section_type": "experiments",
+    "text": "Synthetic excerpt: the detector reports aggregate false-positive rates, but does not audit operator workload at fixed low false-positive budgets.",
+    "page_start": 4,
+    "page_end": 4,
+    "char_start": 0,
+    "char_end": 139,
+    "confidence": "medium"
+  },
+  {
+    "id": "v3-lfc-sec-2",
+    "paper_id": "v3-lfc-prior-2",
+    "title": "Synthetic Limitations Excerpt",
+    "normalized_title": "limitations",
+    "section_type": "limitations",
+    "text": "Synthetic excerpt: changing base rates can overwhelm a fixed alert budget, and the audit does not include counterfactual triage costs.",
+    "page_start": 6,
+    "page_end": 6,
+    "char_start": 0,
+    "char_end": 129,
+    "confidence": "medium"
+  }
+]

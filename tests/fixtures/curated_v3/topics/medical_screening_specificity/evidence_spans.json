@@ -1,0 +1,24 @@
+[
+  {
+    "id": "v3-med-span-1",
+    "paper_id": "v3-med-prior-1",
+    "section_id": "v3-med-sec-1",
+    "quote": "specificity at rare-condition prevalence is not stress-tested",
+    "page_start": 3,
+    "page_end": 3,
+    "locator": "v3-med-prior-1:Evaluation:p3",
+    "evidence_type": "limitation",
+    "confidence": "medium"
+  },
+  {
+    "id": "v3-med-span-2",
+    "paper_id": "v3-med-prior-2",
+    "section_id": "v3-med-sec-2",
+    "quote": "subgroup-specific false-positive burden remains an open deployment concern",
+    "page_start": 8,
+    "page_end": 8,
+    "locator": "v3-med-prior-2:Discussion:p8",
+    "evidence_type": "limitation",
+    "confidence": "medium"
+  }
+]

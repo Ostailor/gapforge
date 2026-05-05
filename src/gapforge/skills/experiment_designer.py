@@ -4,7 +4,17 @@ from __future__ import annotations
 
 from collections import Counter
 
-from gapforge.models import ExperimentPlan, Gap, Hypothesis, NoveltyAssessment, PaperNote, Provenance, ResearchRunState
+from gapforge.models import (
+    ExperimentPlan,
+    Gap,
+    Hypothesis,
+    NoveltyAssessment,
+    PaperNote,
+    Provenance,
+    RelatedWorkMatrix,
+    ResearchRunState,
+    TableRecord,
+)
 from gapforge.review.audit import approved_object_ids, is_rejected, locked_object_ids
 from gapforge.skills.base import Skill
 from gapforge.state import utc_now_iso
@@ -70,8 +80,8 @@ class ExperimentDesigner(Skill):
         index: int,
     ) -> ExperimentPlan:
         hypothesis = hypotheses[0] if hypotheses else None
-        metrics = _metrics_for_gap(gap, state.paper_notes)
-        baselines = _baselines_for_gap(gap, assessment)
+        metrics = _metrics_for_gap(gap, state.paper_notes, state.tables)
+        baselines = _baselines_for_gap(gap, assessment, state.related_work_matrices)
         datasets = _datasets_for_gap(gap, state.paper_notes)
         title = _experiment_title(gap)
         inline_hypothesis = hypothesis.text if hypothesis is not None else _hypothesis_from_gap(gap)
@@ -175,7 +185,7 @@ def _minimum_experiment(gap: Gap) -> str:
     return "Run the smallest controlled comparison that can distinguish the proposed gap from closest prior work."
 
 
-def _metrics_for_gap(gap: Gap, notes: list[PaperNote]) -> list[str]:
+def _metrics_for_gap(gap: Gap, notes: list[PaperNote], tables: list[TableRecord] | None = None) -> list[str]:
     text = _gap_text(gap)
     metrics = []
     if "false-positive" in text or "false positive" in text:
@@ -191,11 +201,24 @@ def _metrics_for_gap(gap: Gap, notes: list[PaperNote]) -> list[str]:
     observed = [metric for note in notes for metric in note.metrics]
     if observed:
         metrics.extend([item for item, _ in Counter(observed).most_common(3)])
+    table_text = " ".join((table.caption + " " + table.text).lower() for table in tables or [])
+    for marker, metric in [
+        ("f1", "f1"),
+        ("auc", "auc"),
+        ("precision", "precision"),
+        ("recall", "recall"),
+        ("false positive", "false-positive-rate"),
+        ("specificity", "specificity"),
+    ]:
+        if marker in table_text:
+            metrics.append(metric)
     metrics.extend(["effect-size", "confidence-interval"])
     return _dedupe(metrics)
 
 
-def _baselines_for_gap(gap: Gap, assessment: NoveltyAssessment | None) -> list[str]:
+def _baselines_for_gap(
+    gap: Gap, assessment: NoveltyAssessment | None, related_work_matrices: list[RelatedWorkMatrix] | None = None
+) -> list[str]:
     text = _gap_text(gap)
     baselines = ["closest-prior-work implementation or reported numbers", "simple supervised baseline"]
     if "collusion" in text:
@@ -206,6 +229,9 @@ def _baselines_for_gap(gap: Gap, assessment: NoveltyAssessment | None) -> list[s
         baselines.append("existing public benchmark split")
     if assessment is not None and assessment.closest_prior_work:
         baselines.append(f"nearest prior: {assessment.closest_prior_work[0]}")
+    for matrix in related_work_matrices or []:
+        if matrix.direction_id == gap.id:
+            baselines.extend([f"related-work baseline paper: {paper_id}" for paper_id in matrix.baseline_paper_ids])
     return _dedupe(baselines)
 
 

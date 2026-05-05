@@ -7,19 +7,73 @@ import json
 import sys
 from pathlib import Path
 
+from gapforge.agents import (
+    AgentRuntimeConfig,
+    AgentUnavailableError,
+    CodexAgentClient,
+    FakeAgentClient,
+    agent_status,
+    create_agent_task_spec,
+)
+from gapforge.canaries import CanaryReviewManager, CanaryRunManager, default_canary_profiles
+from gapforge.claims.project_sync import ProjectClaimGraphManager
 from gapforge.config import GapForgeConfig
+from gapforge.dashboard import StaticDashboardBuilder
+from gapforge.directions.maturation import DirectionMaturationManager
 from gapforge.evals.benchmark import run_evals
+from gapforge.experiments.baselines import render_baseline_candidates_markdown
+from gapforge.experiments.protocol import ExperimentProtocolBuilder, render_protocol_markdown
+from gapforge.experiments.reproducibility import render_reproducibility_checklist
+from gapforge.export.bibliography import render_bibtex
+from gapforge.export.paper_package import PaperPackageExporter
 from gapforge.fulltext.downloader import PdfDownloader
 from gapforge.fulltext.pdf_parser import FullTextParser
+from gapforge.fulltext.structure import FullTextStructureParser
 from gapforge.ingest import ManualIngestor, parse_authors
-from gapforge.models import ResearchRunState, to_plain
+from gapforge.llm.base import LLMClient
+from gapforge.llm.config import LLMRuntimeConfig
+from gapforge.llm.fake import FakeLLMClient
+from gapforge.llm.providers import ProviderLLMClient, ProviderUnavailableError, llm_status
+from gapforge.llm.transcripts import LLMTranscriptLogger
+from gapforge.models import IndexManifest, ResearchProgramState, ResearchRunState, RetrievalResult, to_plain
+from gapforge.orchestration.budgets import budget_from_name
 from gapforge.orchestrator import Orchestrator
+from gapforge.project_memory import ProjectMemoryManager
+from gapforge.related_work.matrix import RelatedWorkMatrixBuilder
 from gapforge.reporting import write_final_report
+from gapforge.retrieval import build_project_index, build_run_index, search_project_index, search_run_index
+from gapforge.retrieval.index_store import RetrievalIndexStore
 from gapforge.review.audit import render_human_reviews_markdown
 from gapforge.review.edits import HumanReviewEditor
+from gapforge.review.queue import ReviewQueueManager, render_review_queue_markdown
+from gapforge.reviewers import ReviewPanelBuilder, render_meta_review_markdown, render_rebuttal_plans_markdown, render_review_panel_markdown
+from gapforge.safety import (
+    audit_project_artifacts,
+    audit_run_artifacts,
+    clean_generated_run_artifacts,
+    export_safe_project_bundle,
+    render_artifact_audit_markdown,
+)
 from gapforge.sources.coverage import refresh_source_coverage
 from gapforge.sources.http_client import cache_summary
+from gapforge.sources.policies import default_source_policy_profiles, get_source_policy_profile
+from gapforge.sources.stopping import refresh_stopping_assessment, render_stopping_assessment_markdown
 from gapforge.state import ResearchStateManager
+
+
+def _add_agent_skill_options(command_parser: argparse.ArgumentParser) -> None:
+    command_parser.add_argument("--agent", choices=["codex"], default=None, help="Route this LLM skill through AgentClient.")
+    command_parser.add_argument(
+        "--agent-mode",
+        choices=["task-pack", "fake", "codex"],
+        default=None,
+        help="AgentClient mode. task-pack writes files only; codex requires GAPFORGE_ENABLE_REAL_RUNS=1.",
+    )
+    command_parser.add_argument("--model", default="gpt-5.4", help="Agent model label for run records.")
+    command_parser.add_argument("--import-output", action="append", default=None, metavar="PATH", help="Validate/import Codex output path.")
+    command_parser.add_argument(
+        "--validate-only", action="store_true", help="Validate imported Codex output without mutating research state."
+    )
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -39,12 +93,55 @@ def build_parser() -> argparse.ArgumentParser:
     run_parser.add_argument("--sources", default="", help="Comma-separated sources, for example arxiv,crossref,dblp.")
     run_parser.add_argument("--dry-run", action="store_true")
     run_parser.add_argument("--v2", action="store_true", help="Use the v0.2 full-text and prior-work orchestration loop.")
+    run_parser.add_argument("--v3", action="store_true", help="Use the v0.3 project-memory and active-research orchestration path.")
+    run_parser.add_argument(
+        "--mode",
+        choices=["deterministic", "prompt-pack", "fake-agent", "llm-assisted"],
+        default="deterministic",
+        help="v0.3 execution mode. Deterministic is CI-safe; llm-assisted requires explicit LLM/agent configuration.",
+    )
+    run_parser.add_argument("--agent", choices=["codex", "fake", "none"], default="none", help="Optional v0.3 AgentClient backend.")
+    run_parser.add_argument("--model", default="gpt-5.4", help="Model label for Codex/GPT-5.4 agent run records.")
+    run_parser.add_argument("--project-id", default="", help="Attach the v0.3 run to a project memory workspace.")
+    run_parser.add_argument("--source-profile", default="", help="Source policy profile, for example ai_safety or medicine.")
+    run_parser.add_argument("--active", action="store_true", help="Use the v0.3 active loop instead of the staged v0.3 plan.")
     run_parser.add_argument("--download-pdfs", action="store_true", help="Include PDF download before deep reading.")
     run_parser.add_argument("--parse-fulltext", action="store_true", help="Include full-text parsing before deep reading.")
     run_parser.add_argument("--deep-novelty", action="store_true", help="Run closest-prior-work dossiers instead of shallow novelty.")
     run_parser.add_argument("--strict-report", action="store_true", help="Use strict final-report recommendation gating.")
     run_parser.add_argument("--skip-pdf-download", action="store_true", help="Skip v0.2 PDF download while recording coverage warnings.")
     run_parser.add_argument("--max-expanded-papers", type=int, default=30)
+    run_parser.add_argument("--llm-reading", action="store_true", help="Use optional LLM-backed deep reading when LLM mode permits it.")
+    run_parser.add_argument("--llm-gaps", action="store_true", help="Use optional LLM-backed gap mining when LLM mode permits it.")
+    run_parser.add_argument(
+        "--llm-novelty", action="store_true", help="Use optional LLM-assisted novelty dossiers when LLM mode permits it."
+    )
+    run_parser.add_argument("--llm-review", action="store_true", help="Use optional LLM-assisted review panels when LLM mode permits it.")
+    run_parser.add_argument("--agent-task-pack", action="store_true", help="Write Codex task packs for selected LLM skill flags.")
+    run_parser.add_argument(
+        "--require-real-agent",
+        action="store_true",
+        help="Fail if actual Codex execution is unavailable instead of falling back to task-pack mode.",
+    )
+    run_parser.add_argument("--build-index", action="store_true", help="Build a v0.3 hybrid retrieval index during the run.")
+    run_parser.add_argument("--mature-directions", action="store_true", help="Create and mature project research directions.")
+    run_parser.add_argument("--export-package", action="store_true", help="Export paper packages for eligible mature directions.")
+    run_parser.add_argument("--dashboard", action="store_true", help="Generate a static dashboard after the run.")
+    run_parser.add_argument("--budget", choices=["small", "medium", "large"], default="small", help="v0.3 active-loop budget preset.")
+    run_parser.add_argument("--canary-profile", default="", help="Built-in canary profile ID to associate with this v0.3 run.")
+    run_parser.add_argument("--record-canary", action="store_true", help="Record this v0.3 run as a canary for human review.")
+
+    active_run_parser = subparsers.add_parser("run-active", help="Run the v0.3 active research loop.")
+    active_run_parser.add_argument("topic")
+    active_run_parser.add_argument("--project-id", default="")
+    active_run_parser.add_argument("--budget", choices=["small", "medium", "large"], default="small")
+    active_run_parser.add_argument("--profile", default="", help="Optional source policy profile, for example ai_safety.")
+
+    active_status_parser = subparsers.add_parser("active-status", help="Print active-loop status as JSON.")
+    active_status_parser.add_argument("--run-id", required=True)
+
+    active_decisions_parser = subparsers.add_parser("active-decisions", help="Print active-loop decision log.")
+    active_decisions_parser.add_argument("--run-id", required=True)
 
     map_parser = subparsers.add_parser("map", help="Build a field map for a topic or existing run.")
     map_parser.add_argument("topic", nargs="?")
@@ -69,11 +166,26 @@ def build_parser() -> argparse.ArgumentParser:
     read_parser.add_argument("--fulltext-only", action="store_true")
     read_parser.add_argument("--allow-abstract-only", action=argparse.BooleanOptionalAction, default=True)
 
+    read_llm_parser = subparsers.add_parser("read-llm", help="Run optional locator-grounded LLM deep reading.")
+    read_llm_parser.add_argument("--run-id", required=True)
+    read_llm_parser.add_argument("--paper-id", default=None)
+    read_llm_parser.add_argument("--tier", type=int, default=None)
+    read_llm_parser.add_argument("--dry-run-prompts", action="store_true")
+    read_llm_parser.add_argument("--fake", action="store_true")
+    _add_agent_skill_options(read_llm_parser)
+
     mine_parser = subparsers.add_parser("mine-gaps", help="Mine evidence-linked research gaps.")
     mine_parser.add_argument("--run-id", required=True)
     mine_parser.add_argument("--min-confidence", choices=["low", "medium", "high"], default="low")
     mine_parser.add_argument("--include-low-confidence", action="store_true")
     mine_parser.add_argument("--force", action="store_true", help="Overwrite locked generated gap artifacts.")
+
+    mine_llm_parser = subparsers.add_parser("mine-gaps-llm", help="Run optional retrieval-grounded LLM gap mining.")
+    mine_llm_parser.add_argument("--run-id", required=True)
+    mine_llm_parser.add_argument("--fake", action="store_true")
+    mine_llm_parser.add_argument("--dry-run-prompts", action="store_true")
+    mine_llm_parser.add_argument("--force", action="store_true", help="Ignore automated lock preservation for generated gaps.")
+    _add_agent_skill_options(mine_llm_parser)
 
     analogies_parser = subparsers.add_parser("analogies", help="Generate skeptical cross-domain analogy queries.")
     analogies_parser.add_argument("--run-id", required=True)
@@ -84,6 +196,14 @@ def build_parser() -> argparse.ArgumentParser:
     novelty_parser.add_argument("--run-id", default=None)
     novelty_parser.add_argument("--gap-id", default=None)
     novelty_parser.add_argument("--deep", action="store_true")
+
+    novelty_llm_parser = subparsers.add_parser("novelty-check-llm", help="Run optional LLM-assisted novelty dossiers.")
+    novelty_llm_parser.add_argument("--run-id", required=True)
+    novelty_llm_parser.add_argument("--gap-id", default=None)
+    novelty_llm_parser.add_argument("--all", action="store_true")
+    novelty_llm_parser.add_argument("--fake", action="store_true")
+    novelty_llm_parser.add_argument("--dry-run-prompts", action="store_true")
+    _add_agent_skill_options(novelty_llm_parser)
 
     novelty_dossier_parser = subparsers.add_parser("novelty-dossier", help="Write or refresh a closest-prior-work dossier.")
     novelty_dossier_parser.add_argument("--run-id", required=True)
@@ -103,6 +223,7 @@ def build_parser() -> argparse.ArgumentParser:
     review_parser = subparsers.add_parser("review", help="Simulate serious conference-review objections.")
     review_parser.add_argument("--run-id", default=None)
     review_parser.add_argument("--experiment-id", default=None)
+    _add_agent_skill_options(review_parser)
 
     download_parser = subparsers.add_parser("download-pdfs", help="Download available PDFs for papers in a run.")
     download_parser.add_argument("--run-id", required=True)
@@ -113,6 +234,21 @@ def build_parser() -> argparse.ArgumentParser:
     parse_parser = subparsers.add_parser("parse-fulltext", help="Extract PDF text and sectionize available paper artifacts.")
     parse_parser.add_argument("--run-id", required=True)
     parse_parser.add_argument("--paper-id", default=None)
+
+    parse_structure_parser = subparsers.add_parser(
+        "parse-structure",
+        help="Extract references, tables, equations, captions, and OCR status.",
+    )
+    parse_structure_parser.add_argument("--run-id", required=True)
+
+    parse_references_parser = subparsers.add_parser("parse-references", help="Extract parsed references from full-text sections.")
+    parse_references_parser.add_argument("--run-id", required=True)
+
+    parse_tables_parser = subparsers.add_parser("parse-tables", help="Extract table-like text and captions from full-text sections.")
+    parse_tables_parser.add_argument("--run-id", required=True)
+
+    ocr_status_parser = subparsers.add_parser("ocr-status", help="Record and print optional OCR recommendations.")
+    ocr_status_parser.add_argument("--run-id", required=True)
 
     add_paper_parser = subparsers.add_parser("add-paper", help="Manually add or merge paper metadata into a run.")
     add_paper_parser.add_argument("--run-id", required=True)
@@ -161,6 +297,7 @@ def build_parser() -> argparse.ArgumentParser:
     eval_parser = subparsers.add_parser("eval", help="Run offline fixture evaluations.")
     eval_parser.add_argument("--fixture", default=None)
     eval_parser.add_argument("--v2", action="store_true", help="Run v0.2 full-text/evidence/dossier evaluation fixtures.")
+    eval_parser.add_argument("--v3", action="store_true", help="Run v0.3 curated real-world-style evaluation fixtures.")
     eval_parser.add_argument("--write-report", action="store_true")
 
     report_parser = subparsers.add_parser("report", help="Write final_report.md or final_report.json.")
@@ -172,8 +309,45 @@ def build_parser() -> argparse.ArgumentParser:
         help="Refuse to recommend a top direction when coverage/evidence/novelty gates are weak.",
     )
 
+    dashboard_parser = subparsers.add_parser("dashboard", help="Generate a static HTML dashboard for a run or project.")
+    dashboard_scope = dashboard_parser.add_mutually_exclusive_group(required=True)
+    dashboard_scope.add_argument("--run-id")
+    dashboard_scope.add_argument("--project-id")
+    dashboard_parser.add_argument("--open", action="store_true", help="Open the dashboard in the default browser.")
+
+    review_queue_parser = subparsers.add_parser("review-queue", help="Build and print the human review queue.")
+    review_queue_scope = review_queue_parser.add_mutually_exclusive_group(required=True)
+    review_queue_scope.add_argument("--project-id")
+    review_queue_scope.add_argument("--run-id")
+
+    complete_review_item_parser = subparsers.add_parser("complete-review-item", help="Mark a project review queue item completed.")
+    complete_review_item_parser.add_argument("--project-id", required=True)
+    complete_review_item_parser.add_argument("--item-id", required=True)
+    complete_review_item_parser.add_argument("--note", default="")
+    complete_review_item_parser.add_argument("--reviewer", default="human")
+
+    dismiss_review_item_parser = subparsers.add_parser(
+        "dismiss-review-item", help="Dismiss a project review queue item with an audit note."
+    )
+    dismiss_review_item_parser.add_argument("--project-id", required=True)
+    dismiss_review_item_parser.add_argument("--item-id", required=True)
+    dismiss_review_item_parser.add_argument("--reason", required=True)
+    dismiss_review_item_parser.add_argument("--reviewer", default="human")
+
     coverage_parser = subparsers.add_parser("coverage", help="Regenerate source and full-text coverage reports.")
     coverage_parser.add_argument("--run-id", default="latest", help="Run ID to cover, or 'latest' (default).")
+
+    source_policy_parser = subparsers.add_parser("source-policy", help="Inspect or apply a field-specific source policy.")
+    source_policy_parser.add_argument("--list", action="store_true", help="List built-in source policy profiles.")
+    source_policy_parser.add_argument("--run-id", default=None)
+    source_policy_parser.add_argument("--profile", default=None)
+
+    assess_coverage_parser = subparsers.add_parser("assess-coverage", help="Evaluate whether literature coverage is sufficient.")
+    assess_coverage_parser.add_argument("--run-id", required=True)
+    assess_coverage_parser.add_argument("--profile", default=None)
+
+    next_searches_parser = subparsers.add_parser("next-searches", help="Print policy-recommended next source searches.")
+    next_searches_parser.add_argument("--run-id", required=True)
 
     graph_parser = subparsers.add_parser("build-citation-graph", help="Build citation graph from available paper metadata.")
     graph_parser.add_argument("--run-id", required=True)
@@ -235,6 +409,242 @@ def build_parser() -> argparse.ArgumentParser:
     prompt_pack_parser.add_argument("--skill", required=True, choices=["deep-reading", "gap-mining", "novelty-gate", "reviewer-simulation"])
     prompt_pack_parser.add_argument("--gap-id", default=None)
 
+    subparsers.add_parser("agent-status", help="Show optional AgentClient configuration and readiness.")
+
+    agent_task_parser = subparsers.add_parser("agent-task", help="Create a Codex/GPT-5.4 task pack for a research skill.")
+    agent_task_parser.add_argument("--run-id", required=True)
+    agent_task_parser.add_argument(
+        "--skill",
+        required=True,
+        choices=["deep-reading", "gap-mining", "novelty-gate", "reviewer-simulation", "related-work", "manuscript"],
+    )
+    agent_task_parser.add_argument("--gap-id", default="")
+    agent_task_parser.add_argument("--paper-id", default="")
+    agent_task_parser.add_argument("--project-id", default="")
+
+    agent_run_parser = subparsers.add_parser("agent-run", help="Run or prepare an existing AgentClient task.")
+    agent_run_parser.add_argument("--task-id", required=True)
+    agent_run_parser.add_argument("--fake", action="store_true", help="Use FakeAgentClient regardless of environment.")
+
+    agent_import_parser = subparsers.add_parser("agent-import-output", help="Validate and import agent output metadata.")
+    agent_import_parser.add_argument("--task-id", required=True)
+    agent_import_parser.add_argument("--path", action="append", required=True)
+
+    agent_validate_parser = subparsers.add_parser("agent-validate-output", help="Validate agent output without importing it.")
+    agent_validate_parser.add_argument("--task-id", required=True)
+    agent_validate_parser.add_argument("--path", action="append")
+
+    codex_task_parser = subparsers.add_parser("codex-task", help="Create a Codex-compatible research task pack.")
+    codex_task_parser.add_argument("--run-id", required=True)
+    codex_task_parser.add_argument(
+        "--skill",
+        required=True,
+        choices=["deep-reading", "gap-mining", "novelty-gate", "reviewer-simulation", "related-work", "manuscript"],
+    )
+    codex_task_parser.add_argument("--gap-id", default="")
+    codex_task_parser.add_argument("--paper-id", default="")
+    codex_task_parser.add_argument("--project-id", default="")
+
+    validate_agent_output_parser = subparsers.add_parser("validate-agent-output", help="Validate outputs in a Codex task outputs/ dir.")
+    validate_agent_output_parser.add_argument("--task-id", required=True)
+
+    import_agent_output_parser = subparsers.add_parser(
+        "import-agent-output", help="Import outputs in a Codex task outputs/ dir after validation."
+    )
+    import_agent_output_parser.add_argument("--task-id", required=True)
+
+    list_agent_tasks_parser = subparsers.add_parser("list-agent-tasks", help="List Codex/GPT-5.4 agent task packs for a run.")
+    list_agent_tasks_parser.add_argument("--run-id", required=True)
+
+    subparsers.add_parser("canary-list", help="List v0.3 canary run profiles.")
+
+    canary_plan_parser = subparsers.add_parser("canary-plan", help="Print a repeatable canary run plan.")
+    canary_plan_parser.add_argument("--profile", required=True)
+
+    canary_run_parser = subparsers.add_parser("canary-run", help="Run or record a v0.3 canary profile.")
+    canary_run_parser.add_argument("--profile", required=True)
+    canary_run_parser.add_argument("--real", action="store_true", help="Allow real Codex/GPT-5.4 canary execution gate.")
+
+    canary_status_parser = subparsers.add_parser("canary-status", help="Print a canary run record as JSON.")
+    canary_status_parser.add_argument("--canary-id", required=True)
+
+    canary_artifacts_parser = subparsers.add_parser("canary-artifacts", help="List artifacts for a canary run record.")
+    canary_artifacts_parser.add_argument("--canary-id", required=True)
+
+    canary_review_parser = subparsers.add_parser("canary-review", help="Render or record human review for a canary.")
+    canary_review_parser.add_argument("--canary-id", required=True)
+    canary_review_parser.add_argument("--reviewer", default="human")
+    canary_review_action = canary_review_parser.add_mutually_exclusive_group()
+    canary_review_action.add_argument("--accept", action="store_true")
+    canary_review_action.add_argument("--reject", action="store_true")
+    canary_review_parser.add_argument("--reason", default="")
+    canary_review_parser.add_argument("--notes", default="")
+    canary_review_parser.add_argument("--source-coverage-score", type=int, default=0)
+    canary_review_parser.add_argument("--full-text-grounding-score", type=int, default=0)
+    canary_review_parser.add_argument("--citation-grounding-score", type=int, default=0)
+    canary_review_parser.add_argument("--novelty-honesty-score", type=int, default=0)
+    canary_review_parser.add_argument("--gap-quality-score", type=int, default=0)
+    canary_review_parser.add_argument("--experiment-quality-score", type=int, default=0)
+    canary_review_parser.add_argument("--uncertainty-visibility-score", type=int, default=0)
+    canary_review_parser.add_argument("--fake-citation-found", action="store_true")
+    canary_review_parser.add_argument("--unsupported-high-confidence-claim-found", action="store_true")
+    canary_review_parser.add_argument("--obvious-prior-work-missed", action="store_true")
+    canary_review_parser.add_argument("--strict-report-overclaimed", action="store_true")
+
+    canary_summary_parser = subparsers.add_parser("canary-summary", help="Print canary acceptance summary.")
+    canary_summary_parser.add_argument("--canary-id", required=True)
+
+    subparsers.add_parser("real-run-acceptance", help="Report whether v0.3 actual-run acceptance has passed.")
+
+    init_project_parser = subparsers.add_parser("init-project", help="Create a v0.3 project memory workspace.")
+    init_project_parser.add_argument("name")
+    init_project_parser.add_argument("--description", default="")
+
+    subparsers.add_parser("list-projects", help="List project memory workspaces.")
+
+    use_project_parser = subparsers.add_parser("use-project", help="Set the active project memory workspace.")
+    use_project_parser.add_argument("project_id")
+
+    project_status_parser = subparsers.add_parser("project-status", help="Print project memory status.")
+    project_status_parser.add_argument("--project-id", required=True)
+
+    project_report_parser = subparsers.add_parser("project-report", help="Write a project-level memory report.")
+    project_report_parser.add_argument("--project-id", required=True)
+
+    attach_run_parser = subparsers.add_parser("attach-run", help="Attach an existing run to a project memory workspace.")
+    attach_run_parser.add_argument("--project-id", required=True)
+    attach_run_parser.add_argument("--run-id", required=True)
+
+    sync_project_parser = subparsers.add_parser("sync-project-memory", help="Sync attached runs into project memory.")
+    sync_project_parser.add_argument("--project-id", required=True)
+
+    build_claim_graph_parser = subparsers.add_parser("build-claim-graph", help="Build a project-level cumulative claim graph.")
+    build_claim_graph_parser.add_argument("--project-id", required=True)
+
+    claim_graph_parser = subparsers.add_parser("claim-graph", help="Print the project claim graph report.")
+    claim_graph_parser.add_argument("--project-id", required=True)
+
+    contradictions_parser = subparsers.add_parser("contradictions", help="Print unresolved project claim contradictions.")
+    contradictions_parser.add_argument("--project-id", required=True)
+
+    resolve_contradiction_parser = subparsers.add_parser(
+        "resolve-contradiction", help="Record a human resolution for a claim contradiction."
+    )
+    resolve_contradiction_parser.add_argument("--project-id", required=True)
+    resolve_contradiction_parser.add_argument("--claim-a", required=True)
+    resolve_contradiction_parser.add_argument("--claim-b", required=True)
+    resolve_contradiction_parser.add_argument("--note", required=True)
+
+    create_direction_parser = subparsers.add_parser("create-direction", help="Create a project research direction from a gap.")
+    create_direction_parser.add_argument("--project-id", required=True)
+    create_direction_parser.add_argument("--gap-id", required=True)
+
+    list_directions_parser = subparsers.add_parser("list-directions", help="List project research directions.")
+    list_directions_parser.add_argument("--project-id", required=True)
+
+    mature_direction_parser = subparsers.add_parser("mature-direction", help="Evaluate and update a direction maturity state.")
+    mature_direction_parser.add_argument("--project-id", required=True)
+    mature_direction_parser.add_argument("--direction-id", required=True)
+
+    direction_card_parser = subparsers.add_parser("direction-card", help="Print and write a direction card.")
+    direction_card_parser.add_argument("--project-id", required=True)
+    direction_card_parser.add_argument("--direction-id", required=True)
+
+    reject_direction_parser = subparsers.add_parser("reject-direction", help="Reject a project research direction.")
+    reject_direction_parser.add_argument("--project-id", required=True)
+    reject_direction_parser.add_argument("--direction-id", required=True)
+    reject_direction_parser.add_argument("--reason", required=True)
+
+    related_work_parser = subparsers.add_parser("related-work-matrix", help="Build a structured related-work matrix.")
+    related_work_scope = related_work_parser.add_mutually_exclusive_group(required=True)
+    related_work_scope.add_argument("--project-id")
+    related_work_scope.add_argument("--run-id")
+    related_work_parser.add_argument("--direction-id", default="")
+    related_work_parser.add_argument("--gap-id", default="")
+
+    must_read_parser = subparsers.add_parser("must-read", help="List must-read papers for a project research direction.")
+    must_read_parser.add_argument("--project-id", required=True)
+    must_read_parser.add_argument("--direction-id", required=True)
+
+    protocol_parser = subparsers.add_parser("experiment-protocol", help="Generate an executable experiment protocol.")
+    protocol_parser.add_argument("--project-id", required=True)
+    protocol_parser.add_argument("--direction-id", required=True)
+
+    baselines_parser = subparsers.add_parser("baselines", help="List baseline candidates for a project research direction.")
+    baselines_parser.add_argument("--project-id", required=True)
+    baselines_parser.add_argument("--direction-id", required=True)
+
+    reproducibility_parser = subparsers.add_parser("reproducibility-checklist", help="Print a reproducibility checklist.")
+    reproducibility_parser.add_argument("--run-id", required=True)
+    reproducibility_parser.add_argument("--experiment-id", required=True)
+
+    review_panel_parser = subparsers.add_parser("review-panel", help="Build a v0.3 review panel for a project direction.")
+    review_panel_parser.add_argument("--project-id", required=True)
+    review_panel_parser.add_argument("--direction-id", required=True)
+
+    rebuttal_plan_parser = subparsers.add_parser("rebuttal-plan", help="Print the rebuttal plan for a project direction.")
+    rebuttal_plan_parser.add_argument("--project-id", required=True)
+    rebuttal_plan_parser.add_argument("--direction-id", required=True)
+
+    meta_review_parser = subparsers.add_parser("meta-review", help="Print the meta-review for a project direction.")
+    meta_review_parser.add_argument("--project-id", required=True)
+    meta_review_parser.add_argument("--direction-id", required=True)
+
+    export_package_parser = subparsers.add_parser("export-paper-package", help="Export a manuscript starter kit for a direction.")
+    export_package_parser.add_argument("--project-id", required=True)
+    export_package_parser.add_argument("--direction-id", required=True)
+    export_package_parser.add_argument("--allow-rejected", action="store_true")
+
+    export_manuscript_parser = subparsers.add_parser("export-manuscript", help="Export a run-level manuscript starter kit for a gap.")
+    export_manuscript_parser.add_argument("--run-id", required=True)
+    export_manuscript_parser.add_argument("--gap-id", required=True)
+    export_manuscript_parser.add_argument("--allow-rejected", action="store_true")
+
+    export_bib_parser = subparsers.add_parser("export-bib", help="Export BibTeX for a project research direction.")
+    export_bib_parser.add_argument("--project-id", required=True)
+    export_bib_parser.add_argument("--direction-id", required=True)
+
+    build_index_parser = subparsers.add_parser("build-index", help="Build a v0.3 hybrid retrieval index.")
+    build_index_scope = build_index_parser.add_mutually_exclusive_group(required=True)
+    build_index_scope.add_argument("--run-id")
+    build_index_scope.add_argument("--project-id")
+
+    search_index_parser = subparsers.add_parser("search-index", help="Search a persisted hybrid retrieval index.")
+    search_index_scope = search_index_parser.add_mutually_exclusive_group(required=True)
+    search_index_scope.add_argument("--run-id")
+    search_index_scope.add_argument("--project-id")
+    search_index_parser.add_argument("query")
+    search_index_parser.add_argument("--top-k", type=int, default=10)
+
+    explain_retrieval_parser = subparsers.add_parser("explain-retrieval", help="Explain hybrid retrieval scores for a query.")
+    explain_retrieval_parser.add_argument("--run-id", required=True)
+    explain_retrieval_parser.add_argument("query")
+    explain_retrieval_parser.add_argument("--top-k", type=int, default=10)
+
+    subparsers.add_parser("llm-status", help="Show optional LLM provider configuration and readiness.")
+
+    llm_test_parser = subparsers.add_parser("llm-test", help="Run a safe LLM smoke test.")
+    llm_test_parser.add_argument("--fake", action="store_true", help="Use FakeLLMClient even if provider mode is configured.")
+    llm_test_parser.add_argument("--run-id", default=None, help="Optional run for usage/transcript audit artifacts.")
+
+    llm_usage_parser = subparsers.add_parser("llm-usage", help="Print per-run LLM usage JSON.")
+    llm_usage_parser.add_argument("--run-id", required=True)
+
+    llm_transcripts_parser = subparsers.add_parser("llm-transcripts", help="Print per-run LLM transcript markdown.")
+    llm_transcripts_parser.add_argument("--run-id", required=True)
+
+    audit_artifacts_parser = subparsers.add_parser("audit-artifacts", help="Classify generated artifacts for commit safety.")
+    audit_artifacts_scope = audit_artifacts_parser.add_mutually_exclusive_group(required=True)
+    audit_artifacts_scope.add_argument("--run-id")
+    audit_artifacts_scope.add_argument("--project-id")
+
+    clean_generated_parser = subparsers.add_parser("clean-generated", help="Remove generated/sensitive artifacts from a run.")
+    clean_generated_parser.add_argument("--run-id", required=True)
+
+    export_safe_bundle_parser = subparsers.add_parser("export-safe-bundle", help="Export a redacted project bundle without PDFs.")
+    export_safe_bundle_parser.add_argument("--project-id", required=True)
+    export_safe_bundle_parser.add_argument("--include-pdfs", action="store_true", help="Include PDFs explicitly; unsafe by default.")
+
     subparsers.add_parser("cache-info", help="Print source cache diagnostics as JSON.")
     subparsers.add_parser("show-state", help="Print latest state.json.")
     subparsers.add_parser("validate-state", help="Validate the latest run state.")
@@ -249,7 +659,7 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         return _dispatch(args, config, orchestrator, parser)
-    except (FileNotFoundError, ValueError, KeyError) as exc:
+    except (FileNotFoundError, ValueError, KeyError, AgentUnavailableError) as exc:
         print(f"gapforge: error: {exc}", file=sys.stderr)
         return 1
     except KeyboardInterrupt:
@@ -266,6 +676,35 @@ def _dispatch(
     if args.command == "init-topic":
         state = orchestrator.init_topic(args.topic)
         print(state.run_dir)
+        return 0
+    if args.command == "run-active":
+        state = orchestrator.run_active(
+            args.topic,
+            budget=budget_from_name(args.budget),
+            project_id=args.project_id,
+            source_policy_profile=args.profile,
+        )
+        _print_active_result(state)
+        return 0
+    if args.command == "active-status":
+        state = ResearchStateManager(config).load_run(args.run_id)
+        payload = {
+            "run_id": state.run_id,
+            "status": state.active_loop.status if state.active_loop else "not_started",
+            "current_iteration": state.active_loop.current_iteration if state.active_loop else 0,
+            "decision_count": len(state.active_loop.decisions) if state.active_loop else 0,
+            "coverage_profile": state.coverage_stopping_assessment.profile_id if state.coverage_stopping_assessment else "",
+            "enough_for_novelty": state.coverage_stopping_assessment.enough_for_novelty if state.coverage_stopping_assessment else False,
+        }
+        print(json.dumps(payload, indent=2))
+        return 0
+    if args.command == "active-decisions":
+        state = ResearchStateManager(config).load_run(args.run_id)
+        path = Path(state.run_dir) / "active_decisions.md"
+        if path.exists():
+            print(path.read_text(encoding="utf-8"), end="")
+            return 0
+        print("No active decisions recorded.")
         return 0
     if args.command == "search":
         state = orchestrator.search(
@@ -313,6 +752,27 @@ def _dispatch(
         )
         print(f"Wrote {len(state.paper_notes)} paper notes to {Path(state.run_dir) / 'paper_notes.md'}")
         return 0
+    if args.command == "read-llm":
+        if _uses_agent_skill(args):
+            return _run_agent_skill_command(
+                config,
+                run_id=args.run_id,
+                skill_name="deep-reading",
+                agent_mode=args.agent_mode,
+                model=args.model,
+                import_outputs=args.import_output,
+                validate_only=args.validate_only,
+                paper_id=args.paper_id or "",
+            )
+        state = orchestrator.read_llm(
+            run_id=args.run_id,
+            tier=args.tier,
+            paper_id=args.paper_id,
+            dry_run_prompts=args.dry_run_prompts,
+            fake=args.fake,
+        )
+        print(f"Wrote LLM deep reading artifacts to {Path(state.run_dir) / 'deep_reading_llm.md'}")
+        return 0
     if args.command == "mine-gaps":
         state = orchestrator.mine_gaps(
             run_id=args.run_id,
@@ -321,6 +781,25 @@ def _dispatch(
             force=args.force,
         )
         print(f"Wrote {len(state.gaps)} gap candidates to {Path(state.run_dir) / 'gaps.md'}")
+        return 0
+    if args.command == "mine-gaps-llm":
+        if _uses_agent_skill(args):
+            return _run_agent_skill_command(
+                config,
+                run_id=args.run_id,
+                skill_name="gap-mining",
+                agent_mode=args.agent_mode,
+                model=args.model,
+                import_outputs=args.import_output,
+                validate_only=args.validate_only,
+            )
+        state = orchestrator.mine_gaps_llm(
+            run_id=args.run_id,
+            dry_run_prompts=args.dry_run_prompts,
+            fake=args.fake,
+            force=args.force,
+        )
+        print(f"Wrote LLM gap mining artifacts to {Path(state.run_dir) / 'gap_mining_llm.md'}")
         return 0
     if args.command == "analogies":
         state = orchestrator.analogies(
@@ -333,6 +812,29 @@ def _dispatch(
     if args.command == "novelty-check":
         state = orchestrator.novelty_check(run_id=args.run_id, gap_id=args.gap_id, deep=args.deep)
         print(f"Wrote {len(state.novelty_assessments)} novelty assessments to {Path(state.run_dir) / 'novelty_gate.md'}")
+        return 0
+    if args.command == "novelty-check-llm":
+        if not args.all and not args.gap_id:
+            parser.error("novelty-check-llm requires --gap-id or --all")
+        if _uses_agent_skill(args):
+            return _run_agent_skill_command(
+                config,
+                run_id=args.run_id,
+                skill_name="novelty-gate",
+                agent_mode=args.agent_mode,
+                model=args.model,
+                import_outputs=args.import_output,
+                validate_only=args.validate_only,
+                gap_id=args.gap_id or "",
+            )
+        state = orchestrator.novelty_check_llm(
+            run_id=args.run_id,
+            gap_id=args.gap_id,
+            all_targets=args.all,
+            dry_run_prompts=args.dry_run_prompts,
+            fake=args.fake,
+        )
+        print(f"Wrote LLM novelty artifacts to {Path(state.run_dir) / 'novelty_gate_llm.md'}")
         return 0
     if args.command == "novelty-dossier":
         state = orchestrator.novelty_check(run_id=args.run_id, gap_id=args.gap_id, deep=True)
@@ -352,6 +854,18 @@ def _dispatch(
         print(f"Wrote {len(state.experiments)} experiments to {Path(state.run_dir) / 'experiments.md'}")
         return 0
     if args.command == "review":
+        if _uses_agent_skill(args):
+            if args.run_id is None:
+                parser.error("review with --agent requires --run-id")
+            return _run_agent_skill_command(
+                config,
+                run_id=args.run_id,
+                skill_name="reviewer-simulation",
+                agent_mode=args.agent_mode,
+                model=args.model,
+                import_outputs=args.import_output,
+                validate_only=args.validate_only,
+            )
         state = orchestrator.review(run_id=args.run_id, experiment_id=args.experiment_id)
         print(f"Wrote {len(state.reviewer_objections)} reviewer objections to {Path(state.run_dir) / 'reviewer_simulation.md'}")
         return 0
@@ -382,6 +896,37 @@ def _dispatch(
             f"Parsed {len(sections)} paper sections. "
             f"Sections: {Path(state.run_dir) / 'paper_sections.json'} Coverage: {Path(state.run_dir) / 'full_text_coverage.md'}"
         )
+        return 0
+    if args.command == "parse-structure":
+        manager = ResearchStateManager(config)
+        state = manager.load_run(args.run_id)
+        FullTextStructureParser().parse_all(state)
+        manager.save_run(state)
+        print(
+            f"Parsed structure: {len(state.references)} references, {len(state.tables)} tables, "
+            f"{len(state.equations)} equations, {len(state.captions)} captions."
+        )
+        return 0
+    if args.command == "parse-references":
+        manager = ResearchStateManager(config)
+        state = manager.load_run(args.run_id)
+        FullTextStructureParser().parse_references(state)
+        manager.save_run(state)
+        print(f"Parsed {len(state.references)} references to {Path(state.run_dir) / 'references.json'}")
+        return 0
+    if args.command == "parse-tables":
+        manager = ResearchStateManager(config)
+        state = manager.load_run(args.run_id)
+        FullTextStructureParser().parse_tables(state)
+        manager.save_run(state)
+        print(f"Parsed {len(state.tables)} tables and {len(state.captions)} captions to {Path(state.run_dir) / 'tables.json'}")
+        return 0
+    if args.command == "ocr-status":
+        manager = ResearchStateManager(config)
+        state = manager.load_run(args.run_id)
+        FullTextStructureParser().record_ocr_status(state)
+        manager.save_run(state)
+        print(Path(state.run_dir, "ocr_status.md").read_text(encoding="utf-8"), end="")
         return 0
     if args.command == "add-paper":
         manager = ResearchStateManager(config)
@@ -443,15 +988,38 @@ def _dispatch(
             sources=_source_names(args.sources),
             dry_run=args.dry_run,
             v2=args.v2,
+            v3=args.v3,
+            project_id=args.project_id,
+            source_profile=args.source_profile,
+            active=args.active,
             download_pdfs=args.download_pdfs,
             parse_fulltext=args.parse_fulltext,
             deep_novelty=args.deep_novelty,
             strict_report=args.strict_report,
             skip_pdf_download=args.skip_pdf_download,
             max_expanded_papers=args.max_expanded_papers,
+            llm_reading=args.llm_reading,
+            llm_gaps=args.llm_gaps,
+            llm_novelty=args.llm_novelty,
+            llm_review=args.llm_review,
+            build_index=args.build_index,
+            mature_directions=args.mature_directions,
+            export_package=args.export_package,
+            dashboard=args.dashboard,
+            budget=budget_from_name(args.budget),
+            run_mode=args.mode,
+            agent=args.agent,
+            model=args.model,
+            agent_task_pack=args.agent_task_pack,
+            require_real_agent=args.require_real_agent,
+            canary_profile=args.canary_profile,
+            record_canary=args.record_canary,
         )
-        _print_run_result(state)
-        return 0
+        if args.v3 and args.active and not args.dry_run:
+            _print_active_result(state)
+        else:
+            _print_run_result(state)
+        return 1 if state.orchestrator_result is not None and state.orchestrator_result.status == "failed" else 0
     if args.command == "resume":
         state = orchestrator.resume(run_id=args.run_id)
         _print_run_result(state)
@@ -461,7 +1029,7 @@ def _dispatch(
         print(json.dumps(to_plain(status_result), indent=2))
         return 0
     if args.command == "eval":
-        report = run_evals(fixture=args.fixture, output_dir=config.root, write_report=True, v2=args.v2)
+        report = run_evals(fixture=args.fixture, output_dir=config.root, write_report=True, v2=args.v2, v3=args.v3)
         target = report.report_path or (config.root / "eval_report.md")
         print(f"Wrote evaluation report to {target}")
         print(f"Overall score: {report.overall_score:.3f}")
@@ -471,17 +1039,93 @@ def _dispatch(
         path = write_final_report(state, output_format=args.format, strict=args.strict)
         print(f"Wrote final report to {path}")
         return 0
+    if args.command == "dashboard":
+        dashboard = StaticDashboardBuilder(config)
+        result = dashboard.build_project(args.project_id) if args.project_id else dashboard.build_run(args.run_id)
+        if args.open:
+            dashboard.open(result)
+        print(f"Wrote dashboard to {result.index_path}")
+        return 0
+    if args.command == "review-queue":
+        queue_manager = ReviewQueueManager(config)
+        queue = queue_manager.build_for_project(args.project_id) if args.project_id else queue_manager.build_for_run(args.run_id)
+        print(render_review_queue_markdown(queue), end="")
+        return 0
+    if args.command == "complete-review-item":
+        item = ReviewQueueManager(config).complete_project_item(
+            args.project_id,
+            args.item_id,
+            note=args.note,
+            reviewer=args.reviewer,
+        )
+        print(f"Completed review item {item.id}.")
+        return 0
+    if args.command == "dismiss-review-item":
+        item = ReviewQueueManager(config).dismiss_project_item(
+            args.project_id,
+            args.item_id,
+            reason=args.reason,
+            reviewer=args.reviewer,
+        )
+        print(f"Dismissed review item {item.id}.")
+        return 0
     if args.command == "coverage":
         manager = ResearchStateManager(config)
         coverage_state = manager.load_latest() if args.run_id == "latest" else manager.load_run(args.run_id)
         if coverage_state is None:
             raise FileNotFoundError('No run state found. Start with `gapforge run "your topic"`.')
         refresh_source_coverage(coverage_state, [str(item) for item in coverage_state.config.get("_coverage_warnings", []) if str(item)])
+        refresh_stopping_assessment(coverage_state)
         manager.save_run(coverage_state)
         print(
             f"Wrote coverage reports to {Path(coverage_state.run_dir) / 'source_coverage.md'} "
             f"and {Path(coverage_state.run_dir) / 'full_text_coverage.md'}"
         )
+        return 0
+    if args.command == "source-policy":
+        profiles = default_source_policy_profiles()
+        if args.list or not args.run_id:
+            for profile_item in profiles.values():
+                print(
+                    f"{profile_item.id}\t{profile_item.field_name}\trequired={','.join(profile_item.required_sources) or 'none'}\t"
+                    f"min_papers={profile_item.minimum_papers}\tmin_full_text={profile_item.minimum_full_text_papers}"
+                )
+            return 0
+        manager = ResearchStateManager(config)
+        state = manager.load_run(args.run_id)
+        policy_profile = get_source_policy_profile(args.profile) if args.profile else None
+        if policy_profile is not None:
+            state.config["source_policy_profile"] = policy_profile.id
+        refresh_source_coverage(state, [str(item) for item in state.config.get("_coverage_warnings", []) if str(item)])
+        assessment = refresh_stopping_assessment(state, profile=policy_profile)
+        manager.save_run(state)
+        print(render_stopping_assessment_markdown(assessment), end="")
+        return 0
+    if args.command == "assess-coverage":
+        manager = ResearchStateManager(config)
+        state = manager.load_run(args.run_id)
+        policy_profile = get_source_policy_profile(args.profile) if args.profile else None
+        if policy_profile is not None:
+            state.config["source_policy_profile"] = policy_profile.id
+        refresh_source_coverage(state, [str(item) for item in state.config.get("_coverage_warnings", []) if str(item)])
+        assessment = refresh_stopping_assessment(state, profile=policy_profile)
+        manager.save_run(state)
+        print(render_stopping_assessment_markdown(assessment), end="")
+        return 0
+    if args.command == "next-searches":
+        manager = ResearchStateManager(config)
+        state = manager.load_run(args.run_id)
+        if state.coverage_stopping_assessment is None:
+            refresh_source_coverage(state, [str(item) for item in state.config.get("_coverage_warnings", []) if str(item)])
+            refresh_stopping_assessment(state)
+            manager.save_run(state)
+        next_assessment = state.coverage_stopping_assessment
+        if next_assessment is None:
+            raise ValueError("Coverage stopping assessment was not generated.")
+        if not next_assessment.recommended_queries:
+            print("No additional searches recommended by the current source policy.")
+            return 0
+        print("\n".join(next_assessment.recommended_queries))
         return 0
     if args.command == "build-citation-graph":
         state = orchestrator.build_citation_graph(run_id=args.run_id)
@@ -584,6 +1228,363 @@ def _dispatch(
         path = orchestrator.write_prompt_pack(run_id=args.run_id, skill_name=args.skill, gap_id=args.gap_id)
         print(f"Wrote prompt pack to {path}")
         return 0
+    if args.command == "agent-status":
+        print(json.dumps(agent_status(AgentRuntimeConfig.from_env()), indent=2))
+        return 0
+    if args.command in {"agent-task", "codex-task"}:
+        manager = ResearchStateManager(config)
+        state = manager.load_run(args.run_id)
+        task_spec = create_agent_task_spec(
+            state,
+            skill_name=args.skill,
+            gap_id=args.gap_id,
+            paper_id=args.paper_id,
+            project_id=args.project_id,
+        )
+        state.agent_task_specs.append(task_spec)
+        pack_dir = CodexAgentClient(config, AgentRuntimeConfig(mode="task-pack")).create_task_pack(state, task_spec)
+        manager.save_run(state)
+        print(f"Wrote agent task {task_spec.id} to {pack_dir}")
+        return 0
+    if args.command == "agent-run":
+        task_spec = _load_agent_task(config, args.task_id)
+        agent_client = _agent_client_for_command(config, fake=args.fake)
+        record = agent_client.run_task(task_spec)
+        print(json.dumps(to_plain(record), indent=2))
+        return 0
+    if args.command == "agent-import-output":
+        task_spec = _load_agent_task(config, args.task_id)
+        agent_client = CodexAgentClient(config, AgentRuntimeConfig(mode="task-pack"))
+        validation = agent_client.import_outputs(task_spec, [Path(path) for path in args.path])
+        print(json.dumps(to_plain(validation), indent=2))
+        return 0 if validation.status == "valid" else 1
+    if args.command == "agent-validate-output":
+        task_spec = _load_agent_task(config, args.task_id)
+        agent_client = CodexAgentClient(config, AgentRuntimeConfig(mode="task-pack"))
+        validation = agent_client.validate_outputs(task_spec, [Path(path) for path in args.path] if args.path else [])
+        print(json.dumps(to_plain(validation), indent=2))
+        return 0 if validation.status == "valid" else 1
+    if args.command == "validate-agent-output":
+        task_spec = _load_agent_task(config, args.task_id)
+        validation = CodexAgentClient(config, AgentRuntimeConfig(mode="task-pack")).validate_outputs(task_spec, [])
+        print(json.dumps(to_plain(validation), indent=2))
+        return 0 if validation.status == "valid" else 1
+    if args.command == "import-agent-output":
+        task_spec = _load_agent_task(config, args.task_id)
+        validation = CodexAgentClient(config, AgentRuntimeConfig(mode="task-pack")).import_outputs(task_spec, [])
+        print(json.dumps(to_plain(validation), indent=2))
+        return 0 if validation.status == "valid" else 1
+    if args.command == "list-agent-tasks":
+        state = ResearchStateManager(config).load_run(args.run_id)
+        if not state.agent_task_specs:
+            print("No agent tasks.")
+            return 0
+        for task_spec in state.agent_task_specs:
+            validations = [item for item in state.agent_validation_results if item.task_spec_id == task_spec.id]
+            status = validations[-1].status if validations else "not_validated"
+            print(f"{task_spec.id}\t{task_spec.skill_name}\t{task_spec.task_type}\t{status}")
+        return 0
+    if args.command == "canary-list":
+        for profile in default_canary_profiles():
+            print(
+                f"{profile.id}\t{profile.mode}\t"
+                f"network={str(profile.requires_network).lower()}\t"
+                f"codex={str(profile.requires_codex).lower()}\t{profile.title}"
+            )
+        return 0
+    if args.command == "canary-plan":
+        print(CanaryRunManager(config).plan(args.profile), end="")
+        return 0
+    if args.command == "canary-run":
+        canary_record = CanaryRunManager(config).run(args.profile, real=args.real)
+        print(json.dumps(to_plain(canary_record), indent=2))
+        return 0 if canary_record.status in {"complete", "reviewed", "accepted", "planned"} else 1
+    if args.command == "canary-status":
+        canary_record = CanaryRunManager(config).load_record(args.canary_id)
+        print(json.dumps(to_plain(canary_record), indent=2))
+        return 0
+    if args.command == "canary-artifacts":
+        paths = CanaryRunManager(config).artifact_paths(args.canary_id)
+        print("\n".join(paths) if paths else "No canary artifacts recorded.")
+        return 0
+    if args.command == "canary-review":
+        review_manager = CanaryReviewManager(config)
+        if not args.accept and not args.reject:
+            print(review_manager.render_form(args.canary_id), end="")
+            return 0
+        review, summary = review_manager.review(
+            args.canary_id,
+            reviewer=args.reviewer,
+            accept=args.accept,
+            reject=args.reject,
+            reason=args.reason,
+            notes=args.notes,
+            source_coverage_score=args.source_coverage_score,
+            full_text_grounding_score=args.full_text_grounding_score,
+            citation_grounding_score=args.citation_grounding_score,
+            novelty_honesty_score=args.novelty_honesty_score,
+            gap_quality_score=args.gap_quality_score,
+            experiment_quality_score=args.experiment_quality_score,
+            uncertainty_visibility_score=args.uncertainty_visibility_score,
+            fake_citation_found=args.fake_citation_found,
+            unsupported_high_confidence_claim_found=args.unsupported_high_confidence_claim_found,
+            obvious_prior_work_missed=args.obvious_prior_work_missed,
+            strict_report_behaved_correctly=not args.strict_report_overclaimed,
+        )
+        print(json.dumps({"review": to_plain(review), "summary": to_plain(summary)}, indent=2))
+        return 0 if summary.passed else 1
+    if args.command == "canary-summary":
+        summary = CanaryReviewManager(config).summary(args.canary_id)
+        print(json.dumps(to_plain(summary), indent=2))
+        return 0 if summary.passed else 1
+    if args.command == "real-run-acceptance":
+        payload = CanaryReviewManager(config).real_run_acceptance()
+        print(json.dumps(payload, indent=2))
+        return 0 if payload.get("passed") else 1
+    if args.command == "init-project":
+        program = ProjectMemoryManager(config).create_project(args.name, description=args.description)
+        print(program.project.root_dir)
+        return 0
+    if args.command == "list-projects":
+        project_manager = ProjectMemoryManager(config)
+        projects = project_manager.list_projects()
+        active_id = project_manager.active_project_id()
+        if not projects:
+            print("No projects found.")
+            return 0
+        for project in projects:
+            marker = " *active*" if project.id == active_id else ""
+            print(f"{project.id}\t{project.name}\t{project.status}\t{len(project.run_ids)} run(s){marker}")
+        return 0
+    if args.command == "use-project":
+        project = ProjectMemoryManager(config).use_project(args.project_id)
+        print(f"Using project {project.id}: {project.name}")
+        return 0
+    if args.command == "project-status":
+        program = ProjectMemoryManager(config).load_project(args.project_id)
+        print(json.dumps(_project_status_payload(program), indent=2))
+        return 0
+    if args.command == "project-report":
+        project_manager = ProjectMemoryManager(config)
+        program = project_manager.load_project(args.project_id)
+        path = project_manager.write_project_report(program)
+        print(f"Wrote project report to {path}")
+        return 0
+    if args.command == "attach-run":
+        program = ProjectMemoryManager(config).attach_run(args.project_id, args.run_id)
+        print(f"Attached run {args.run_id} to project {program.project.id}.")
+        return 0
+    if args.command == "sync-project-memory":
+        program = ProjectMemoryManager(config).sync_project_memory(args.project_id)
+        print(
+            f"Synced project {program.project.id}: {len(program.corpus_papers)} corpus papers, "
+            f"{len(program.memory_records)} memory records, {len(program.research_directions)} research directions."
+        )
+        return 0
+    if args.command == "build-claim-graph":
+        claim_graph = ProjectClaimGraphManager(config).build(args.project_id)
+        print(
+            f"Built claim graph for {claim_graph.project_id}: {len(claim_graph.nodes)} nodes, "
+            f"{len(claim_graph.edges)} edges, {len(claim_graph.unresolved_contradictions)} unresolved contradiction(s)."
+        )
+        return 0
+    if args.command == "claim-graph":
+        print(ProjectClaimGraphManager(config).render(args.project_id), end="")
+        return 0
+    if args.command == "contradictions":
+        loaded_claim_graph = ProjectClaimGraphManager(config).load(args.project_id)
+        assert loaded_claim_graph is not None
+        if not loaded_claim_graph.unresolved_contradictions:
+            print("No unresolved contradictions.")
+            return 0
+        print("\n".join(loaded_claim_graph.unresolved_contradictions))
+        return 0
+    if args.command == "resolve-contradiction":
+        claim_graph = ProjectClaimGraphManager(config).resolve_contradiction(args.project_id, args.claim_a, args.claim_b, args.note)
+        print(f"Resolved contradiction note recorded. Unresolved contradictions: {len(claim_graph.unresolved_contradictions)}")
+        return 0
+    if args.command == "create-direction":
+        direction = DirectionMaturationManager(config).create_direction(args.project_id, args.gap_id)
+        print(f"Created direction {direction.id} at maturity {direction.maturity}.")
+        return 0
+    if args.command == "list-directions":
+        program = ProjectMemoryManager(config).load_project(args.project_id)
+        if not program.research_directions:
+            print("No research directions.")
+            return 0
+        for direction in sorted(program.research_directions, key=lambda item: (-item.readiness_score, item.title)):
+            print(f"{direction.id}\t{direction.maturity}\t{direction.readiness_score:.2f}\t{direction.title}")
+        return 0
+    if args.command == "mature-direction":
+        direction = DirectionMaturationManager(config).mature_direction(args.project_id, args.direction_id)
+        print(f"Matured direction {direction.id}: {direction.maturity} ({direction.readiness_score:.2f}).")
+        return 0
+    if args.command == "direction-card":
+        direction_manager = DirectionMaturationManager(config)
+        card = direction_manager.render_card(args.project_id, args.direction_id)
+        direction_manager.write_card(args.project_id, args.direction_id)
+        print(card, end="")
+        return 0
+    if args.command == "reject-direction":
+        direction = DirectionMaturationManager(config).reject_direction(args.project_id, args.direction_id, args.reason)
+        print(f"Rejected direction {direction.id}: {args.reason}")
+        return 0
+    if args.command == "related-work-matrix":
+        builder = RelatedWorkMatrixBuilder(config)
+        if args.project_id:
+            if not args.direction_id:
+                parser.error("related-work-matrix with --project-id requires --direction-id")
+            matrix = builder.build_for_project(args.project_id, args.direction_id)
+            print(
+                f"Wrote related-work matrix for {matrix.direction_id}: {len(matrix.entries)} entries, "
+                f"{len(matrix.must_read_paper_ids)} must-read, {len(matrix.baseline_paper_ids)} baselines."
+            )
+            return 0
+        if not args.gap_id:
+            parser.error("related-work-matrix with --run-id requires --gap-id")
+        matrix = builder.build_for_run(args.run_id, args.gap_id)
+        print(
+            f"Wrote related-work matrix for {matrix.direction_id}: {len(matrix.entries)} entries, "
+            f"{len(matrix.must_read_paper_ids)} must-read, {len(matrix.baseline_paper_ids)} baselines."
+        )
+        return 0
+    if args.command == "must-read":
+        paper_ids = RelatedWorkMatrixBuilder(config).must_read_for_project(args.project_id, args.direction_id)
+        print("\n".join(paper_ids) if paper_ids else "No must-read papers recorded.")
+        return 0
+    if args.command == "experiment-protocol":
+        protocol = ExperimentProtocolBuilder(config).build_for_project(args.project_id, args.direction_id)
+        print(render_protocol_markdown(protocol), end="")
+        return 0
+    if args.command == "baselines":
+        candidates = ExperimentProtocolBuilder(config).baseline_candidates_for_project(args.project_id, args.direction_id)
+        print(render_baseline_candidates_markdown(candidates), end="")
+        return 0
+    if args.command == "reproducibility-checklist":
+        checklist = ExperimentProtocolBuilder(config).reproducibility_for_run(args.run_id, args.experiment_id)
+        print(render_reproducibility_checklist(checklist), end="")
+        return 0
+    if args.command == "review-panel":
+        panel = ReviewPanelBuilder(config).build_for_project(args.project_id, args.direction_id)
+        print(render_review_panel_markdown(panel), end="")
+        return 0
+    if args.command == "rebuttal-plan":
+        review_panel_builder = ReviewPanelBuilder(config)
+        review_panel_builder.rebuttal_plan_for_project(args.project_id, args.direction_id)
+        program = ProjectMemoryManager(config).load_project(args.project_id)
+        panels = [panel for panel in program.review_panels if panel.experiment_or_direction_id == args.direction_id]
+        print(render_rebuttal_plans_markdown(panels), end="")
+        return 0
+    if args.command == "meta-review":
+        review_panel_builder = ReviewPanelBuilder(config)
+        review_panel_builder.meta_review_for_project(args.project_id, args.direction_id)
+        program = ProjectMemoryManager(config).load_project(args.project_id)
+        panels = [panel for panel in program.review_panels if panel.experiment_or_direction_id == args.direction_id]
+        print(render_meta_review_markdown(panels), end="")
+        return 0
+    if args.command == "export-paper-package":
+        package = PaperPackageExporter(config).export_project_direction(
+            args.project_id,
+            args.direction_id,
+            allow_rejected=args.allow_rejected,
+        )
+        print(
+            f"Exported paper package {package.id} with {len(package.files)} files "
+            f"(readiness={package.readiness}, missing={len(package.missing_requirements)})."
+        )
+        return 0
+    if args.command == "export-manuscript":
+        package = PaperPackageExporter(config).export_run_gap(args.run_id, args.gap_id, allow_rejected=args.allow_rejected)
+        print(
+            f"Exported manuscript package {package.id} with {len(package.files)} files "
+            f"(readiness={package.readiness}, missing={len(package.missing_requirements)})."
+        )
+        return 0
+    if args.command == "export-bib":
+        exporter = PaperPackageExporter(config)
+        exporter.export_project_direction(args.project_id, args.direction_id, allow_rejected=True)
+        bib_program = ProjectMemoryManager(config).load_project(args.project_id)
+        package_dir = Path(bib_program.project.root_dir) / "paper_packages" / args.direction_id
+        bib = package_dir / "bibliography.bib"
+        if bib.exists():
+            print(bib.read_text(encoding="utf-8"), end="")
+            return 0
+        print(render_bibtex([]), end="")
+        return 0
+    if args.command == "build-index":
+        if args.run_id:
+            manager = ResearchStateManager(config)
+            state = manager.load_run(args.run_id)
+            manifest = build_run_index(state)
+            manager.save_run(state)
+        else:
+            project_manager = ProjectMemoryManager(config)
+            program = project_manager.load_project(args.project_id)
+            manifest = build_project_index(program)
+        print(f"Built {manifest.index_type} retrieval index with {manifest.document_count} documents at {manifest.path}")
+        return 0
+    if args.command == "search-index":
+        results = (
+            search_run_index(config, args.run_id, args.query, top_k=args.top_k)
+            if args.run_id
+            else search_project_index(config, args.project_id, args.query, top_k=args.top_k)
+        )
+        print(_format_retrieval_results(results))
+        return 0
+    if args.command == "explain-retrieval":
+        results = search_run_index(config, args.run_id, args.query, top_k=args.top_k)
+        state = ResearchStateManager(config).load_run(args.run_id)
+        manifest = RetrievalIndexStore.for_run(state.run_dir).load_manifest()
+        print(_format_retrieval_explanation(manifest, results))
+        return 0
+    if args.command == "llm-status":
+        print(json.dumps(llm_status(LLMRuntimeConfig.from_env()), indent=2))
+        return 0
+    if args.command == "llm-test":
+        run_dir = _run_dir_for_optional_run(config, args.run_id)
+        client: LLMClient
+        if args.fake:
+            client = FakeLLMClient(run_dir=run_dir, skill_name="llm-test")
+        else:
+            runtime = LLMRuntimeConfig.from_env()
+            if runtime.mode != "provider":
+                raise ValueError("llm-test without --fake requires GAPFORGE_LLM_MODE=provider")
+            client = ProviderLLMClient(config=runtime, run_dir=run_dir, skill_name="llm-test")
+        try:
+            payload = client.complete_json(
+                "Target ID: llm-test\nReturn a conservative novelty-gate JSON object.",
+                schema_name="novelty-gate",
+                system="You are GapForge. Return valid JSON only.",
+            )
+        except ProviderUnavailableError as exc:
+            print(f"LLM provider unavailable: {exc}", file=sys.stderr)
+            return 1
+        print(json.dumps(payload, indent=2))
+        return 0
+    if args.command == "llm-usage":
+        run_dir = Path(ResearchStateManager(config).load_run(args.run_id).run_dir)
+        path = run_dir / "llm_usage.json"
+        print(path.read_text(encoding="utf-8") if path.exists() else json.dumps({"calls": 0, "records": []}, indent=2))
+        return 0
+    if args.command == "llm-transcripts":
+        state = ResearchStateManager(config).load_run(args.run_id)
+        print(LLMTranscriptLogger(state.run_dir).render_markdown(), end="")
+        return 0
+    if args.command == "audit-artifacts":
+        classifications = audit_run_artifacts(config, args.run_id) if args.run_id else audit_project_artifacts(config, args.project_id)
+        print(render_artifact_audit_markdown(classifications), end="")
+        return 0
+    if args.command == "clean-generated":
+        removed = clean_generated_run_artifacts(config, args.run_id)
+        if removed:
+            print("\n".join(str(path) for path in removed))
+        else:
+            print("No generated artifacts removed.")
+        return 0
+    if args.command == "export-safe-bundle":
+        path = export_safe_project_bundle(config, args.project_id, include_pdfs=args.include_pdfs)
+        print(f"Exported safe bundle to {path}")
+        return 0
     if args.command == "cache-info":
         print(json.dumps(cache_summary(config.cache_dir), indent=2))
         return 0
@@ -603,6 +1604,98 @@ def _dispatch(
         return 1
     parser.error(f"Unknown command: {args.command}")
     return 2
+
+
+def _agent_client_for_command(config: GapForgeConfig, *, fake: bool):
+    if fake:
+        return FakeAgentClient(config)
+    runtime = AgentRuntimeConfig.from_env()
+    if runtime.mode == "fake":
+        return FakeAgentClient(config, runtime)
+    if runtime.mode in {"task-pack", "codex"}:
+        return CodexAgentClient(config, runtime)
+    raise AgentUnavailableError("Agent mode is off. Set GAPFORGE_AGENT_MODE=task-pack, fake, or codex, or pass --fake.")
+
+
+def _uses_agent_skill(args: argparse.Namespace) -> bool:
+    return bool(getattr(args, "agent", None) or getattr(args, "agent_mode", None) or getattr(args, "import_output", None))
+
+
+def _run_agent_skill_command(
+    config: GapForgeConfig,
+    *,
+    run_id: str,
+    skill_name: str,
+    agent_mode: str | None,
+    model: str,
+    import_outputs: list[str] | None,
+    validate_only: bool,
+    gap_id: str = "",
+    paper_id: str = "",
+) -> int:
+    manager = ResearchStateManager(config)
+    state = manager.load_run(run_id)
+    mode = agent_mode or ("task-pack" if not import_outputs else "task-pack")
+    runtime_env = AgentRuntimeConfig.from_env()
+    runtime = AgentRuntimeConfig(
+        mode=mode,
+        agent_name="codex" if mode in {"task-pack", "codex"} else "fake-agent",
+        codex_model=model or runtime_env.codex_model,
+        enable_real_runs=runtime_env.enable_real_runs,
+        output_dir=runtime_env.output_dir,
+    )
+    task_spec = create_agent_task_spec(
+        state,
+        skill_name=skill_name,
+        gap_id=gap_id,
+        paper_id=paper_id,
+        project_id=str(state.config.get("project_id", "")),
+    )
+    state.agent_task_specs.append(task_spec)
+    pack_dir = CodexAgentClient(config, AgentRuntimeConfig(mode="task-pack", codex_model=runtime.codex_model)).create_task_pack(
+        state, task_spec
+    )
+    manager.save_run(state)
+
+    if import_outputs:
+        client = CodexAgentClient(config, AgentRuntimeConfig(mode="task-pack", codex_model=runtime.codex_model))
+        paths = [Path(path) for path in import_outputs]
+        validation = client.validate_outputs(task_spec, paths) if validate_only else client.import_outputs(task_spec, paths)
+        print(json.dumps({"task_id": task_spec.id, "task_pack": str(pack_dir), "validation": to_plain(validation)}, indent=2))
+        return 0 if validation.status == "valid" else 1
+    if validate_only:
+        validation = CodexAgentClient(config, AgentRuntimeConfig(mode="task-pack", codex_model=runtime.codex_model)).validate_outputs(
+            task_spec, []
+        )
+        print(json.dumps({"task_id": task_spec.id, "task_pack": str(pack_dir), "validation": to_plain(validation)}, indent=2))
+        return 0 if validation.status == "valid" else 1
+    if mode == "task-pack":
+        print(f"Wrote Codex task pack for {skill_name} to {pack_dir}")
+        return 0
+    if mode == "fake":
+        record = FakeAgentClient(config, runtime).run_task(task_spec)
+        print(json.dumps(to_plain(record), indent=2))
+        return 0 if record.status == "complete" else 1
+    if mode == "codex":
+        record = CodexAgentClient(config, runtime).run_task(task_spec)
+        print(json.dumps(to_plain(record), indent=2))
+        return 0 if record.status in {"complete", "planned"} else 1
+    raise AgentUnavailableError(f"Unsupported agent mode: {mode}")
+
+
+def _load_agent_task(config: GapForgeConfig, task_id: str):
+    manager = ResearchStateManager(config)
+    for run_dir in sorted(config.runs_dir.glob("*"), reverse=True):
+        if not run_dir.is_dir():
+            continue
+        try:
+            state = manager.load_run(run_dir.name)
+        except (FileNotFoundError, ValueError, json.JSONDecodeError):
+            continue
+        for task_spec in state.agent_task_specs:
+            if task_spec.id == task_id:
+                return task_spec
+    raise FileNotFoundError(f"No agent task found for {task_id}")
 
 
 def _source_names(raw: str) -> list[str] | None:
@@ -637,11 +1730,77 @@ def _load_report_state(config: GapForgeConfig, run_id: str) -> ResearchRunState:
     return manager.load_run(run_id)
 
 
+def _run_dir_for_optional_run(config: GapForgeConfig, run_id: str | None) -> Path | None:
+    if run_id is None:
+        return None
+    return Path(ResearchStateManager(config).load_run(run_id).run_dir)
+
+
+def _project_status_payload(program: ResearchProgramState) -> dict[str, object]:
+    project = program.project
+    return {
+        "project_id": project.id,
+        "name": project.name,
+        "status": project.status,
+        "root_dir": project.root_dir,
+        "run_ids": program.run_ids,
+        "topic_count": len(program.topics),
+        "corpus_paper_count": len(program.corpus_papers),
+        "memory_record_count": len(program.memory_records),
+        "research_direction_count": len(program.research_directions),
+        "active_topic_ids": project.active_topic_ids,
+    }
+
+
+def _format_retrieval_results(results: list[RetrievalResult]) -> str:
+    if not results:
+        return "No retrieval results."
+    lines = ["Retrieval results:"]
+    for index, result in enumerate(results, start=1):
+        title = result.metadata.get("title", "")
+        lines.append(f"{index}. {result.score:.3f} `{result.object_type}:{result.object_id}` {title} [{result.document_id}]")
+        if result.locator:
+            lines.append(f"   Locator: {result.locator}")
+        if result.text_snippet:
+            lines.append(f"   {result.text_snippet}")
+    return "\n".join(lines)
+
+
+def _format_retrieval_explanation(manifest: IndexManifest, results: list[RetrievalResult]) -> str:
+    lines = [
+        "Retrieval explanation:",
+        f"- Index: `{manifest.id}`",
+        f"- Documents: {manifest.document_count}",
+        f"- Embedding model: {manifest.embedding_model}",
+        "",
+    ]
+    for index, result in enumerate(results, start=1):
+        lines.extend(
+            [
+                f"{index}. `{result.object_type}:{result.object_id}` score={result.score:.3f}",
+                f"   lexical={result.lexical_score:.3f} semantic={result.semantic_score:.3f} rerank={result.rerank_score:.3f}",
+                f"   locator={result.locator or 'none'}",
+                f"   snippet={result.text_snippet}",
+            ]
+        )
+    if not results:
+        lines.append("No retrieval results.")
+    return "\n".join(lines)
+
+
 def _print_run_result(state: ResearchRunState) -> None:
     status = state.orchestrator_result.status if state.orchestrator_result else "unknown"
     report_path = Path(state.run_dir) / "final_report.md"
     suffix = f" Report: {report_path}" if report_path.exists() else ""
     print(f"{_status_verb(status)} run {state.run_id} in {state.run_dir}.{suffix}")
+
+
+def _print_active_result(state: ResearchRunState) -> None:
+    loop_status = state.active_loop.status if state.active_loop else "not_started"
+    decisions = len(state.active_loop.decisions) if state.active_loop else 0
+    report_path = Path(state.run_dir) / "final_report.md"
+    suffix = f" Report: {report_path}" if report_path.exists() else ""
+    print(f"Active loop {loop_status} for run {state.run_id} after {decisions} decision(s) in {state.run_dir}.{suffix}")
 
 
 def _status_verb(status: str) -> str:

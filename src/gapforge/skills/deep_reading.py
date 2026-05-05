@@ -7,6 +7,7 @@ import re
 from gapforge.claim_ledger import ClaimLedger
 from gapforge.fulltext.sectionizer import create_evidence_span_from_quote
 from gapforge.models import Evidence, EvidenceSpan, Paper, PaperNote, PaperSection, Provenance, ResearchRunState
+from gapforge.retrieval.hybrid import retrieval_candidates_for_state
 from gapforge.skills.base import Skill
 from gapforge.state import utc_now_iso
 
@@ -96,6 +97,7 @@ class DeepReading(Skill):
         for paper in papers:
             sections = sections_by_paper.get(paper.id, [])
             if sections:
+                sections = _retrieval_ordered_sections(state, paper.id, sections)
                 note, note_spans = self.read_paper_sections(state.topic.text, paper, sections)
                 notes.append(note)
                 spans.extend(note_spans)
@@ -320,6 +322,23 @@ def _sections_by_paper(sections: list[PaperSection]) -> dict[str, list[PaperSect
     for paper_sections in by_paper.values():
         paper_sections.sort(key=lambda section: (section.page_start, section.char_start, section.id))
     return by_paper
+
+
+def _retrieval_ordered_sections(state: ResearchRunState, paper_id: str, sections: list[PaperSection]) -> list[PaperSection]:
+    try:
+        results, _paper_ids = retrieval_candidates_for_state(state, state.topic.text, top_k=40)
+    except (FileNotFoundError, ValueError, OSError, RuntimeError):
+        return sections
+    section_by_id = {section.id: section for section in sections}
+    ranked_ids = [
+        result.object_id
+        for result in results
+        if result.object_type == "paper_section" and result.paper_id == paper_id and result.object_id in section_by_id
+    ]
+    if not ranked_ids:
+        return sections
+    used = set(ranked_ids)
+    return [section_by_id[section_id] for section_id in ranked_ids] + [section for section in sections if section.id not in used]
 
 
 def _sections_by_type(sections: list[PaperSection]) -> dict[str, list[PaperSection]]:

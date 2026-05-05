@@ -1,0 +1,24 @@
+[
+  {
+    "id": "v3-lfc-span-1",
+    "paper_id": "v3-lfc-prior-1",
+    "section_id": "v3-lfc-sec-1",
+    "quote": "does not audit operator workload at fixed low false-positive budgets",
+    "page_start": 4,
+    "page_end": 4,
+    "locator": "v3-lfc-prior-1:Evaluation:p4",
+    "evidence_type": "limitation",
+    "confidence": "medium"
+  },
+  {
+    "id": "v3-lfc-span-2",
+    "paper_id": "v3-lfc-prior-2",
+    "section_id": "v3-lfc-sec-2",
+    "quote": "changing base rates can overwhelm a fixed alert budget",
+    "page_start": 6,
+    "page_end": 6,
+    "locator": "v3-lfc-prior-2:Limitations:p6",
+    "evidence_type": "counterevidence",
+    "confidence": "medium"
+  }
+]

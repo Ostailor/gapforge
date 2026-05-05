@@ -1,81 +1,79 @@
 ---
 name: experiment-designer
-description: Use when converting novelty-checked research gaps into falsifiable experiment plans with baselines, metrics, ablations, risks, and implementation steps.
+description: Use when converting novelty-checked gaps or mature directions into falsifiable experiment plans, protocols, baselines, and reproducibility checklists.
 ---
 
 # Experiment Designer
 
 ## Purpose
-Convert validated or non-rejected research gaps into concrete experiment-ready plans. Prefer decisive, falsifiable experiments over vague research directions.
+Convert validated research gaps or directions into concrete experiments and v0.3 protocols. Prefer decisive tests that can falsify the idea.
 
 ## When To Use
-- Use after novelty gate.
-- Use only for gaps with `pursue`, `revise`, or explicitly allowed rejected status.
-- CLI: `gapforge design-experiments --run-id RUN_ID` or `gapforge design-experiment --gap-id GAP_ID`.
+- After novelty dossiers.
+- After related-work matrix when designing v0.3 protocols.
+- CLI: `gapforge design-experiments --run-id RUN_ID`, `gapforge experiment-protocol --project-id PROJECT --direction-id DIRECTION`.
 
 ## Inputs
-- `Gap` records
-- `NoveltyAssessment` records
-- `PaperNote` records
+- gaps
+- novelty assessments/dossiers
+- related-work matrix
+- paper notes/evidence
 - claim ledger
-- research topic
+- direction maturity state
 
 ## Outputs
-- `ExperimentPlan` records
+- `ExperimentPlan`
+- `ExperimentProtocol`
+- `BaselineCandidate`
+- `ReproducibilityChecklist`
 - `experiments.json`
 - `experiments.md`
-- `implementation_tasks.md`
+- `experiment_protocols.json`
+- `experiment_protocols.md`
 
 ## Required Artifacts
-- `novelty_gate.json`
 - `gaps.json`
-- `paper_notes.json`
+- `novelty_dossiers.json`
+- `related_work_matrix.json` when available
 - `experiments.json`
-- `experiments.md`
-- `implementation_tasks.md`
+- `experiment_protocols.json` for v0.3 protocols
 
 ## Procedure
-1. Skip rejected novelty assessments by default.
-2. Choose gaps with the clearest measurable failure mode.
-3. State one hypothesis and one core claim being tested.
-4. Define the minimum viable experiment.
-5. Name datasets needed and label/provenance requirements.
-6. Name strong baselines, including closest prior work.
-7. Name metrics tied to the gap.
-8. Add statistical tests, ablations, failure modes, compute requirements, implementation steps, expected result patterns, falsification condition, reviewer-killer result, risks, and ethical/safety considerations.
-9. Keep confidence conservative and uncertainty explicit.
+1. Skip rejected novelty assessments and human-rejected gaps by default.
+2. Select gaps/directions with measurable claims and non-rejected novelty.
+3. State hypothesis and core claim being tested.
+4. Define minimum viable experiment, datasets, baselines, metrics, statistical tests, ablations, failure modes, compute, implementation steps, and falsification condition.
+5. Pull required baselines from related-work matrix.
+6. Add reproducibility checklist: seeds, dataset versions, environment, logging, metric definitions, negative controls, error analysis.
+7. Do not mark paper-ready without protocol and reviewer checks.
 
-## Quality Bar
-- Every experiment needs baselines, metrics, and falsification conditions.
-- No experiment should be marked paper-ready without novelty assessment.
-- Prefer experiments that could kill the idea quickly.
-- Do not invent datasets, results, or benchmark scores.
-- Publishability criteria must name what result would convince a serious reviewer.
+## Citation and Evidence Rules
+- Baselines should cite paper IDs.
+- Do not invent datasets, benchmark scores, code URLs, or results.
+- Expected result patterns are hypothetical until experiments run.
+- Use claim IDs and evidence locators for tested claims.
 
-## Failure Modes
-- Designing around a rejected idea without explicit override.
-- Producing vague agendas instead of executable experiments.
-- Missing closest-prior-work baselines.
-- Omitting falsification conditions.
-- Treating risky data or detection settings as harmless.
+## Uncertainty Rules
+- Missing baselines or poor novelty lowers readiness.
+- Data availability and compute assumptions should be explicit risks.
+- If source coverage is weak, recommend search steps before experiments.
 
 ## Validation Checklist
-- [ ] `experiments.json`, `experiments.md`, and `implementation_tasks.md` exist.
-- [ ] No rejected gap is used unless explicitly allowed.
-- [ ] Each experiment has baselines and metrics.
-- [ ] Each experiment says what would falsify the idea.
-- [ ] Each experiment explains what would make the result publishable.
-- [ ] Risks and ethical/safety considerations are explicit.
+- [ ] Every experiment has baselines, metrics, and falsification condition.
+- [ ] Rejected gaps are skipped unless explicitly allowed.
+- [ ] Protocol includes reproducibility and statistics notes.
+- [ ] Publishability criteria are concrete.
+- [ ] No hidden chain-of-thought is stored.
+
+## Failure Modes
+- Vague agenda instead of executable protocol.
+- Missing closest-prior-work baseline.
+- Paper-ready label without novelty/protocol support.
+- Fake results in expected outcomes.
 
 ## Examples
-Design experiments for all non-rejected gaps:
-
 ```bash
-gapforge design-experiments --run-id 20260505T002206Z-low-false-positive-collusion-detection
-```
-
-Design one experiment:
-
-```bash
-gapforge design-experiment --run-id 20260505T002206Z-low-false-positive-collusion-detection --gap-id gap-12345
+gapforge design-experiments --run-id RUN_ID
+gapforge related-work-matrix --project-id PROJECT --direction-id DIRECTION
+gapforge experiment-protocol --project-id PROJECT --direction-id DIRECTION
 ```

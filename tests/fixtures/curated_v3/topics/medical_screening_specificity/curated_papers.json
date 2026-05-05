@@ -1,0 +1,28 @@
+[
+  {
+    "id": "v3-med-prior-1",
+    "title": "Synthetic Screening Specificity Metadata for Rare Conditions",
+    "authors": ["Curated Fixture Author"],
+    "abstract": "Synthetic fixture metadata: a screening classifier reports sensitivity and AUROC, while specificity at low prevalence is only briefly discussed.",
+    "year": 2023,
+    "venue": "Synthetic Medical Informatics Venue",
+    "source": "curated-v3-fixture",
+    "url": "https://example.test/gapforge/v3-med-prior-1",
+    "citation_count": 18,
+    "keywords": ["specificity", "screening", "low prevalence"],
+    "roles": ["benchmark", "method"]
+  },
+  {
+    "id": "v3-med-prior-2",
+    "title": "Synthetic Calibration Notes for Screening False Positives",
+    "authors": ["Curated Fixture Author"],
+    "abstract": "Synthetic fixture metadata: calibration is measured on a held-out cohort, but subgroup-specific false-positive burden is not evaluated.",
+    "year": 2024,
+    "venue": "Synthetic Clinical ML Workshop",
+    "source": "curated-v3-fixture",
+    "url": "https://example.test/gapforge/v3-med-prior-2",
+    "citation_count": 5,
+    "keywords": ["calibration", "false positives", "subgroups"],
+    "roles": ["frontier"]
+  }
+]

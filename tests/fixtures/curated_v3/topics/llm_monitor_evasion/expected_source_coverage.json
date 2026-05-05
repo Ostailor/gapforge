@@ -1,0 +1,27 @@
+{
+  "run_id": "curated-v3-llm_monitor_evasion",
+  "topic": "LLM monitor evasion",
+  "searched_sources": ["fixture-source"],
+  "query_records": [
+    {
+      "id": "v3-lme-query-1",
+      "query": "LLM monitor evasion adaptive multi-turn false positive benchmark",
+      "source_names": ["fixture-source"],
+      "purpose": "initial_topic",
+      "max_results": 2,
+      "executed_at": "2026-01-01T00:00:00+00:00",
+      "result_paper_ids": ["v3-lme-prior-1", "v3-lme-prior-2"],
+      "failure_messages": []
+    }
+  ],
+  "papers_by_source": {"curated-v3-fixture": 2},
+  "papers_with_pdf": [],
+  "papers_with_full_text": ["v3-lme-prior-1", "v3-lme-prior-2"],
+  "papers_abstract_only": [],
+  "failed_downloads": [],
+  "failed_sources": [],
+  "fallback_paper_count": 0,
+  "missing_source_types": ["OpenReview/Semantic Scholar coverage intentionally absent"],
+  "coverage_warnings": ["Synthetic curated v3 fixture; do not treat as real AI safety coverage."],
+  "confidence": "low"
+}

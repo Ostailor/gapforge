@@ -1,0 +1,24 @@
+[
+  {
+    "id": "v3-phys-sec-1",
+    "paper_id": "v3-phys-prior-1",
+    "title": "Synthetic Theory Excerpt",
+    "normalized_title": "theory",
+    "section_type": "method",
+    "text": "Synthetic excerpt: the threshold model predicts abrupt changes in detectability when noise crosses a critical level.",
+    "page_start": 2,
+    "page_end": 2,
+    "confidence": "medium"
+  },
+  {
+    "id": "v3-phys-sec-2",
+    "paper_id": "v3-phys-prior-2",
+    "title": "Synthetic Discussion Excerpt",
+    "normalized_title": "discussion",
+    "section_type": "discussion",
+    "text": "Synthetic excerpt: transferring robustness margins to language-agent monitoring would require a validated state variable.",
+    "page_start": 5,
+    "page_end": 5,
+    "confidence": "medium"
+  }
+]

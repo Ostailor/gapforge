@@ -1,8 +1,8 @@
-# Source Connectors
+# Source Connectors and Coverage
 
-GapForge source connectors normalize external research metadata into the shared `Paper` model.
+GapForge source connectors normalize research metadata into the shared `Paper` model and record how search coverage was obtained. Source output is evidence about what was searched; it is not proof that the literature has been exhausted.
 
-## Interface
+## Connector Interface
 
 Every connector implements:
 
@@ -17,136 +17,138 @@ ResearchSource.search(
 ) -> list[Paper]
 ```
 
-Supported source modules:
+Current connectors:
 
-- `ArxivSource`
-- `CrossrefSource`
-- `DblpSource`
-- `OpenReviewSource`
-- `SemanticScholarSource`
-- `WebSource`
+- arXiv
+- CrossRef
+- DBLP
+- OpenReview
+- Semantic Scholar
+- generic web metadata placeholder
 
-The first working version does not require API keys. Sources that are unavailable or rate-limited degrade gracefully and return deterministic fallback metadata where appropriate.
+The default path must not require API keys. If a source is unavailable, rate-limited, or disabled, it should fail gracefully and record warnings.
 
-## HTTP and Caching
+## HTTP, Cache, and Offline Mode
 
-All networked connectors use `CachedHttpClient`.
+Networked sources use `CachedHttpClient` for:
 
-The client provides:
-
-- user-agent header
-- timeout
-- retry loop
+- user-agent
+- timeouts
+- retries
 - response cache under `.gapforge_cache/`
-- environment escape hatch: `GAPFORGE_DISABLE_NETWORK=1`
+- deterministic failure when `GAPFORGE_DISABLE_NETWORK=1`
 
-Cache diagnostics:
+Commands:
 
 ```bash
 gapforge cache-info
+gapforge search "topic" --max-results 50 --sources arxiv,crossref
 ```
 
-Set `GAPFORGE_CACHE_DIR=/path/to/cache` to override the cache location. Set `GAPFORGE_DISABLE_NETWORK=1` for offline tests and smoke runs; uncached network requests fail fast and connectors should degrade gracefully.
+Tests must use mocked HTTP or offline fixtures. No test should require a live public API.
 
-Tests must mock HTTP responses or disable network access. Do not write tests that depend on live public APIs.
+## Search Query Ledger
 
-## Source Coverage
+Every source search should create a `SearchQueryRecord`:
 
-Every search should create a `SearchQueryRecord` with:
-
-- query text
+- query
 - source names
-- purpose, such as `initial_topic`, `analogy`, `novelty`, `citation_expansion`, or `manual`
+- purpose: `initial_topic`, `analogy`, `novelty`, `citation_expansion`, or `manual`
 - max results and date filters
+- execution time
 - result paper IDs
 - failure messages
+- provenance
 
-Run coverage reporting with:
+The ledger lets reports say exactly what was searched.
+
+## Source Coverage Reports
+
+Run:
 
 ```bash
-gapforge coverage
 gapforge coverage --run-id <run-id>
+gapforge assess-coverage --run-id <run-id> --profile ai_safety
+gapforge next-searches --run-id <run-id>
 ```
 
-Coverage artifacts:
+Artifacts:
 
 - `source_coverage.json`
 - `source_coverage.md`
 - `full_text_coverage.md`
+- `coverage_stopping_assessment.json`
+- `coverage_stopping_assessment.md`
 
-In offline mode, coverage must clearly label fallback records and missing full text. A report produced from fallback metadata is a smoke test, not a literature conclusion.
+Coverage reports include source failures, fallback/offline records, full-text coverage, abstract-only counts, and policy warnings.
 
-## PDF and Full-Text Sources
+## v0.3 Source Policy Profiles
 
-PDF handling is intentionally conservative:
+Profiles live in `src/gapforge/sources/policies.py`.
 
-- arXiv PDF URLs may be inferred from `arxiv_id`.
-- OpenReview and generic sources use explicit `pdf_url` when present.
-- CrossRef and DBLP do not invent PDF URLs unless metadata provides a reliable one.
-- `GAPFORGE_DISABLE_NETWORK=1` skips downloads and records a warning.
+Profiles define:
+
+- required and recommended sources
+- venue keywords
+- required query patterns
+- recency windows
+- minimum papers and full-text papers
+- minimum surveys
+- citation expansion rounds
+- novelty and adjacent-field search requirements
+
+Built-in profiles include machine learning, AI safety, multi-agent systems, physics, biology, economics, medicine, cybersecurity, and generic.
+
+Strict reports and novelty gates should not upgrade novelty when policy-critical coverage is missing.
+
+## PDF and Full Text
+
+PDF URL inference is conservative:
+
+- arXiv can infer `https://arxiv.org/pdf/{id}` from `arxiv_id`
+- OpenReview and generic sources use explicit `pdf_url`
+- CrossRef/DBLP do not invent PDF URLs unless metadata provides a reliable one
 
 Commands:
 
 ```bash
 gapforge download-pdfs --run-id <run-id> --max-papers 10 --skip-existing
 gapforge parse-fulltext --run-id <run-id>
-gapforge add-pdf --run-id <run-id> /path/to/paper.pdf --title "Paper Title" --parse
+gapforge parse-structure --run-id <run-id>
+gapforge add-pdf --run-id <run-id> /path/to/file.pdf --title "Paper Title" --parse
 ```
 
-Downloaded or manually added PDFs are stored under the run directory, hashed, and represented as `PaperArtifact` objects. Parsed text becomes `PaperSection` objects and may produce `EvidenceSpan` locators for downstream reading and gap mining.
-
-## Paper Normalization
-
-Connectors must populate as many fields as possible:
-
-- `id`
-- `title`
-- `authors`
-- `abstract`
-- `year`
-- `published_date`
-- `venue`
-- `source`
-- `url`
-- `pdf_url`
-- `doi`
-- `arxiv_id`
-- `openreview_id`
-- `semantic_scholar_id`
-- `citation_count`
-- `keywords`
-- `raw_metadata`
-- `provenance`
-
-`raw_metadata` should preserve the original source payload for later auditing.
+Downloaded or manual PDFs are stored as `PaperArtifact` records. Parsed text becomes `PaperSection`, `EvidenceSpan`, `ReferenceRecord`, `TableRecord`, `EquationRecord`, `CaptionRecord`, and `OcrAttemptRecord` where possible. Extraction warnings remain visible.
 
 ## Ranking and Deduplication
 
-`sources/ranking.py` and `sources/ranking_v2.py` handle:
+Ranking utilities combine:
 
-- newer-paper boost
-- exact title/topic match boost
-- authoritative venue boost
-- citation-count boost
-- source diversity controls
-- role diversity controls for frontier, survey, benchmark, dataset, method, theory, negative-result, and adjacent-field papers
-- full-text availability signals
-- deduplication by DOI, arXiv ID, and high title similarity
+- topic relevance
+- recency
+- citation count
+- venue/source authority
+- source diversity
+- role diversity
+- full-text availability
+- closest-prior-work signal
+- adjacent-field transfer signal
+- survey/systematic-review signal
 
-Ranking is deliberately separate from connectors. Connectors fetch and normalize; ranking decides cross-source ordering.
+Deduplication uses DOI, arXiv ID, Semantic Scholar ID, exact title, and title similarity. Ranking is separate from source fetching.
 
 ## Adding a Source
 
 1. Create `src/gapforge/sources/<name>_source.py`.
 2. Subclass `ResearchSource`.
-3. Accept an optional `CachedHttpClient` in `__init__`.
-4. Implement `search(...)` with the common signature.
-5. Use `self.http.get_json(...)` or `self.http.get_text(...)`; never call `urlopen` directly.
-6. Catch source/network errors and degrade gracefully.
+3. Accept an optional `CachedHttpClient`.
+4. Implement `search(...)`.
+5. Use the HTTP client wrapper, not direct network calls.
+6. Catch source/network errors and record graceful failures.
 7. Normalize every result into `Paper`.
-8. Preserve source payloads in `raw_metadata`.
-9. Attach public provenance with `source_provenance(...)`.
-10. Register the connector in `sources/__init__.py` and `skill_registry.default_sources`.
-11. Add mocked HTTP tests.
+8. Preserve original payloads in `raw_metadata`.
+9. Attach public provenance.
+10. Register the source.
+11. Add mocked HTTP tests and coverage behavior tests.
 
-Do not add API-key requirements for the default search path unless the connector also has a keyless fallback.
+Do not add a required API-key path unless a no-key fallback remains available.

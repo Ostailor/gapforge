@@ -1,0 +1,29 @@
+[
+  {
+    "id": "v3-lfc-prior-1",
+    "title": "Synthetic Benchmark Metadata for Low-FPR Collusion Detection",
+    "authors": ["Curated Fixture Author"],
+    "abstract": "Synthetic fixture metadata: a graph collusion detector is evaluated with aggregate false-positive rates but not operator workload at fixed alert budgets.",
+    "year": 2024,
+    "venue": "Synthetic Fixture Venue",
+    "source": "curated-v3-fixture",
+    "url": "https://example.test/gapforge/v3-lfc-prior-1",
+    "doi": "10.0000/gapforge.v3.lfc.1",
+    "citation_count": 12,
+    "keywords": ["collusion", "false-positive rate", "benchmark"],
+    "roles": ["benchmark", "method"]
+  },
+  {
+    "id": "v3-lfc-prior-2",
+    "title": "Synthetic Deployment Audit Notes for Collusion Monitors",
+    "authors": ["Curated Fixture Author"],
+    "abstract": "Synthetic fixture metadata: deployment-shift audits are discussed, but calibrated low-FPR triage under changing base rates remains unresolved.",
+    "year": 2025,
+    "venue": "Synthetic Fixture Workshop",
+    "source": "curated-v3-fixture",
+    "url": "https://example.test/gapforge/v3-lfc-prior-2",
+    "citation_count": 3,
+    "keywords": ["deployment shift", "base rate", "triage"],
+    "roles": ["frontier"]
+  }
+]

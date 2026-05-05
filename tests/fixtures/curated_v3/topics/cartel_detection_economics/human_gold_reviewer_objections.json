@@ -1,0 +1,7 @@
+[
+  {
+    "category": "theory",
+    "severity": "fatal",
+    "expected_contains": "identification strategy"
+  }
+]

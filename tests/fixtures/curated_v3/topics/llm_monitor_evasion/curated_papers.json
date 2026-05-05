@@ -1,0 +1,28 @@
+[
+  {
+    "id": "v3-lme-prior-1",
+    "title": "Synthetic Red-Team Metadata for LLM Monitor Evasion",
+    "authors": ["Curated Fixture Author"],
+    "abstract": "Synthetic fixture metadata: a monitor catches direct policy violations, but paraphrased multi-turn evasion is evaluated only with toy prompts.",
+    "year": 2025,
+    "venue": "Synthetic AI Safety Workshop",
+    "source": "curated-v3-fixture",
+    "url": "https://example.test/gapforge/v3-lme-prior-1",
+    "citation_count": 7,
+    "keywords": ["monitor", "evasion", "multi-turn"],
+    "roles": ["frontier", "method"]
+  },
+  {
+    "id": "v3-lme-prior-2",
+    "title": "Synthetic Adversarial Evaluation Notes for Safety Monitors",
+    "authors": ["Curated Fixture Author"],
+    "abstract": "Synthetic fixture metadata: adversarial monitor evaluations report attack success but omit persistent user adaptation and false-positive costs.",
+    "year": 2024,
+    "venue": "Synthetic Security Evaluation Venue",
+    "source": "curated-v3-fixture",
+    "url": "https://example.test/gapforge/v3-lme-prior-2",
+    "citation_count": 9,
+    "keywords": ["adversarial evaluation", "false positives", "safety monitor"],
+    "roles": ["benchmark"]
+  }
+]

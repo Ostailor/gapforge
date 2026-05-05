@@ -1,84 +1,78 @@
 ---
 name: reviewer-simulation
-description: Use when attacking proposed experiments for novelty, baselines, metrics, datasets, theory, clarity, scaling, reproducibility, or ethics before recommending submission.
+description: Use when attacking experiments or research directions for novelty, baselines, metrics, theory, reproducibility, ethics, and rebuttal readiness.
 ---
 
 # Reviewer Simulation
 
 ## Purpose
-Attack each proposed experiment like a serious conference reviewer. The goal is to find fatal weaknesses before GapForge recommends an idea.
+Attack proposed experiments and directions like serious reviewers. The goal is actionable rejection-risk discovery, not encouragement.
 
 ## When To Use
-- Use after experiment design.
-- Use before final recommendation or report generation.
-- CLI: `gapforge review --run-id RUN_ID` or `gapforge review --experiment-id EXPERIMENT_ID`.
+- After experiment plans/protocols.
+- Before final recommendation, direction maturation to manuscript-ready, or manuscript export.
+- CLI: `gapforge review --run-id RUN_ID`, `gapforge review-panel --project-id PROJECT --direction-id DIRECTION`.
 
 ## Inputs
-- `ExperimentPlan` records
-- `NoveltyAssessment` records
-- claim ledger
-- `PaperNote` records
+- experiments or directions
+- novelty assessments/dossiers
+- related-work matrix
+- experiment protocol
+- claim ledger/claim graph
+- paper notes and evidence
 
 ## Outputs
-- `ReviewerObjection` records
-- `reviewer_objections.json`
-- `reviewer_summaries.json`
+- `ReviewerObjection`
+- `ReviewPanel`
+- `ReviewerReview`
+- `RebuttalPlan`
 - `reviewer_simulation.md`
-- `revised_experiment_recommendations.md`
+- `review_panel.md`
+- `rebuttal_plan.md`
+- `meta_review.md`
 
 ## Required Artifacts
-- `experiments.json`
-- `novelty_gate.json`
-- `claims.json`
-- `paper_notes.json`
-- `reviewer_objections.json`
-- `reviewer_simulation.md`
-- `revised_experiment_recommendations.md`
+- `experiments.json` or `research_directions.json`
+- `novelty_dossiers.json`
+- `related_work_matrix.json` when available
+- `experiment_protocols.json` when available
+- review Markdown/JSON artifacts
 
 ## Procedure
-1. Simulate four perspectives:
-   - Reviewer 1: technical correctness
-   - Reviewer 2: novelty skeptic
-   - Reviewer 3: empirical rigor and baselines
-   - Area Chair: positioning and contribution clarity
-2. Check novelty support first. Unsupported novelty is fatal.
-3. Check baselines. Missing baselines are major or fatal.
-4. Check metrics, datasets, statistical tests, ablations, reproducibility, scaling, and ethics.
-5. For each objection, record why a reviewer would care, evidence or prior work, suggested fix, whether it blocks submission, and confidence.
-6. Produce readiness score, blocking issues, required fixes, optional fixes, and final recommendation.
-7. Attack the idea before recommending it.
+1. Simulate technical, novelty, empirical, theory, ethics, and area-chair perspectives.
+2. Check unsupported novelty first; it is fatal.
+3. Check missing baselines and missing metrics; these are major or fatal.
+4. Check dataset validity, scaling, reproducibility, statistical tests, ethics, and clarity.
+5. Link objections to evidence/prior work when possible.
+6. Provide concrete required fixes and optional fixes.
+7. Build rebuttal plans that request evidence or additional experiments, not fake results.
 
-## Quality Bar
-- Objections must be specific to the experiment, not generic advice.
-- Every objection must include a concrete fix.
-- Fatal and major issues must block submission.
-- Do not invent reviewer evidence, citations, or results.
-- Mark uncertainty when the critique depends on abstract-only notes.
+## Citation and Evidence Rules
+- Reviewer evidence should cite paper IDs, dossiers, matrices, protocols, or claim IDs.
+- Do not invent reviewer citations or results.
+- Do not use query-only analogies as proof.
 
-## Failure Modes
-- Giving encouraging feedback without stress-testing the idea.
-- Missing unsupported novelty.
-- Accepting weak or absent baselines.
-- Recommending conference submission despite blocking issues.
-- Producing vague fixes like "improve evaluation".
+## Uncertainty Rules
+- Abstract-only critique should say so.
+- Missing protocol should block readiness.
+- Unresolved claim contradictions should raise decision risk.
 
 ## Validation Checklist
-- [ ] `reviewer_simulation.md` exists.
-- [ ] `revised_experiment_recommendations.md` exists.
-- [ ] Each objection has severity, category, evidence, fix, and blocking flag.
-- [ ] Missing baselines are major or fatal.
+- [ ] Objections are specific and actionable.
+- [ ] Missing baselines are major/fatal.
 - [ ] Unsupported novelty is fatal.
-- [ ] Final recommendation is one of `not_ready`, `workshop_ready`, `conference_potential`, or `strong_submission_candidate`.
+- [ ] Rebuttal plan does not invent evidence.
+- [ ] No hidden chain-of-thought is stored.
+
+## Failure Modes
+- Generic feedback.
+- Recommending submission despite fatal blockers.
+- Ignoring related-work omissions.
+- Drafting fake rebuttal evidence.
 
 ## Examples
-Review all experiments:
-
 ```bash
-gapforge review --run-id 20260505T002206Z-low-false-positive-collusion-detection
-```
-
-Review one experiment:
-
-```bash
-gapforge review --run-id 20260505T002206Z-low-false-positive-collusion-detection --experiment-id experiment-1
+gapforge review --run-id RUN_ID
+gapforge review-panel --project-id PROJECT --direction-id DIRECTION
+gapforge rebuttal-plan --project-id PROJECT --direction-id DIRECTION
 ```

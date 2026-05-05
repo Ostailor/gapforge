@@ -4,8 +4,18 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from gapforge.models import EvidenceSpan, Gap, NoveltyAssessment, NoveltyDossier, Paper, Provenance, ResearchRunState
+from gapforge.models import (
+    CoverageStoppingAssessment,
+    EvidenceSpan,
+    Gap,
+    NoveltyAssessment,
+    NoveltyDossier,
+    Paper,
+    Provenance,
+    ResearchRunState,
+)
 from gapforge.novelty.comparator import PriorWorkComparator, PriorWorkMatch, comparison_row
+from gapforge.sources.stopping import assess_literature_coverage
 
 
 class NoveltyDossierBuilder:
@@ -36,6 +46,10 @@ class NoveltyDossierBuilder:
         missing = [] if source_search_ran else [f"source connector search: {query}" for query in query_plan]
         if state.source_coverage is not None and state.source_coverage.confidence == "low":
             missing.append("strong source/full-text coverage")
+        stopping = _policy_assessment_for_gate(state)
+        if stopping is not None and not stopping.enough_for_novelty:
+            missing.append(f"source policy novelty coverage ({stopping.profile_id})")
+            missing.extend(stopping.missing_requirements[:6])
         decisive = _decisive_difference(top, gap, coverage_weak)
         objection = _reviewer_objection(top, verdict, coverage_weak)
         action = _recommended_action(verdict, coverage_weak)
@@ -104,9 +118,20 @@ def _coverage_is_weak(state: ResearchRunState, source_search_ran: bool) -> bool:
         return True
     if state.source_coverage is not None and state.source_coverage.confidence == "low":
         return True
+    stopping = _policy_assessment_for_gate(state)
+    if stopping is not None and not stopping.enough_for_novelty:
+        return True
     if state.papers and not state.paper_sections and state.source_coverage is not None and not state.source_coverage.papers_with_full_text:
         return True
     return False
+
+
+def _policy_assessment_for_gate(state: ResearchRunState) -> CoverageStoppingAssessment | None:
+    if state.coverage_stopping_assessment is not None:
+        return state.coverage_stopping_assessment
+    if state.config.get("source_policy_profile"):
+        return assess_literature_coverage(state)
+    return None
 
 
 def _decisive_difference(match: PriorWorkMatch | None, gap: Gap | None, coverage_weak: bool) -> str:

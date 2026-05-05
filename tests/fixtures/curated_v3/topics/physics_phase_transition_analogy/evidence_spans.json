@@ -1,0 +1,24 @@
+[
+  {
+    "id": "v3-phys-span-1",
+    "paper_id": "v3-phys-prior-1",
+    "section_id": "v3-phys-sec-1",
+    "quote": "abrupt changes in detectability when noise crosses a critical level",
+    "page_start": 2,
+    "page_end": 2,
+    "locator": "v3-phys-prior-1:Theory:p2",
+    "evidence_type": "method",
+    "confidence": "medium"
+  },
+  {
+    "id": "v3-phys-span-2",
+    "paper_id": "v3-phys-prior-2",
+    "section_id": "v3-phys-sec-2",
+    "quote": "would require a validated state variable",
+    "page_start": 5,
+    "page_end": 5,
+    "locator": "v3-phys-prior-2:Discussion:p5",
+    "evidence_type": "counterevidence",
+    "confidence": "medium"
+  }
+]

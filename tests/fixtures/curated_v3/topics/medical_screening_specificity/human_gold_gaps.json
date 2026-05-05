@@ -1,0 +1,17 @@
+[
+  {
+    "id": "v3-med-gap-1",
+    "title": "Specificity stress tests for low-prevalence screening",
+    "type": "measurement gap",
+    "description": "Curated excerpts support evaluating screening models by specificity and false-positive burden under low-prevalence and subgroup settings.",
+    "supporting_paper_ids": ["v3-med-prior-1", "v3-med-prior-2"],
+    "why_existing_work_does_not_solve_it": "The synthetic prior work emphasizes sensitivity, AUROC, and calibration but not low-prevalence specificity stress tests.",
+    "why_it_matters": "False positives can dominate real screening workloads in rare-condition settings.",
+    "possible_research_questions": ["Which calibration protocols reduce subgroup false-positive burden at fixed sensitivity?"],
+    "minimum_experiment_needed": "Evaluate sensitivity, specificity, PPV, NPV, and subgroup false-positive rates under simulated low-prevalence deployment.",
+    "risk_that_gap_is_fake": "A real medical search may find domain-specific screening protocols with these metrics.",
+    "confidence": "medium",
+    "novelty_status": "unchecked",
+    "closest_prior_work": ["v3-med-prior-1"]
+  }
+]

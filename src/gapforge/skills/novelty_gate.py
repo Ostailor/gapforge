@@ -18,6 +18,7 @@ from gapforge.models import (
     ResearchRunState,
 )
 from gapforge.novelty import NoveltyDossierBuilder, NoveltyQueryPlanner
+from gapforge.retrieval.hybrid import retrieval_candidates_for_state
 from gapforge.skills.base import Skill
 from gapforge.sources.coverage import add_search_query_record
 from gapforge.sources.ranking import rank_papers
@@ -44,7 +45,7 @@ class NoveltyGate(Skill):
 
         for target_id, summary, gap in targets:
             queries = self.query_planner.plan(state, target_id, summary, gap)
-            candidates = list(state.papers)
+            candidates = self._retrieval_ordered_candidates(state, summary)
             source_search_ran = self.search_sources or deep
             if source_search_ran:
                 candidates = self._merge_source_candidates(state, queries, candidates)
@@ -86,6 +87,17 @@ class NoveltyGate(Skill):
         state.claims = self._add_novelty_claims(state, assessments).claims
         self.mark_complete(state)
         return state
+
+    def _retrieval_ordered_candidates(self, state: ResearchRunState, summary: str) -> list[Paper]:
+        try:
+            _results, paper_ids = retrieval_candidates_for_state(state, summary, top_k=30)
+        except (FileNotFoundError, ValueError, OSError, RuntimeError):
+            return list(state.papers)
+        paper_by_id = {paper.id: paper for paper in state.papers}
+        ordered = [paper_by_id[paper_id] for paper_id in paper_ids if paper_id in paper_by_id]
+        ordered_ids = {paper.id for paper in ordered}
+        ordered.extend(paper for paper in state.papers if paper.id not in ordered_ids)
+        return ordered
 
     def _targets(self, state: ResearchRunState, *, gap_id: str | None) -> list[tuple[str, str, Gap | None]]:
         gaps = [gap for gap in state.gaps if gap_id is None or gap.id == gap_id]

@@ -1,0 +1,24 @@
+[
+  {
+    "id": "v3-lme-sec-1",
+    "paper_id": "v3-lme-prior-1",
+    "title": "Synthetic Results Excerpt",
+    "normalized_title": "results",
+    "section_type": "results",
+    "text": "Synthetic excerpt: direct violations are detected, but paraphrased multi-turn evasion is represented by only twelve toy prompts.",
+    "page_start": 5,
+    "page_end": 5,
+    "confidence": "medium"
+  },
+  {
+    "id": "v3-lme-sec-2",
+    "paper_id": "v3-lme-prior-2",
+    "title": "Synthetic Limitations Excerpt",
+    "normalized_title": "limitations",
+    "section_type": "limitations",
+    "text": "Synthetic excerpt: the evaluation omits adaptive users and does not quantify false-positive costs for benign ambiguous requests.",
+    "page_start": 7,
+    "page_end": 7,
+    "confidence": "medium"
+  }
+]

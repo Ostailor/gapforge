@@ -1,0 +1,7 @@
+[
+  {
+    "category": "theory",
+    "severity": "fatal",
+    "expected_contains": "analogy lacks validated state variable"
+  }
+]

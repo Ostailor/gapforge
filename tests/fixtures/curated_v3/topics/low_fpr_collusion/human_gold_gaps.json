@@ -1,0 +1,17 @@
+[
+  {
+    "id": "v3-lfc-gap-1",
+    "title": "Workload-aware low-FPR deployment evaluation",
+    "type": "evaluation gap",
+    "description": "The curated excerpts support testing collusion detectors under fixed low-FPR alert budgets and shifting base rates.",
+    "supporting_paper_ids": ["v3-lfc-prior-1", "v3-lfc-prior-2"],
+    "why_existing_work_does_not_solve_it": "The closest synthetic benchmark reports aggregate false-positive rates but not operator workload or base-rate shift.",
+    "why_it_matters": "A detector with acceptable aggregate false positives may still be unusable when alert budgets are fixed.",
+    "possible_research_questions": ["Can calibration preserve low-FPR workload under base-rate shift?"],
+    "minimum_experiment_needed": "Evaluate a baseline graph detector and a calibrated variant across fixed alert budgets and shifted base rates.",
+    "risk_that_gap_is_fake": "A larger real literature search may find workload-aware operational audits.",
+    "confidence": "medium",
+    "novelty_status": "medium",
+    "closest_prior_work": ["v3-lfc-prior-1"]
+  }
+]

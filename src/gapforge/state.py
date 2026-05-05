@@ -27,6 +27,7 @@ from gapforge.models import (
     ValidationResult,
     to_plain,
 )
+from gapforge.redaction import redact_text
 
 RUN_ARTIFACTS = [
     "topic.md",
@@ -40,9 +41,21 @@ RUN_ARTIFACTS = [
     "search_queries.json",
     "source_coverage.json",
     "source_coverage.md",
+    "coverage_stopping_assessment.json",
+    "coverage_stopping_assessment.md",
     "full_text_coverage.md",
     "citation_graph.json",
     "citation_graph.md",
+    "references.json",
+    "references.md",
+    "tables.json",
+    "tables.md",
+    "equations.json",
+    "equations.md",
+    "captions.json",
+    "captions.md",
+    "ocr_attempts.json",
+    "ocr_status.md",
     "related_work_expansion.md",
     "paper_notes.json",
     "paper_notes.md",
@@ -66,8 +79,14 @@ RUN_ARTIFACTS = [
     "novelty_gate.md",
     "novelty_dossiers.json",
     "novelty_dossiers.md",
+    "related_work_matrix.json",
+    "related_work_matrix.md",
     "experiments.json",
     "experiments.md",
+    "experiment_protocols.json",
+    "experiment_protocols.md",
+    "baseline_candidates.json",
+    "baseline_candidates.md",
     "implementation_tasks.md",
     "reviewer_objections.json",
     "reviewer_summaries.json",
@@ -75,8 +94,18 @@ RUN_ARTIFACTS = [
     "revised_experiment_recommendations.md",
     "human_reviews.json",
     "human_reviews.md",
+    "review_queue.json",
+    "review_queue.md",
+    "agent_tasks.json",
+    "agent_task_specs.json",
+    "agent_run_records.json",
+    "agent_validations.json",
+    "agent_validation_results.json",
+    "agent_tasks.md",
     "orchestrator_plan.json",
     "orchestrator_result.json",
+    "active_loop.json",
+    "active_decisions.md",
     "run_log.json",
     "rejected_ideas.json",
     "provenance.json",
@@ -151,7 +180,13 @@ class ResearchStateManager:
         self._write_json(run_dir / "evidence_spans.json", state.evidence_spans)
         self._write_json(run_dir / "search_queries.json", state.search_queries)
         self._write_json(run_dir / "source_coverage.json", state.source_coverage)
+        self._write_json(run_dir / "coverage_stopping_assessment.json", state.coverage_stopping_assessment)
         self._write_json(run_dir / "citation_graph.json", state.citation_graph)
+        self._write_json(run_dir / "references.json", state.references)
+        self._write_json(run_dir / "tables.json", state.tables)
+        self._write_json(run_dir / "equations.json", state.equations)
+        self._write_json(run_dir / "captions.json", state.captions)
+        self._write_json(run_dir / "ocr_attempts.json", state.ocr_attempts)
         self._write_json(run_dir / "paper_notes.json", state.paper_notes)
         self._write_json(run_dir / "paper_ranking.json", state.paper_ranking)
         self._write_json(run_dir / "paper_triage.json", state.paper_triage)
@@ -164,20 +199,33 @@ class ResearchStateManager:
         self._write_json(run_dir / "cross_domain_transfers.json", state.cross_domain_transfers)
         self._write_json(run_dir / "novelty_gate.json", state.novelty_assessments)
         self._write_json(run_dir / "novelty_dossiers.json", state.novelty_dossiers)
+        self._write_json(run_dir / "related_work_matrix.json", state.related_work_matrices)
         self._write_json(run_dir / "experiments.json", state.experiments)
+        self._write_json(run_dir / "experiment_protocols.json", state.experiment_protocols)
+        self._write_json(run_dir / "baseline_candidates.json", state.baseline_candidates)
         self._write_json(run_dir / "reviewer_objections.json", state.reviewer_objections)
         self._write_json(run_dir / "reviewer_summaries.json", state.reviewer_summaries)
         self._write_json(run_dir / "human_reviews.json", state.human_reviews)
+        self._write_json(run_dir / "review_queue.json", state.review_queue)
+        self._write_json(run_dir / "agent_tasks.json", state.agent_task_specs)
+        self._write_json(run_dir / "agent_task_specs.json", state.agent_task_specs)
+        self._write_json(run_dir / "agent_run_records.json", state.agent_run_records)
+        self._write_json(run_dir / "agent_validations.json", state.agent_validation_results)
+        self._write_json(run_dir / "agent_validation_results.json", state.agent_validation_results)
         self._write_json(run_dir / "orchestrator_plan.json", state.orchestrator_plan)
         self._write_json(run_dir / "orchestrator_result.json", state.orchestrator_result)
+        self._write_json(run_dir / "active_loop.json", state.active_loop)
         self._write_json(run_dir / "run_log.json", state.run_log)
         self._write_json(run_dir / "rejected_ideas.json", state.rejected_ideas)
         self._write_json(run_dir / "provenance.json", self._provenance_records(state))
         self._write_paper_notes_markdown(state)
         self._write_source_coverage_markdown(state)
+        self._write_coverage_stopping_markdown(state)
         self._write_full_text_coverage_markdown(state)
         self._write_evidence_spans_markdown(state)
         self._write_citation_graph_markdown(state)
+        self._write_structure_markdown(state)
+        self._write_ocr_status_markdown(state)
         self._write_related_work_expansion_markdown(state)
         self._write_paper_ranking_markdown(state)
         self._write_paper_triage_markdown(state)
@@ -188,11 +236,17 @@ class ResearchStateManager:
         self._write_cross_domain_transfers_markdown(state)
         self._write_novelty_gate_markdown(state)
         self._write_novelty_dossiers_markdown(state)
+        self._write_related_work_matrix_markdown(state)
         self._write_experiments_markdown(state)
+        self._write_experiment_protocols_markdown(state)
+        self._write_baseline_candidates_markdown(state)
         self._write_implementation_tasks_markdown(state)
         self._write_reviewer_simulation_markdown(state)
         self._write_revised_experiment_recommendations_markdown(state)
         self._write_human_reviews_markdown(state)
+        self._write_review_queue_markdown(state)
+        self._write_agent_tasks_markdown(state)
+        self._write_active_loop_markdown(state)
         self._write_report(state)
 
     def append_papers(self, state: ResearchRunState, papers: Iterable[Paper]) -> ResearchRunState:
@@ -258,8 +312,11 @@ class ResearchStateManager:
             "claim": {claim.id for claim in state.claims},
             "gap": {gap.id for gap in state.gaps},
             "novelty_assessment": {assessment.target_gap_or_hypothesis_id for assessment in state.novelty_assessments},
+            "novelty_dossier": {dossier.target_id for dossier in state.novelty_dossiers},
             "experiment": {experiment.id for experiment in state.experiments},
             "reviewer_objection": {objection.id for objection in state.reviewer_objections},
+            "source_policy": {state.coverage_stopping_assessment.profile_id if state.coverage_stopping_assessment else ""},
+            "run": {state.run_id},
         }
 
         for claim in state.claims:
@@ -506,6 +563,16 @@ class ResearchStateManager:
                         message=f"Experiment {experiment.id} is paper-ready without a novelty assessment.",
                     )
                 )
+            if experiment.paper_ready and not any(
+                protocol.linked_experiment_plan_id == experiment.id for protocol in state.experiment_protocols
+            ):
+                issues.append(
+                    ValidationIssue(
+                        code="paper-ready-experiment-without-protocol",
+                        object_id=experiment.id,
+                        message=f"Experiment {experiment.id} is paper-ready without an experiment protocol.",
+                    )
+                )
             if not experiment.baselines:
                 issues.append(
                     ValidationIssue(
@@ -540,6 +607,21 @@ class ResearchStateManager:
                         message=(f"Novelty assessment {assessment.target_gap_or_hypothesis_id} is strong without closest prior work."),
                     )
                 )
+            if (
+                assessment.novelty_strength == "strong"
+                and state.coverage_stopping_assessment is not None
+                and not state.coverage_stopping_assessment.enough_for_novelty
+            ):
+                issues.append(
+                    ValidationIssue(
+                        code="strong-novelty-without-policy-coverage",
+                        object_id=assessment.target_gap_or_hypothesis_id,
+                        message=(
+                            f"Novelty assessment {assessment.target_gap_or_hypothesis_id} is strong, but "
+                            f"{state.coverage_stopping_assessment.profile_id} source policy novelty coverage has not passed."
+                        ),
+                    )
+                )
 
         for review in state.human_reviews:
             known_ids = review_object_ids.get(review.object_type)
@@ -559,6 +641,27 @@ class ResearchStateManager:
                         message=f"Human review {review.id} references unknown {review.object_type} {review.object_id}.",
                     )
                 )
+
+        if state.review_queue is not None:
+            for item in state.review_queue.items:
+                if item.status not in {"open", "completed", "dismissed"}:
+                    issues.append(
+                        ValidationIssue(
+                            code="review-queue-invalid-status",
+                            object_id=item.id,
+                            message=f"Review queue item {item.id} has unsupported status {item.status}.",
+                        )
+                    )
+                known_ids = review_object_ids.get(item.object_type)
+                if known_ids is not None and item.object_id not in known_ids:
+                    issues.append(
+                        ValidationIssue(
+                            code="review-queue-unknown-object",
+                            object_id=item.id,
+                            severity="warning",
+                            message=f"Review queue item {item.id} references unknown {item.object_type} {item.object_id}.",
+                        )
+                    )
 
         for note in state.paper_notes:
             if not note.paper_id:
@@ -754,7 +857,15 @@ class ResearchStateManager:
             )
         else:
             lines.append("- none")
-        report_path.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
+        lines.extend(["", "## Review Queue", ""])
+        open_items = [item for item in (state.review_queue.items if state.review_queue else []) if item.status == "open"]
+        if open_items:
+            lines.extend(
+                [f"- `{item.id}` {item.priority} `{item.object_type}:{item.object_id}`: {item.reason}" for item in open_items[:10]]
+            )
+        else:
+            lines.append("- none")
+        report_path.write_text(redact_text("\n".join(lines).rstrip() + "\n"), encoding="utf-8")
 
     def _write_field_map_markdown(self, state: ResearchRunState) -> None:
         path = Path(state.run_dir, "field_map.md")
@@ -1009,6 +1120,15 @@ class ResearchStateManager:
             return
         path.write_text(render_source_coverage_markdown(state.source_coverage), encoding="utf-8")
 
+    def _write_coverage_stopping_markdown(self, state: ResearchRunState) -> None:
+        from gapforge.sources.stopping import render_stopping_assessment_markdown
+
+        path = Path(state.run_dir, "coverage_stopping_assessment.md")
+        if state.coverage_stopping_assessment is None:
+            path.write_text("# Coverage Stopping Assessment\n\nNo policy-aware assessment generated yet.\n", encoding="utf-8")
+            return
+        path.write_text(render_stopping_assessment_markdown(state.coverage_stopping_assessment), encoding="utf-8")
+
     def _write_evidence_spans_markdown(self, state: ResearchRunState) -> None:
         path = Path(state.run_dir, "evidence_spans.md")
         if not state.evidence_spans:
@@ -1060,6 +1180,69 @@ class ResearchStateManager:
         )
         lines.extend(["", "## Unresolved References", ""])
         lines.extend([f"- {reference}" for reference in graph.unresolved_references] or ["- none"])
+        path.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
+
+    def _write_structure_markdown(self, state: ResearchRunState) -> None:
+        _write_records_markdown(
+            Path(state.run_dir, "references.md"),
+            "References",
+            [
+                f"- `{record.id}` paper=`{record.paper_id}` year={record.parsed_year or 'unknown'} "
+                f"doi={record.doi or 'none'} arxiv={record.arxiv_id or 'none'} resolved={record.resolved_paper_id or 'none'}: "
+                f"{record.parsed_title or record.raw_reference[:220]}"
+                for record in state.references
+            ],
+        )
+        _write_records_markdown(
+            Path(state.run_dir, "tables.md"),
+            "Tables",
+            [
+                f"- `{record.id}` paper=`{record.paper_id}` section=`{record.section_id or 'unknown'}` "
+                f"locator={record.locator or 'none'} caption={record.caption or 'none'}"
+                for record in state.tables
+            ],
+        )
+        _write_records_markdown(
+            Path(state.run_dir, "equations.md"),
+            "Equations",
+            [
+                f"- `{record.id}` paper=`{record.paper_id}` section=`{record.section_id or 'unknown'}` "
+                f"locator={record.locator or 'none'}: {record.text[:220]}"
+                for record in state.equations
+            ],
+        )
+        _write_records_markdown(
+            Path(state.run_dir, "captions.md"),
+            "Captions",
+            [
+                f"- `{record.id}` {record.caption_type} paper=`{record.paper_id}` section=`{record.section_id or 'unknown'}` "
+                f"locator={record.locator or 'none'}: {record.caption}"
+                for record in state.captions
+            ],
+        )
+
+    def _write_ocr_status_markdown(self, state: ResearchRunState) -> None:
+        path = Path(state.run_dir, "ocr_status.md")
+        if not state.ocr_attempts:
+            path.write_text("# OCR Status\n\nNo OCR attempts or recommendations recorded yet.\n", encoding="utf-8")
+            return
+        lines = ["# OCR Status", ""]
+        for record in state.ocr_attempts:
+            lines.extend(
+                [
+                    f"## {record.id}",
+                    "",
+                    f"- Paper ID: `{record.paper_id}`",
+                    f"- Artifact ID: `{record.artifact_id or 'unknown'}`",
+                    f"- Status: {record.status}",
+                    f"- Pages attempted: {', '.join(str(page) for page in record.pages_attempted) or 'none'}",
+                    "",
+                    "### Warnings",
+                    "",
+                ]
+            )
+            lines.extend([f"- {warning}" for warning in record.warnings] or ["- none"])
+            lines.append("")
         path.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
 
     def _write_related_work_expansion_markdown(self, state: ResearchRunState) -> None:
@@ -1371,6 +1554,24 @@ class ResearchStateManager:
             )
         path.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
 
+    def _write_experiment_protocols_markdown(self, state: ResearchRunState) -> None:
+        path = Path(state.run_dir, "experiment_protocols.md")
+        if not state.experiment_protocols:
+            path.write_text("# Experiment Protocols\n\nNo experiment protocols generated yet.\n", encoding="utf-8")
+            return
+        from gapforge.experiments.protocol import render_protocols_markdown
+
+        path.write_text(render_protocols_markdown(state.experiment_protocols), encoding="utf-8")
+
+    def _write_baseline_candidates_markdown(self, state: ResearchRunState) -> None:
+        path = Path(state.run_dir, "baseline_candidates.md")
+        if not state.baseline_candidates:
+            path.write_text("# Baseline Candidates\n\nNo baseline candidates generated yet.\n", encoding="utf-8")
+            return
+        from gapforge.experiments.baselines import render_baseline_candidates_markdown
+
+        path.write_text(render_baseline_candidates_markdown(state.baseline_candidates), encoding="utf-8")
+
     def _write_implementation_tasks_markdown(self, state: ResearchRunState) -> None:
         path = Path(state.run_dir, "implementation_tasks.md")
         if not state.experiments:
@@ -1572,10 +1773,107 @@ class ResearchStateManager:
             lines.append("")
         path.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
 
+    def _write_related_work_matrix_markdown(self, state: ResearchRunState) -> None:
+        path = Path(state.run_dir, "related_work_matrix.md")
+        if not state.related_work_matrices:
+            path.write_text("# Related Work Matrix\n\nNo related-work matrices generated yet.\n", encoding="utf-8")
+            return
+        from gapforge.related_work.renderer import render_related_work_matrices_markdown
+
+        path.write_text(render_related_work_matrices_markdown(state.related_work_matrices), encoding="utf-8")
+
     def _write_human_reviews_markdown(self, state: ResearchRunState) -> None:
         from gapforge.review.audit import render_human_reviews_markdown
 
         Path(state.run_dir, "human_reviews.md").write_text(render_human_reviews_markdown(state), encoding="utf-8")
+
+    def _write_review_queue_markdown(self, state: ResearchRunState) -> None:
+        from gapforge.review.queue import render_review_queue_markdown
+
+        Path(state.run_dir, "review_queue.md").write_text(render_review_queue_markdown(state.review_queue), encoding="utf-8")
+
+    def _write_agent_tasks_markdown(self, state: ResearchRunState) -> None:
+        path = Path(state.run_dir, "agent_tasks.md")
+        lines = [
+            "# Agent Tasks",
+            "",
+            "Agent task packs are validation-gated handoffs for optional Codex/GPT-5.4 actual runs.",
+            "Imported agent outputs do not update research objects unless validation passes.",
+            "",
+        ]
+        if not state.agent_task_specs:
+            path.write_text("\n".join(lines + ["No agent tasks have been created yet.", ""]), encoding="utf-8")
+            return
+        validation_by_task = {result.task_spec_id: result for result in state.agent_validation_results}
+        runs_by_task: dict[str, list[Any]] = {}
+        for record in state.agent_run_records:
+            runs_by_task.setdefault(record.task_spec_id, []).append(record)
+        for task in state.agent_task_specs:
+            result = validation_by_task.get(task.id)
+            lines.extend(
+                [
+                    f"## {task.id}",
+                    "",
+                    f"- Skill: {task.skill_name}",
+                    f"- Task type: {task.task_type}",
+                    f"- Output schema: {task.output_schema_name or 'unspecified'}",
+                    f"- Required output files: {', '.join(task.required_output_files) if task.required_output_files else 'none'}",
+                    f"- Validation: {result.status if result else 'not validated'}",
+                    "",
+                ]
+            )
+            if result and result.issues:
+                lines.append("Validation issues:")
+                lines.extend(f"- {issue}" for issue in result.issues)
+                lines.append("")
+            for record in runs_by_task.get(task.id, []):
+                lines.extend(
+                    [
+                        f"- Run record {record.id}: {record.status} ({record.agent_name}/{record.model})",
+                        f"  outputs: {', '.join(record.output_paths) if record.output_paths else 'none'}",
+                    ]
+                )
+            if runs_by_task.get(task.id):
+                lines.append("")
+        path.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
+
+    def _write_active_loop_markdown(self, state: ResearchRunState) -> None:
+        path = Path(state.run_dir, "active_decisions.md")
+        if state.active_loop is None:
+            path.write_text("# Active Loop Decisions\n\nNo active research loop has run yet.\n", encoding="utf-8")
+            return
+        loop = state.active_loop
+        lines = [
+            "# Active Loop Decisions",
+            "",
+            f"- Status: {loop.status}",
+            f"- Current iteration: {loop.current_iteration}",
+            f"- Max iterations: {loop.budget.max_iterations}",
+            f"- Max papers: {loop.budget.max_papers}",
+            f"- Max full-text papers: {loop.budget.max_full_text_papers}",
+            f"- Max queries: {loop.budget.max_queries}",
+            "",
+            "## Decisions",
+            "",
+        ]
+        for decision in loop.decisions:
+            lines.extend(
+                [
+                    f"### {decision.id}: {decision.decision_type}",
+                    "",
+                    f"- Iteration: {decision.iteration}",
+                    f"- Status: {decision.status}",
+                    f"- Expected value: {decision.expected_value:.2f}",
+                    f"- Cost estimate: {decision.cost_estimate:.2f}",
+                    f"- Reason: {decision.reason or 'none'}",
+                    "",
+                    "Evidence:",
+                    "",
+                ]
+            )
+            lines.extend([f"- {item}" for item in decision.evidence] or ["- none"])
+            lines.append("")
+        path.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
 
     def _provenance_records(self, state: ResearchRunState) -> list[dict[str, Any]]:
         records: list[dict[str, Any]] = []
@@ -1586,7 +1884,13 @@ class ResearchStateManager:
             "evidence_spans",
             "search_queries",
             "source_coverage",
+            "coverage_stopping_assessment",
             "citation_graph",
+            "references",
+            "tables",
+            "equations",
+            "captions",
+            "ocr_attempts",
             "paper_ranking",
             "paper_triage",
             "field_map",
@@ -1603,6 +1907,11 @@ class ResearchStateManager:
             "reviewer_summaries",
             "rejected_ideas",
             "human_reviews",
+            "review_queue",
+            "agent_task_specs",
+            "agent_run_records",
+            "agent_validation_results",
+            "active_loop",
         ]:
             value = getattr(state, collection_name)
             items = value if isinstance(value, list) else ([value] if value is not None else [])
@@ -1650,6 +1959,13 @@ def _span_locator(span: EvidenceSpan) -> str:
     if span.char_start or span.char_end:
         parts.append(f"chars {span.char_start}-{span.char_end}")
     return ", ".join(parts) or "unlocated"
+
+
+def _write_records_markdown(path: Path, title: str, lines: list[str]) -> None:
+    if not lines:
+        path.write_text(f"# {title}\n\nNo {title.lower()} recorded yet.\n", encoding="utf-8")
+        return
+    path.write_text(f"# {title}\n\n" + "\n".join(lines).rstrip() + "\n", encoding="utf-8")
 
 
 # Backward-compatible name for the initial scaffold.

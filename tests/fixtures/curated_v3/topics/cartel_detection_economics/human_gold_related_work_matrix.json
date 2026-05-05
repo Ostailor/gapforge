@@ -1,0 +1,23 @@
+[
+  {
+    "direction_id": "v3-cartel-gap-1",
+    "coverage_summary": "Synthetic curated matrix: screening and identification are represented, but economics coverage is intentionally incomplete.",
+    "missing_categories": ["survey/background", "field validation", "legal enforcement context"],
+    "must_read_paper_ids": ["v3-cartel-prior-1", "v3-cartel-prior-2"],
+    "baseline_paper_ids": ["v3-cartel-prior-1"],
+    "entries": [
+      {
+        "direction_id": "v3-cartel-gap-1",
+        "paper_id": "v3-cartel-prior-1",
+        "relationship": "baseline_to_include",
+        "relevance_score": 0.86,
+        "evidence_span_ids": ["v3-cartel-span-1"],
+        "what_it_contributes": "A cartel screening baseline.",
+        "what_it_does_not_solve": "It does not separate collusion from platform-wide shocks.",
+        "must_cite": true,
+        "baseline_candidate": true,
+        "reviewer_risk_if_omitted": "Industrial organization reviewers would reject an experiment that omits the screening baseline."
+      }
+    ]
+  }
+]
