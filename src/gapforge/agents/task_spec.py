@@ -106,6 +106,30 @@ def create_agent_task_spec(
     )
 
 
+def agent_handoff_checklist(task_spec: AgentTaskSpec, *, execution_method: str = "task_pack") -> list[str]:
+    method = execution_method.strip().lower().replace("-", "_")
+    if method == "direct":
+        return [
+            "Confirm GAPFORGE_ENABLE_REAL_RUNS=1 and a configured direct runner command.",
+            "Run the task through Codex/GPT-5.4.",
+            "Validate imported output patches before any research-state mutation.",
+            "Record actual-run status and human acceptance.",
+        ]
+    if method == "fake":
+        return [
+            "Run FakeAgentClient only for deterministic integration testing.",
+            "Do not count fake outputs as actual-run acceptance.",
+        ]
+    return [
+        "Generate the task pack.",
+        "Have Codex/GPT-5.4 inspect TASK.md and the linked artifacts externally.",
+        "Place output files in the task outputs directory or pass explicit output paths.",
+        "Run validation before import.",
+        "Record an attestation naming Codex/GPT-5.4 and the execution method.",
+        "Review actual-run status before claiming acceptance.",
+    ]
+
+
 def _existing_input_artifacts(state: ResearchRunState) -> list[str]:
     run_dir = Path(state.run_dir)
     candidates = [

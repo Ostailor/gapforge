@@ -6,7 +6,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from gapforge.canaries import CanaryReviewManager, CanaryRunManager, default_canary_profiles
+from gapforge.canaries import CampaignCanaryRunManager, CanaryReviewManager, CanaryRunManager, default_canary_profiles
 from gapforge.config import GapForgeConfig
 
 
@@ -17,6 +17,67 @@ def test_list_profiles_includes_required_canaries() -> None:
     assert "manual_pdf_fulltext_codex" in profile_ids
     assert "undercovered_topic_refusal" in profile_ids
     assert "fake_agent_regression" in profile_ids
+
+
+def test_campaign_canary_profiles_include_required_v4_profiles(tmp_path: Path) -> None:
+    manager = CampaignCanaryRunManager(GapForgeConfig.from_cwd(tmp_path))
+    profile_ids = {profile.id for profile in manager.list_profiles()}
+
+    assert "agentic_low_fpr_collusion" in profile_ids
+    assert "agentic_monitor_evasion" in profile_ids
+    assert "agentic_cross_domain_specificity" in profile_ids
+    assert "agentic_undercovered_refusal" in profile_ids
+    assert "manual_pdf_agentic" in profile_ids
+    assert "fake_agent_campaign_regression" in profile_ids
+
+
+def test_campaign_canary_plan_includes_commands_and_acceptance_criteria(tmp_path: Path) -> None:
+    manager = CampaignCanaryRunManager(GapForgeConfig.from_cwd(tmp_path))
+
+    plan = manager.plan("agentic_low_fpr_collusion")
+
+    assert "Campaign Canary Plan" in plan
+    assert "gapforge campaign-canary-run" in plan
+    assert "Acceptance Criteria" in plan
+    assert "novelty dossier" in plan.lower()
+
+
+def test_fake_campaign_canary_runs_offline_and_persists_record(tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    monkeypatch.setenv("GAPFORGE_DISABLE_NETWORK", "1")
+    manager = CampaignCanaryRunManager(GapForgeConfig.from_cwd(tmp_path))
+
+    record = manager.run("fake_agent_campaign_regression")
+
+    assert record.status == "complete"
+    assert record.accepted is True
+    assert record.campaign_id
+    assert record.project_id
+    assert record.actual_run_status == "fake_not_actual"
+    assert record.artifacts
+    loaded = manager.load_record(record.id)
+    assert loaded.id == record.id
+
+
+def test_real_campaign_canary_refuses_without_env(tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    monkeypatch.delenv("GAPFORGE_ENABLE_REAL_RUNS", raising=False)
+    manager = CampaignCanaryRunManager(GapForgeConfig.from_cwd(tmp_path))
+
+    record = manager.run("agentic_low_fpr_collusion", real=True)
+
+    assert record.status == "failed"
+    assert "GAPFORGE_ENABLE_REAL_RUNS=1" in record.failure_reason
+    assert record.accepted is False
+
+
+def test_campaign_undercovered_refusal_can_pass_by_refusing_recommendation(tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    monkeypatch.setenv("GAPFORGE_DISABLE_NETWORK", "1")
+    manager = CampaignCanaryRunManager(GapForgeConfig.from_cwd(tmp_path))
+
+    record = manager.run("agentic_undercovered_refusal")
+
+    assert record.status == "complete"
+    assert record.accepted is True
+    assert record.actual_run_status == "not_applicable"
 
 
 def test_plan_fake_and_real_profiles(tmp_path: Path) -> None:
@@ -115,6 +176,55 @@ def test_canary_cli_list_plan_run_status_artifacts(tmp_path: Path) -> None:
     )
     assert artifacts.returncode == 0, artifacts.stderr
     assert "record.json" in artifacts.stdout
+
+
+def test_campaign_canary_cli_list_plan_run_status(tmp_path: Path) -> None:
+    env = {**os.environ, "GAPFORGE_DISABLE_NETWORK": "1", "PYTHONPATH": str(Path(__file__).resolve().parents[1] / "src")}
+
+    listed = subprocess.run(
+        [sys.executable, "-m", "gapforge.cli", "campaign-canary-list"],
+        cwd=tmp_path,
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert listed.returncode == 0, listed.stderr
+    assert "fake_agent_campaign_regression" in listed.stdout
+
+    plan = subprocess.run(
+        [sys.executable, "-m", "gapforge.cli", "campaign-canary-plan", "--profile", "agentic_low_fpr_collusion"],
+        cwd=tmp_path,
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert plan.returncode == 0, plan.stderr
+    assert "Campaign Canary Plan" in plan.stdout
+
+    run = subprocess.run(
+        [sys.executable, "-m", "gapforge.cli", "campaign-canary-run", "--profile", "fake_agent_campaign_regression"],
+        cwd=tmp_path,
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert run.returncode == 0, run.stderr
+    payload = json.loads(run.stdout)
+    assert payload["status"] == "complete"
+
+    status = subprocess.run(
+        [sys.executable, "-m", "gapforge.cli", "campaign-canary-status", "--canary-id", payload["id"]],
+        cwd=tmp_path,
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert status.returncode == 0, status.stderr
+    assert json.loads(status.stdout)["id"] == payload["id"]
 
 
 def test_review_form_renders(tmp_path: Path) -> None:

@@ -101,6 +101,7 @@ RUN_ARTIFACTS = [
     "agent_run_records.json",
     "agent_validations.json",
     "agent_validation_results.json",
+    "agent_repair_records.json",
     "agent_tasks.md",
     "orchestrator_plan.json",
     "orchestrator_result.json",
@@ -212,6 +213,8 @@ class ResearchStateManager:
         self._write_json(run_dir / "agent_run_records.json", state.agent_run_records)
         self._write_json(run_dir / "agent_validations.json", state.agent_validation_results)
         self._write_json(run_dir / "agent_validation_results.json", state.agent_validation_results)
+        self._write_json(run_dir / "agent_repair_records.json", state.agent_repair_records)
+        self._write_json(run_dir / "agent_actual_run_attestations.json", state.agent_actual_run_attestations)
         self._write_json(run_dir / "orchestrator_plan.json", state.orchestrator_plan)
         self._write_json(run_dir / "orchestrator_result.json", state.orchestrator_result)
         self._write_json(run_dir / "active_loop.json", state.active_loop)
@@ -1810,6 +1813,7 @@ class ResearchStateManager:
             runs_by_task.setdefault(record.task_spec_id, []).append(record)
         for task in state.agent_task_specs:
             result = validation_by_task.get(task.id)
+            attestations = [item for item in state.agent_actual_run_attestations if item.task_spec_id == task.id]
             lines.extend(
                 [
                     f"## {task.id}",
@@ -1833,7 +1837,16 @@ class ResearchStateManager:
                         f"  outputs: {', '.join(record.output_paths) if record.output_paths else 'none'}",
                     ]
                 )
-            if runs_by_task.get(task.id):
+            for attestation in attestations:
+                lines.extend(
+                    [
+                        f"- Attestation {attestation.id}: {attestation.execution_method} "
+                        f"({attestation.agent_name}/{attestation.model}) "
+                        f"accepted={str(attestation.accepted_as_actual_run).lower()}",
+                        f"  attester: {attestation.attester}",
+                    ]
+                )
+            if runs_by_task.get(task.id) or attestations:
                 lines.append("")
         path.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
 
@@ -1911,6 +1924,8 @@ class ResearchStateManager:
             "agent_task_specs",
             "agent_run_records",
             "agent_validation_results",
+            "agent_repair_records",
+            "agent_actual_run_attestations",
             "active_loop",
         ]:
             value = getattr(state, collection_name)

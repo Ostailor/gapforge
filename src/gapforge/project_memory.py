@@ -14,8 +14,10 @@ from gapforge.models import (
     Claim,
     ClaimGraph,
     CorpusPaperRecord,
+    ExperimentCodeTask,
     ExperimentPlan,
     ExperimentProtocol,
+    ExperimentRepoScaffold,
     Gap,
     HumanReviewRecord,
     ProjectMemoryRecord,
@@ -23,6 +25,7 @@ from gapforge.models import (
     Provenance,
     RejectedIdea,
     RelatedWorkMatrix,
+    ResearchCampaign,
     ResearchDirection,
     ResearchProgramState,
     ResearchProject,
@@ -42,12 +45,18 @@ PROJECT_ARTIFACTS = [
     "corpus_papers.json",
     "memory_records.json",
     "research_directions.json",
+    "campaigns.json",
+    "campaigns/",
     "related_work_matrices.json",
     "related_work_matrix.md",
     "experiment_protocols.json",
     "experiment_protocols.md",
     "baseline_candidates.json",
     "baseline_candidates.md",
+    "experiment_code_tasks.json",
+    "experiment_code_tasks.md",
+    "experiment_repo_scaffolds.json",
+    "experiment_repo_scaffolds.md",
     "review_panels.json",
     "review_panel.md",
     "rebuttal_plan.md",
@@ -79,6 +88,7 @@ class ProjectMemoryManager:
         root_dir.mkdir(parents=True, exist_ok=False)
         (root_dir / "runs").mkdir(parents=True, exist_ok=True)
         (root_dir / "reports").mkdir(parents=True, exist_ok=True)
+        (root_dir / "campaigns").mkdir(parents=True, exist_ok=True)
         now = utc_now_iso()
         project = ResearchProject(
             id=project_id,
@@ -128,9 +138,12 @@ class ProjectMemoryManager:
         corpus_papers = _load_list(root_dir / "corpus_papers.json", CorpusPaperRecord)
         memory_records = _load_list(root_dir / "memory_records.json", ProjectMemoryRecord)
         research_directions = _load_list(root_dir / "research_directions.json", ResearchDirection)
+        campaigns = _load_campaigns(root_dir)
         related_work_matrices = _load_list(root_dir / "related_work_matrices.json", RelatedWorkMatrix)
         experiment_protocols = _load_list(root_dir / "experiment_protocols.json", ExperimentProtocol)
         baseline_candidates = _load_list(root_dir / "baseline_candidates.json", BaselineCandidate)
+        experiment_code_tasks = _load_list(root_dir / "experiment_code_tasks.json", ExperimentCodeTask)
+        experiment_repo_scaffolds = _load_list(root_dir / "experiment_repo_scaffolds.json", ExperimentRepoScaffold)
         review_panels = _load_list(root_dir / "review_panels.json", ReviewPanel)
         review_queue = None
         review_queue_path = root_dir / "review_queue.json"
@@ -149,9 +162,12 @@ class ProjectMemoryManager:
             corpus_papers=corpus_papers,
             memory_records=memory_records,
             research_directions=research_directions,
+            campaigns=campaigns,
             related_work_matrices=related_work_matrices,
             experiment_protocols=experiment_protocols,
             baseline_candidates=baseline_candidates,
+            experiment_code_tasks=experiment_code_tasks,
+            experiment_repo_scaffolds=experiment_repo_scaffolds,
             review_panels=review_panels,
             review_queue=review_queue,
             claim_graph=claim_graph,
@@ -163,6 +179,7 @@ class ProjectMemoryManager:
         root_dir.mkdir(parents=True, exist_ok=True)
         (root_dir / "runs").mkdir(parents=True, exist_ok=True)
         (root_dir / "reports").mkdir(parents=True, exist_ok=True)
+        (root_dir / "campaigns").mkdir(parents=True, exist_ok=True)
         program.project.root_dir = str(root_dir)
         program.project.run_ids = _unique(program.run_ids or program.project.run_ids)
         program.project.active_topic_ids = _unique(program.project.active_topic_ids)
@@ -172,15 +189,20 @@ class ProjectMemoryManager:
         self._write_json(root_dir / "corpus_papers.json", program.corpus_papers)
         self._write_json(root_dir / "memory_records.json", program.memory_records)
         self._write_json(root_dir / "research_directions.json", program.research_directions)
+        self._write_json(root_dir / "campaigns.json", program.campaigns)
         self._write_json(root_dir / "related_work_matrices.json", program.related_work_matrices)
         self._write_json(root_dir / "experiment_protocols.json", program.experiment_protocols)
         self._write_json(root_dir / "baseline_candidates.json", program.baseline_candidates)
+        self._write_json(root_dir / "experiment_code_tasks.json", program.experiment_code_tasks)
+        self._write_json(root_dir / "experiment_repo_scaffolds.json", program.experiment_repo_scaffolds)
         self._write_json(root_dir / "review_panels.json", program.review_panels)
         self._write_json(root_dir / "review_queue.json", program.review_queue)
         self._write_json(root_dir / "claim_graph.json", program.claim_graph)
         self._write_related_work_matrix_markdown(program, root_dir)
         self._write_experiment_protocols_markdown(program, root_dir)
         self._write_baseline_candidates_markdown(program, root_dir)
+        self._write_experiment_code_tasks_markdown(program, root_dir)
+        self._write_experiment_repo_scaffolds_markdown(program, root_dir)
         self._write_review_panel_markdown(program, root_dir)
         self._write_review_queue_markdown(program, root_dir)
         if program.claim_graph is not None:
@@ -238,12 +260,24 @@ class ProjectMemoryManager:
             f"- Corpus papers: {len(program.corpus_papers)}",
             f"- Memory records: {len(program.memory_records)}",
             f"- Research directions: {len(program.research_directions)}",
+            f"- Campaigns: {len(program.campaigns)}",
             f"- Experiment protocols: {len(program.experiment_protocols)}",
+            f"- Experiment code tasks: {len(program.experiment_code_tasks)}",
+            f"- Experiment repo scaffolds: {len(program.experiment_repo_scaffolds)}",
             "",
             "## Topics",
             "",
         ]
         lines.extend([f"- `{topic.id}` {topic.text} [{topic.status}]" for topic in program.topics] or ["- none"])
+        lines.extend(["", "## Campaigns", ""])
+        lines.extend(
+            [
+                f"- `{campaign.id}` {campaign.title or campaign.topic} "
+                f"[{campaign.status}, mode={campaign.mode}, runs={len(campaign.run_ids)}, tasks={len(campaign.task_ids)}]"
+                for campaign in program.campaigns[:20]
+            ]
+            or ["- none"]
+        )
         lines.extend(["", "## Corpus Summary", ""])
         lines.extend(
             [
@@ -289,6 +323,22 @@ class ProjectMemoryManager:
                 f"- `{protocol.id}` direction={protocol.direction_id}, experiment={protocol.linked_experiment_plan_id}, "
                 f"baselines={len(protocol.baselines)}, metrics={len(protocol.metrics)}"
                 for protocol in program.experiment_protocols[:20]
+            ]
+            or ["- none"]
+        )
+        lines.extend(["", "## Experiment Code Handoffs", ""])
+        lines.extend(
+            [
+                f"- `{task.id}` direction={task.direction_id}, type={task.task_type}, status={task.status}"
+                for task in program.experiment_code_tasks[:20]
+            ]
+            or ["- none"]
+        )
+        lines.extend(["", "## Experiment Repo Scaffolds", ""])
+        lines.extend(
+            [
+                f"- `{scaffold.id}` direction={scaffold.direction_id}, files={len(scaffold.files)}, path=`{scaffold.path}`"
+                for scaffold in program.experiment_repo_scaffolds[:20]
             ]
             or ["- none"]
         )
@@ -373,6 +423,62 @@ class ProjectMemoryManager:
         from gapforge.experiments.baselines import render_baseline_candidates_markdown
 
         path.write_text(render_baseline_candidates_markdown(program.baseline_candidates), encoding="utf-8")
+
+    def _write_experiment_code_tasks_markdown(self, program: ResearchProgramState, root_dir: Path) -> None:
+        path = root_dir / "experiment_code_tasks.md"
+        if not program.experiment_code_tasks:
+            path.write_text("# Experiment Code Tasks\n\nNo experiment code tasks generated yet.\n", encoding="utf-8")
+            return
+        lines = ["# Experiment Code Tasks", ""]
+        for task in program.experiment_code_tasks:
+            lines.extend(
+                [
+                    f"## `{task.id}`",
+                    "",
+                    f"- Campaign ID: `{task.campaign_id}`",
+                    f"- Direction ID: `{task.direction_id}`",
+                    f"- Protocol ID: `{task.experiment_protocol_id}`",
+                    f"- Task type: `{task.task_type}`",
+                    f"- Status: `{task.status}`",
+                    "",
+                    "### Required Files",
+                    "",
+                    *[f"- `{item}`" for item in task.required_files],
+                    "",
+                    "### Expected Outputs",
+                    "",
+                    *[f"- `{item}`" for item in task.expected_outputs],
+                    "",
+                    "### Validation Commands",
+                    "",
+                    *[f"- `{item}`" for item in task.validation_commands],
+                    "",
+                ]
+            )
+        path.write_text(redact_text("\n".join(lines).rstrip() + "\n"), encoding="utf-8")
+
+    def _write_experiment_repo_scaffolds_markdown(self, program: ResearchProgramState, root_dir: Path) -> None:
+        path = root_dir / "experiment_repo_scaffolds.md"
+        if not program.experiment_repo_scaffolds:
+            path.write_text("# Experiment Repo Scaffolds\n\nNo experiment repos scaffolded yet.\n", encoding="utf-8")
+            return
+        lines = ["# Experiment Repo Scaffolds", ""]
+        for scaffold in program.experiment_repo_scaffolds:
+            lines.extend(
+                [
+                    f"## `{scaffold.id}`",
+                    "",
+                    f"- Direction ID: `{scaffold.direction_id}`",
+                    f"- Path: `{scaffold.path}`",
+                    f"- Created at: {scaffold.created_at or 'unknown'}",
+                    "",
+                    "### Files",
+                    "",
+                    *[f"- `{item}`" for item in scaffold.files],
+                    "",
+                ]
+            )
+        path.write_text(redact_text("\n".join(lines).rstrip() + "\n"), encoding="utf-8")
 
     def _write_review_panel_markdown(self, program: ResearchProgramState, root_dir: Path) -> None:
         from gapforge.reviewers.panel import render_review_panel_markdown
@@ -559,6 +665,17 @@ def _load_list(path: Path, model: type[Any]) -> list[Any]:
         return []
     raw = json.loads(path.read_text(encoding="utf-8"))
     return [from_dict(model, item) for item in raw]
+
+
+def _load_campaigns(root_dir: Path) -> list[ResearchCampaign]:
+    campaigns_dir = root_dir / "campaigns"
+    campaigns: list[ResearchCampaign] = []
+    if campaigns_dir.exists():
+        for campaign_path in sorted(campaigns_dir.glob("*/campaign.json")):
+            campaigns.append(from_dict(ResearchCampaign, json.loads(campaign_path.read_text(encoding="utf-8"))))
+    if campaigns:
+        return campaigns
+    return _load_list(root_dir / "campaigns.json", ResearchCampaign)
 
 
 def _record_from_claim(project_id: str, run_id: str, claim: Claim) -> ProjectMemoryRecord:

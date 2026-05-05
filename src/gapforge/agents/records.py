@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from pathlib import Path
 
-from gapforge.models import AgentRunRecord, AgentTaskSpec, AgentValidationResult, ResearchRunState
+from gapforge.models import AgentActualRunAttestation, AgentRunRecord, AgentTaskSpec, AgentValidationResult, ResearchRunState
 from gapforge.redaction import redact_text
 
 
@@ -37,6 +37,8 @@ def render_task_pack_markdown(state: ResearchRunState, task_spec: AgentTaskSpec)
         f"- Task type: `{task_spec.task_type}`",
         f"- Output schema: `{task_spec.output_schema_name or 'unspecified'}`",
         "- Model default for Codex actual runs: `gpt-5.4` unless configured otherwise",
+        "- Actual-run methods: direct, task_pack, manual_handoff, or fake",
+        "- Task-pack/manual-handoff outputs count only after validation, attestation, and human acceptance",
         "",
         "## Instructions",
         "",
@@ -87,3 +89,8 @@ def append_validation_result(state: ResearchRunState, result: AgentValidationRes
 def append_run_record(state: ResearchRunState, record: AgentRunRecord) -> None:
     state.agent_run_records = [item for item in state.agent_run_records if item.id != record.id]
     state.agent_run_records.append(record)
+
+
+def append_attestation(state: ResearchRunState, attestation: AgentActualRunAttestation) -> None:
+    state.agent_actual_run_attestations = [item for item in state.agent_actual_run_attestations if item.id != attestation.id]
+    state.agent_actual_run_attestations.append(attestation)

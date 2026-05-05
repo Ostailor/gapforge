@@ -9,21 +9,28 @@ The Python skills transform `ResearchRunState`. The Codex skill packages tell a 
 
 ## Skill Set by Version
 
-| Skill | v0.1 | v0.2 | v0.3 | CLI |
-| --- | --- | --- | --- | --- |
-| Literature Cartographer | field map | refreshed maps | retrieval/project context aware | `gapforge map` |
-| Paper Triage | tiering | role-aware ranking | source/full-text/retrieval-aware prioritization | `gapforge triage`, `gapforge rank-papers` |
-| Deep Reading | abstract notes | full-text sections and evidence spans | optional LLM reading with locator validation | `gapforge read`, `gapforge read-llm` |
-| Gap Mining | heuristic gaps | evidence matrices | retrieval-backed counterevidence and optional LLM synthesis | `gapforge mine-gaps`, `gapforge mine-gaps-llm` |
-| Cross-Domain Analogy | query suggestions | transfer candidates | evidence-backed adjacent-field promotion | `gapforge analogies` |
-| Novelty Gate | lexical novelty | novelty dossiers | retrieval/citation/project-memory and optional LLM comparison | `gapforge novelty-check`, `gapforge novelty-check-llm` |
-| Experiment Designer | experiment plans | novelty-gated plans | executable protocols and baseline candidates | `gapforge design-experiments`, `gapforge experiment-protocol` |
-| Reviewer Simulation | objections | readiness summary | review panel and rebuttal planning | `gapforge review`, `gapforge review-panel` |
-| Project Memory | - | - | cross-run corpus, decisions, directions | `gapforge init-project`, `gapforge sync-project-memory` |
-| Hybrid Retrieval | - | - | local retrieval index | `gapforge build-index`, `gapforge search-index` |
-| Related-Work Matrix | - | - | prior-work taxonomy per direction | `gapforge related-work-matrix` |
-| Direction Maturation | - | - | seed to manuscript-ready gates | `gapforge create-direction`, `gapforge mature-direction` |
-| Manuscript Export | - | - | paper package and BibTeX | `gapforge export-paper-package` |
+| Skill | v0.1 | v0.2 | v0.3 | v0.4 | CLI |
+| --- | --- | --- | --- | --- | --- |
+| Literature Cartographer | field map | refreshed maps | retrieval/project context aware | campaign input artifact | `gapforge map` |
+| Paper Triage | tiering | role-aware ranking | source/full-text/retrieval-aware prioritization | campaign reading priority | `gapforge triage`, `gapforge rank-papers` |
+| Deep Reading | abstract notes | full-text sections and evidence spans | optional LLM reading with locator validation | Codex campaign task input/output | `gapforge read`, `gapforge read-llm` |
+| Gap Mining | heuristic gaps | evidence matrices | retrieval-backed counterevidence and optional LLM synthesis | campaign gap synthesis task | `gapforge mine-gaps`, `gapforge mine-gaps-llm` |
+| Cross-Domain Analogy | query suggestions | transfer candidates | evidence-backed adjacent-field promotion | campaign search/gap input | `gapforge analogies` |
+| Novelty Gate | lexical novelty | novelty dossiers | retrieval/citation/project-memory and optional LLM comparison | novelty re-search loop | `gapforge novelty-check`, `gapforge novelty-check-llm`, `gapforge novelty-loop` |
+| Experiment Designer | experiment plans | novelty-gated plans | executable protocols and baseline candidates | code-task handoff source | `gapforge design-experiments`, `gapforge experiment-protocol` |
+| Reviewer Simulation | objections | readiness summary | review panel and rebuttal planning | campaign reviewer loop | `gapforge review`, `gapforge review-panel`, `gapforge reviewer-loop` |
+| Project Memory | - | - | cross-run corpus, decisions, directions | campaign parent state | `gapforge init-project`, `gapforge sync-project-memory` |
+| Hybrid Retrieval | - | - | local retrieval index | task context selection | `gapforge build-index`, `gapforge build-task-context` |
+| Related-Work Matrix | - | - | prior-work taxonomy per direction | campaign readiness gate | `gapforge related-work-matrix` |
+| Direction Maturation | - | - | seed to manuscript-ready gates | campaign stop/readiness input | `gapforge create-direction`, `gapforge mature-direction` |
+| Manuscript Export | - | - | paper package and BibTeX | campaign package/export step | `gapforge export-paper-package` |
+| Campaign Controller | - | - | - | auditable campaign loop | `gapforge campaign-run`, `gapforge campaign-next` |
+| Codex Campaign Task | - | - | task packs | campaign task packs/handoff | `gapforge campaign-task`, `gapforge task-handoff` |
+| Agent Output Validator | - | - | validated import | repair/rollback campaign import | `gapforge campaign-validate-output`, `gapforge campaign-import-output` |
+| Novelty Research Loop | - | - | novelty dossiers | iterative novelty re-search | `gapforge novelty-loop` |
+| Experiment Code Task | - | - | protocols | Codex code task handoff | `gapforge generate-code-tasks`, `gapforge codex-code-task` |
+| Campaign Reviewer Panel | - | - | review panels | campaign rebuttal/fix loop | `gapforge reviewer-loop` |
+| Real-Run Acceptance | - | - | canary review | campaign release gate | `gapforge campaign-acceptance`, `gapforge v4-release-gate` |
 
 ## Shared Rules
 
@@ -37,6 +44,8 @@ The Python skills transform `ResearchRunState`. The Codex skill packages tell a 
 - Preserve rejected ideas and human decisions.
 - Prefer decisive experiments over vague ideas.
 - Attack an idea before recommending it.
+- Distinguish deterministic, fake-agent, task-pack/manual-handoff, and direct Codex modes.
+- Never count fake-agent outputs as real Codex/GPT-5.4 acceptance.
 
 ## Optional LLM Skills
 
@@ -50,6 +59,20 @@ Modes:
 - `provider`: opt-in real provider adapter
 
 LLM outputs must be schema-valid before state changes. Unsupported model claims are rejected, downgraded, or marked uncertain. Model-generated citations are not trusted unless resolved to known paper IDs or recorded source results.
+
+## v0.4 Campaign Skills
+
+The v0.4 skill packages guide campaign-level work. They do not authorize unvalidated model output. Use them with:
+
+```bash
+gapforge campaign-task --campaign-id <campaign-id> --type <task-type>
+gapforge campaign-validate-output --campaign-id <campaign-id> --task-id <task-id>
+gapforge campaign-import-output --campaign-id <campaign-id> --task-id <task-id>
+gapforge campaign-review --campaign-id <campaign-id>
+gapforge v4-release-gate --project-id <project-id>
+```
+
+Fake-agent mode validates workflow plumbing only. Task-pack/manual-handoff can support real acceptance only after real Codex/GPT-5.4 output is imported, validated, attested, and human-reviewed.
 
 ## Codex Skill Package Requirements
 

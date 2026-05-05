@@ -5,15 +5,29 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from gapforge.evals.fixtures import V2_FIXTURE_NAMES, V3_FIXTURE_NAMES, EvalFixture, load_fixtures, load_v3_fixtures
+from gapforge.evals.fixtures import (
+    V2_FIXTURE_NAMES,
+    V3_FIXTURE_NAMES,
+    V4_FIXTURE_NAMES,
+    EvalFixture,
+    load_fixtures,
+    load_v3_fixtures,
+    load_v4_fixtures,
+)
 from gapforge.evals.metrics import (
     EvalScores,
     RunMetrics,
+    actual_run_gate_correctness,
+    agent_output_validation_strictness,
+    campaign_decision_quality,
+    campaign_report_honesty,
     contradiction_detection_score,
     direction_maturity_accuracy,
+    direction_maturity_gate_accuracy_from_fixture,
     duplicate_detection_rate,
     evidence_linkage_score,
     evidence_span_precision_proxy,
+    experiment_code_task_quality,
     experiment_completeness_score,
     full_text_coverage_score,
     gap_evidence_matrix_score,
@@ -23,15 +37,19 @@ from gapforge.evals.metrics import (
     manuscript_package_honesty,
     novelty_dossier_completeness_score,
     novelty_gate_accuracy,
+    novelty_research_loop_quality,
     prior_work_recall_proxy,
     protocol_completeness,
     related_work_matrix_quality,
     report_uncertainty_score,
     retrieval_relevance_at_k,
+    review_queue_quality,
     reviewer_objection_quality_score,
+    rollback_safety,
     section_grounding_score,
     source_coverage_transparency_score,
     source_policy_compliance,
+    stop_reason_correctness,
     unsupported_claim_rate,
 )
 from gapforge.experiments.protocol import build_protocol_from_state
@@ -68,6 +86,7 @@ class EvalReport:
     results: list[FixtureEvalResult]
     v2: bool = False
     v3: bool = False
+    v4: bool = False
     report_path: Path | None = None
 
     @property
@@ -90,11 +109,22 @@ def run_evals(
     write_report: bool = True,
     v2: bool = False,
     v3: bool = False,
+    v4: bool = False,
 ) -> EvalReport:
-    selected = [fixture] if fixture else (V3_FIXTURE_NAMES if v3 else V2_FIXTURE_NAMES if v2 else None)
-    fixtures = load_v3_fixtures(selected, fixture_root) if v3 else load_fixtures(selected, fixture_root)
+    selected = [fixture] if fixture else (V4_FIXTURE_NAMES if v4 else V3_FIXTURE_NAMES if v3 else V2_FIXTURE_NAMES if v2 else None)
+    if v4:
+        fixtures = load_v4_fixtures(selected, fixture_root)
+    elif v3:
+        fixtures = load_v3_fixtures(selected, fixture_root)
+    else:
+        fixtures = load_fixtures(selected, fixture_root)
     results = [_evaluate_fixture(item) for item in fixtures]
-    report = EvalReport(results=results, v2=v2 or any(item.is_v2 for item in fixtures), v3=v3 or any(item.is_v3 for item in fixtures))
+    report = EvalReport(
+        results=results,
+        v2=v2 or any(item.is_v2 for item in fixtures),
+        v3=v3 or any(item.is_v3 for item in fixtures),
+        v4=v4 or any(item.is_v4 for item in fixtures),
+    )
     if write_report:
         path = (output_dir or Path.cwd()) / "eval_report.md"
         path.write_text(render_eval_report(report), encoding="utf-8")
@@ -112,6 +142,10 @@ def render_eval_report(report: EvalReport) -> str:
         v3_scores = [score for result in report.results if (score := result.scores.v3_overall()) is not None]
         v3_overall = round(sum(v3_scores) / len(v3_scores), 3) if v3_scores else 0.0
         lines.extend([f"v0.3 overall score: **{v3_overall:.3f}**", ""])
+    if report.v4:
+        v4_scores = [score for result in report.results if (score := result.scores.v4_overall()) is not None]
+        v4_overall = round(sum(v4_scores) / len(v4_scores), 3) if v4_scores else 0.0
+        lines.extend([f"v0.4 overall score: **{v4_overall:.3f}**", ""])
     for result in report.results:
         scores = result.scores
         lines.extend(
@@ -165,6 +199,25 @@ def render_eval_report(report: EvalReport) -> str:
                     f"- source_policy_compliance: {scores.source_policy_compliance:.3f}",
                     f"- llm_output_grounding_score: {scores.llm_output_grounding_score:.3f}",
                     f"- fixture_v3_overall: {scores.v3_overall():.3f}",
+                    "",
+                ]
+            )
+        if scores.v4_overall() is not None:
+            lines.extend(
+                [
+                    "### v0.4 Scores",
+                    "",
+                    f"- campaign_decision_quality: {scores.campaign_decision_quality:.3f}",
+                    f"- stop_reason_correctness: {scores.stop_reason_correctness:.3f}",
+                    f"- agent_output_validation_strictness: {scores.agent_output_validation_strictness:.3f}",
+                    f"- actual_run_gate_correctness: {scores.actual_run_gate_correctness:.3f}",
+                    f"- novelty_research_loop_quality: {scores.novelty_research_loop_quality:.3f}",
+                    f"- direction_maturity_gate_accuracy: {scores.direction_maturity_gate_accuracy:.3f}",
+                    f"- campaign_report_honesty: {scores.campaign_report_honesty:.3f}",
+                    f"- review_queue_quality: {scores.review_queue_quality:.3f}",
+                    f"- experiment_code_task_quality: {scores.experiment_code_task_quality:.3f}",
+                    f"- rollback_safety: {scores.rollback_safety:.3f}",
+                    f"- fixture_v4_overall: {scores.v4_overall():.3f}",
                     "",
                 ]
             )
@@ -241,6 +294,18 @@ def _evaluate_fixture(fixture: EvalFixture) -> FixtureEvalResult:
             [{"evidence_locators": [span.locator for span in state.evidence_spans[:1]]}],
             [span.locator for span in state.evidence_spans],
         )
+    if fixture.is_v4:
+        campaign_fixture = fixture.campaign_fixture
+        scores.campaign_decision_quality = campaign_decision_quality(campaign_fixture)
+        scores.stop_reason_correctness = stop_reason_correctness(campaign_fixture)
+        scores.agent_output_validation_strictness = agent_output_validation_strictness(campaign_fixture)
+        scores.actual_run_gate_correctness = actual_run_gate_correctness(campaign_fixture)
+        scores.novelty_research_loop_quality = novelty_research_loop_quality(campaign_fixture)
+        scores.direction_maturity_gate_accuracy = direction_maturity_gate_accuracy_from_fixture(campaign_fixture)
+        scores.campaign_report_honesty = campaign_report_honesty(campaign_fixture)
+        scores.review_queue_quality = review_queue_quality(campaign_fixture)
+        scores.experiment_code_task_quality = experiment_code_task_quality(campaign_fixture)
+        scores.rollback_safety = rollback_safety(campaign_fixture)
     unsupported = [
         claim.id
         for claim in state.claims
@@ -460,6 +525,16 @@ def _failed_checks(scores: EvalScores, result: FixtureEvalResult) -> list[tuple[
         "contradiction_detection_score": 0.8,
         "source_policy_compliance": 0.8,
         "llm_output_grounding_score": 0.9,
+        "campaign_decision_quality": 0.75,
+        "stop_reason_correctness": 0.8,
+        "agent_output_validation_strictness": 0.9,
+        "actual_run_gate_correctness": 1.0,
+        "novelty_research_loop_quality": 0.8,
+        "direction_maturity_gate_accuracy": 0.9,
+        "campaign_report_honesty": 0.85,
+        "review_queue_quality": 0.8,
+        "experiment_code_task_quality": 0.8,
+        "rollback_safety": 0.9,
     }
     suggestions = {
         "full_text_coverage_score": "Parse more full text before evaluating research quality.",
@@ -481,6 +556,18 @@ def _failed_checks(scores: EvalScores, result: FixtureEvalResult) -> list[tuple[
         "contradiction_detection_score": "Surface expected claim contradictions before manuscript or direction promotion.",
         "source_policy_compliance": "Satisfy required source policies or explicitly warn that coverage is insufficient.",
         "llm_output_grounding_score": "Require every model-produced claim to cite known evidence locators.",
+        "campaign_decision_quality": "Record campaign decisions with evidence, reason, status, and expected next action.",
+        "stop_reason_correctness": "Use explicit stop reasons and refuse recommendations when coverage or novelty is weak.",
+        "agent_output_validation_strictness": "Reject fake citations, unsupported high-confidence claims, and unvalidated imports.",
+        "actual_run_gate_correctness": "Keep fake-agent campaigns separate from accepted actual Codex/GPT-5.4 campaigns.",
+        "novelty_research_loop_quality": "Iterate unknown novelty through recorded searches, retrieval rebuilds, and dossier refreshes.",
+        "direction_maturity_gate_accuracy": "Require protocol, novelty dossier, and related-work matrix before experiment-ready maturity.",
+        "campaign_report_honesty": "Show campaign mode, stop reason, uncertainty, and fake-vs-real status without overclaiming.",
+        "review_queue_quality": "Create prioritized review items for unresolved risks and human acceptance gates.",
+        "experiment_code_task_quality": (
+            "Generate code tasks with required files, expected outputs, validation commands, and no fake results."
+        ),
+        "rollback_safety": "Create rollback snapshots and audit records before applying campaign imports.",
     }
     for name, threshold in thresholds.items():
         value = getattr(scores, name)

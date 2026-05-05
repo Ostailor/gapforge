@@ -39,6 +39,19 @@ Located in `tests/fixtures/curated_v3/`:
 
 These are synthetic or metadata/short-excerpt fixtures designed to resemble real research workflows. They must not include copyrighted PDFs or present fixture conclusions as real literature findings.
 
+### v0.4 Campaign Fixtures
+
+Located in `tests/fixtures/campaign_v4/`:
+
+- `fake_agent_campaign`
+- `novelty_research_loop`
+- `undercovered_refusal`
+- `invalid_agent_output`
+- `experiment_ready_direction`
+- `reviewer_fatal_flaw`
+
+These fixtures test campaign behavior, actual-run gate logic, invalid output rejection, novelty re-search, stop reasons, direction maturity gates, review queues, code task quality, and rollback safety. They are synthetic offline fixtures and do not prove Codex/GPT-5.4 actual-run quality.
+
 ## Metrics
 
 Core metrics:
@@ -74,13 +87,28 @@ v0.3 metrics:
 - `source_policy_compliance`
 - `llm_output_grounding_score`
 
+v0.4 metrics:
+
+- `campaign_decision_quality`
+- `stop_reason_correctness`
+- `agent_output_validation_strictness`
+- `actual_run_gate_correctness`
+- `novelty_research_loop_quality`
+- `direction_maturity_gate_accuracy`
+- `campaign_report_honesty`
+- `review_queue_quality`
+- `experiment_code_task_quality`
+- `rollback_safety`
+
 ## Commands
 
 ```bash
 gapforge eval
 gapforge eval --v2
 gapforge eval --v3
+gapforge eval --v4
 gapforge eval --fixture low_fpr_collusion --v3
+gapforge eval --fixture fake_agent_campaign --v4
 gapforge eval --write-report
 make eval
 ```
@@ -98,6 +126,11 @@ make eval
 - query-only analogies presented as conclusions
 - LLM outputs accepted without grounding
 - manuscript packages that imply fake results
+- fake-agent campaigns counted as actual-run acceptance
+- invalid campaign output mutating state
+- campaign reports recommending directions under poor coverage
+- experiment-ready directions missing protocols, novelty dossiers, or related-work matrices
+- rollback snapshots missing before import
 
 ## Fixture Policy
 
@@ -110,3 +143,5 @@ make eval
 ## Interpreting Scores
 
 Eval scores are regression signals. A passing eval means GapForge preserved safety and behavior on curated cases. It does not mean a generated research direction is novel, publishable, or exhaustive. Human expert review and additional source coverage remain required.
+
+For v0.4, passing `gapforge eval --v4` means the offline campaign behavior fixtures passed. It does not mean actual Codex/GPT-5.4 campaign acceptance passed. Actual-run acceptance requires recorded real campaigns, validated imports, attestation, and human review.

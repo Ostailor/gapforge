@@ -1,0 +1,107 @@
+{
+  "topic": "reviewer fatal flaw campaign fixture",
+  "decisions": [
+    {
+      "decision_type": "request_human_review",
+      "reason": "Reviewer panel found missing baseline and unsupported novelty.",
+      "evidence": ["fatal baseline objection", "novelty dossier unknown"],
+      "status": "complete"
+    },
+    {
+      "decision_type": "stop",
+      "reason": "Fatal reviewer flaw blocks manuscript readiness.",
+      "evidence": ["review panel required fixes"],
+      "status": "complete"
+    }
+  ],
+  "expected_decisions": ["request_human_review", "stop"],
+  "stop_reason": {
+    "actual": "human_review_required",
+    "expected": "human_review_required",
+    "recommended_direction": false,
+    "explanation": "Fatal reviewer flaw must be fixed before a recommendation."
+  },
+  "agent_outputs": {
+    "invalid_output_rejected": true,
+    "fake_citation_rejected": true,
+    "unsupported_high_confidence_rejected": true,
+    "unvalidated_imports": 0,
+    "validation_issues": ["reviewer objection must cite protocol gap or prior work"]
+  },
+  "actual_run_gate": {
+    "expected_pass": false,
+    "expected_blockers": ["human review did not accept the campaign"],
+    "campaigns": [
+      {
+        "id": "campaign-reviewer-fatal",
+        "mode": "codex_task_pack",
+        "accepted": false,
+        "release_gate_eligible": false,
+        "attested": true,
+        "validated_imports": true,
+        "human_review_accepted": false
+      }
+    ]
+  },
+  "novelty_loop": {
+    "initial_verdict": "contested",
+    "generated_search_requests": ["missing baseline closest prior work", "unsupported novelty prior work"],
+    "searches_recorded": true,
+    "retrieval_rebuilt": true,
+    "duplicate_prior_work": false,
+    "strong_novelty_blocked_when_missing_searches": true,
+    "direction_updated": true
+  },
+  "directions": [
+    {
+      "id": "direction-fatal",
+      "maturity": "candidate",
+      "has_protocol": true,
+      "has_novelty_dossier": false,
+      "has_related_work_matrix": true,
+      "rejected": false
+    }
+  ],
+  "report": {
+    "text": "Reviewer panel report states human_review_required, missing baseline, unsupported novelty, and uncertainty.",
+    "mentions_uncertainty": true,
+    "mentions_stop_reason": true,
+    "labels_fake_vs_real": true,
+    "overclaims": false,
+    "claims_novel_without_dossier": false
+  },
+  "review_queue": {
+    "expected_open": 2,
+    "items": [
+      {
+        "object_type": "experiment_protocol",
+        "object_id": "protocol-fatal",
+        "priority": "high",
+        "reason": "Missing required baseline creates fatal reviewer risk.",
+        "status": "open"
+      },
+      {
+        "object_type": "novelty_dossier",
+        "object_id": "dossier-fatal",
+        "priority": "high",
+        "reason": "Unsupported novelty must be downgraded or searched.",
+        "status": "open"
+      }
+    ]
+  },
+  "experiment_code_tasks": [
+    {
+      "task_type": "implement_baseline",
+      "instructions": "Prepare a baseline task only after the missing baseline is identified; do not invent results.",
+      "required_files": ["baselines/README.md"],
+      "expected_outputs": ["baseline_requests.json"],
+      "validation_commands": ["pytest"]
+    }
+  ],
+  "rollback": {
+    "snapshot_created": true,
+    "rollback_exercised": true,
+    "state_restored": true,
+    "audit_recorded": true
+  }
+}

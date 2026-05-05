@@ -62,6 +62,16 @@ class EvalScores:
     contradiction_detection_score: float | None = None
     source_policy_compliance: float | None = None
     llm_output_grounding_score: float | None = None
+    campaign_decision_quality: float | None = None
+    stop_reason_correctness: float | None = None
+    agent_output_validation_strictness: float | None = None
+    actual_run_gate_correctness: float | None = None
+    novelty_research_loop_quality: float | None = None
+    direction_maturity_gate_accuracy: float | None = None
+    campaign_report_honesty: float | None = None
+    review_queue_quality: float | None = None
+    experiment_code_task_quality: float | None = None
+    rollback_safety: float | None = None
 
     def overall(self) -> float:
         positive = [
@@ -101,6 +111,24 @@ class EvalScores:
             self.contradiction_detection_score,
             self.source_policy_compliance,
             self.llm_output_grounding_score,
+        ]
+        present = [value for value in values if value is not None]
+        if not present:
+            return None
+        return round(sum(present) / len(present), 3)
+
+    def v4_overall(self) -> float | None:
+        values = [
+            self.campaign_decision_quality,
+            self.stop_reason_correctness,
+            self.agent_output_validation_strictness,
+            self.actual_run_gate_correctness,
+            self.novelty_research_loop_quality,
+            self.direction_maturity_gate_accuracy,
+            self.campaign_report_honesty,
+            self.review_queue_quality,
+            self.experiment_code_task_quality,
+            self.rollback_safety,
         ]
         present = [value for value in values if value is not None]
         if not present:
@@ -491,6 +519,158 @@ def llm_output_grounding_score(outputs: list[dict[str, object]], known_locators:
     return round(grounded / total, 3)
 
 
+def campaign_decision_quality(fixture: dict[str, object]) -> float:
+    decisions = _dicts(fixture.get("decisions"))
+    expected = [str(item) for item in _list(fixture.get("expected_decisions"))]
+    if not expected:
+        return 1.0 if decisions else 0.0
+    actual = [str(item.get("decision_type", "")) for item in decisions]
+    coverage = len(set(expected) & set(actual)) / len(set(expected))
+    grounded = [
+        bool(str(item.get("reason", "")).strip())
+        and bool(_list(item.get("evidence")))
+        and item.get("status") in {"complete", "pending", "blocked"}
+        for item in decisions
+        if str(item.get("decision_type", "")) in expected
+    ]
+    grounding = sum(1 for item in grounded if item) / len(grounded) if grounded else 0.0
+    return round((0.65 * coverage) + (0.35 * grounding), 3)
+
+
+def stop_reason_correctness(fixture: dict[str, object]) -> float:
+    stop = _dict(fixture.get("stop_reason"))
+    actual = str(stop.get("actual", ""))
+    expected = str(stop.get("expected", ""))
+    if not expected:
+        return 0.0
+    reason_match = actual == expected
+    not_ready = actual.startswith("not_ready") or actual in {"rejected_duplicate_prior_work", "human_review_required"}
+    recommendation_ok = not (not_ready and bool(stop.get("recommended_direction")))
+    explicit = bool(str(stop.get("explanation", "")).strip()) or bool(_list(stop.get("evidence")))
+    return round((0.5 * int(reason_match)) + (0.3 * int(recommendation_ok)) + (0.2 * int(explicit)), 3)
+
+
+def agent_output_validation_strictness(fixture: dict[str, object]) -> float:
+    outputs = _dict(fixture.get("agent_outputs"))
+    checks = [
+        outputs.get("invalid_output_rejected") is True,
+        _int(outputs.get("unvalidated_imports")) == 0,
+        bool(_list(outputs.get("validation_issues"))),
+        outputs.get("fake_citation_rejected", True) is True,
+        outputs.get("unsupported_high_confidence_rejected", True) is True,
+    ]
+    return round(sum(1 for item in checks if item) / len(checks), 3)
+
+
+def actual_run_gate_correctness(fixture: dict[str, object]) -> float:
+    gate = _dict(fixture.get("actual_run_gate"))
+    campaigns = _dicts(gate.get("campaigns"))
+    expected_pass = bool(gate.get("expected_pass"))
+    computed_pass = _computed_actual_run_gate(campaigns)
+    fake_only_blocked = not any(
+        item.get("mode") != "fake_agent" and item.get("accepted") and item.get("release_gate_eligible") for item in campaigns
+    )
+    if expected_pass:
+        return 1.0 if computed_pass else 0.0
+    return round((0.7 * int(computed_pass is False)) + (0.3 * int(fake_only_blocked or bool(gate.get("expected_blockers")))), 3)
+
+
+def novelty_research_loop_quality(fixture: dict[str, object]) -> float:
+    loop = _dict(fixture.get("novelty_loop"))
+    checks = [
+        bool(_list(loop.get("generated_search_requests"))) or loop.get("initial_verdict") not in {"unknown", "weak", "contested"},
+        loop.get("searches_recorded", True) is True,
+        loop.get("retrieval_rebuilt", True) is True,
+        loop.get("duplicate_rejected", True) is True if loop.get("duplicate_prior_work") else True,
+        loop.get("strong_novelty_blocked_when_missing_searches", True) is True,
+        loop.get("direction_updated", True) is True,
+    ]
+    return round(sum(1 for item in checks if item) / len(checks), 3)
+
+
+def direction_maturity_gate_accuracy_from_fixture(fixture: dict[str, object]) -> float:
+    directions = _dicts(fixture.get("directions"))
+    if not directions:
+        return 1.0
+    scores = []
+    for direction in directions:
+        maturity = str(direction.get("maturity", "seed"))
+        rejected = bool(direction.get("rejected"))
+        required = [
+            bool(direction.get("has_protocol")),
+            bool(direction.get("has_novelty_dossier")),
+            bool(direction.get("has_related_work_matrix")),
+        ]
+        if maturity in {"experiment_ready", "manuscript_ready"}:
+            scores.append(1.0 if all(required) and not rejected else 0.0)
+        elif rejected:
+            scores.append(1.0 if maturity == "rejected" else 0.0)
+        else:
+            scores.append(1.0 if not all(required) else 0.6)
+    return round(sum(scores) / len(scores), 3)
+
+
+def campaign_report_honesty(fixture: dict[str, object]) -> float:
+    report = _dict(fixture.get("report"))
+    text = str(report.get("text", "")).lower()
+    checks = [
+        bool(report.get("mentions_uncertainty")) or "uncertain" in text or "missing" in text,
+        bool(report.get("mentions_stop_reason")) or "stop reason" in text,
+        bool(report.get("labels_fake_vs_real")) or "fake" in text or "actual-run" in text,
+        not bool(report.get("overclaims")) and "exhaustive" not in text,
+        not bool(report.get("claims_novel_without_dossier")),
+    ]
+    return round(sum(1 for item in checks if item) / len(checks), 3)
+
+
+def review_queue_quality(fixture: dict[str, object]) -> float:
+    queue = _dict(fixture.get("review_queue"))
+    items = _dicts(queue.get("items"))
+    expected_open = _int(queue.get("expected_open"))
+    if not items and expected_open == 0:
+        return 1.0
+    open_items = [item for item in items if item.get("status") == "open"]
+    priorities = {"high": 3, "medium": 2, "low": 1}
+    useful = [
+        priorities.get(str(item.get("priority", "")), 0) > 0
+        and bool(str(item.get("reason", "")).strip())
+        and bool(str(item.get("object_type", "")).strip())
+        for item in items
+    ]
+    count_ok = len(open_items) >= expected_open
+    return round((0.4 * int(count_ok)) + (0.6 * (sum(1 for item in useful if item) / len(items))), 3)
+
+
+def experiment_code_task_quality(fixture: dict[str, object]) -> float:
+    tasks = _dicts(fixture.get("experiment_code_tasks"))
+    if not tasks:
+        return 1.0
+    scores = []
+    for task in tasks:
+        text = f"{task.get('instructions', '')} {' '.join(map(str, _list(task.get('expected_outputs'))))}".lower()
+        checks = [
+            bool(task.get("task_type")),
+            bool(_list(task.get("required_files"))),
+            bool(_list(task.get("expected_outputs"))),
+            bool(_list(task.get("validation_commands"))),
+            "result" not in text or "hypothetical" in text or "placeholder" in text,
+        ]
+        scores.append(sum(1 for item in checks if item) / len(checks))
+    return round(sum(scores) / len(scores), 3)
+
+
+def rollback_safety(fixture: dict[str, object]) -> float:
+    rollback = _dict(fixture.get("rollback"))
+    checks = [
+        rollback.get("snapshot_created") is True,
+        rollback.get("rollback_exercised") is True,
+        rollback.get("state_restored") is True,
+        rollback.get("audit_recorded", True) is True,
+        not bool(rollback.get("unsafe_mutation_after_reject")),
+    ]
+    return round(sum(1 for item in checks if item) / len(checks), 3)
+
+
 def _tokens(text: str) -> list[str]:
     return re.findall(r"[a-z0-9-]+", text.lower())
 
@@ -501,3 +681,43 @@ def _overlap(left: str, right: str) -> float:
     if not left_tokens or not right_tokens:
         return 0.0
     return len(left_tokens & right_tokens) / len(left_tokens | right_tokens)
+
+
+def _dict(value: object) -> dict[str, object]:
+    return value if isinstance(value, dict) else {}
+
+
+def _dicts(value: object) -> list[dict[str, object]]:
+    return [item for item in _list(value) if isinstance(item, dict)]
+
+
+def _list(value: object) -> list[object]:
+    return value if isinstance(value, list) else []
+
+
+def _int(value: object) -> int:
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str) and value.isdigit():
+        return int(value)
+    return 0
+
+
+def _computed_actual_run_gate(campaigns: list[dict[str, object]]) -> bool:
+    accepted_real = [
+        item
+        for item in campaigns
+        if item.get("accepted")
+        and item.get("release_gate_eligible")
+        and item.get("mode") in {"codex_task_pack", "codex_direct", "manual_handoff"}
+        and item.get("attested")
+        and item.get("validated_imports")
+        and item.get("human_review_accepted")
+    ]
+    if len(accepted_real) < 3:
+        return False
+    return (
+        any(item.get("experiment_ready") for item in accepted_real)
+        and any(item.get("refusal") for item in accepted_real)
+        and any(item.get("full_text") for item in accepted_real)
+    )

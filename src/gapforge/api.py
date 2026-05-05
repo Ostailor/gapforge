@@ -10,26 +10,43 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+from gapforge.agents.validation import create_actual_run_attestation as create_run_actual_run_attestation
+from gapforge.campaigns import CampaignManager, CampaignState
+from gapforge.campaigns.controller import CampaignController
+from gapforge.campaigns.decision_policy import CampaignAction
+from gapforge.campaigns.import_workflow import find_campaign_task
+from gapforge.campaigns.importer import CampaignOutputImporter
+from gapforge.campaigns.review import CampaignReviewManager
+from gapforge.campaigns.task_packs import create_campaign_task_pack
 from gapforge.config import GapForgeConfig
 from gapforge.directions.maturation import DirectionMaturationManager
+from gapforge.experiment_code import ExperimentCodeTaskGenerator
 from gapforge.export.paper_package import PaperPackageExporter
 from gapforge.fulltext.pdf_parser import FullTextParser
 from gapforge.ingest import ManualIngestor
 from gapforge.models import (
+    AgentActualRunAttestation,
+    AgentTaskSpec,
+    CampaignAcceptanceSummary,
+    CampaignHumanReview,
+    CampaignImportRecord,
+    ExperimentCodeTask,
     IndexManifest,
     Paper,
     PaperArtifact,
     PaperPackage,
     PaperSection,
+    Provenance,
     ResearchDirection,
     ResearchProgramState,
     ResearchRunState,
 )
 from gapforge.orchestrator import Orchestrator
 from gapforge.project_memory import ProjectMemoryManager
+from gapforge.release_gate import V04ReleaseGateEnforcer, V04ReleaseGateResult
 from gapforge.reporting import write_final_report
 from gapforge.retrieval import build_project_index, build_run_index
-from gapforge.state import ResearchStateManager
+from gapforge.state import ResearchStateManager, utc_now_compact, utc_now_iso
 
 
 @dataclass(slots=True)
@@ -49,6 +66,19 @@ class ParseFullTextResult:
 class ReportResult:
     state: ResearchRunState
     path: Path
+
+
+@dataclass(slots=True)
+class CampaignTaskResult:
+    state: CampaignState
+    task_id: str
+    path: Path
+
+
+@dataclass(slots=True)
+class CampaignReviewResult:
+    review: CampaignHumanReview
+    summary: CampaignAcceptanceSummary
 
 
 def create_project(
@@ -276,6 +306,224 @@ def export_report(
     return ReportResult(state=state, path=path)
 
 
+def create_campaign(
+    project_id: str,
+    topic: str,
+    *,
+    title: str = "",
+    mode: str = "deterministic",
+    agent_name: str = "",
+    model: str = "",
+    source_profile: str = "generic",
+    budget_id: str = "small",
+    config: GapForgeConfig | None = None,
+) -> CampaignState:
+    """Create a durable v0.4 campaign under a project."""
+
+    return CampaignManager(_config(config)).create_campaign(
+        topic,
+        project_id=project_id,
+        title=title,
+        mode=mode,
+        agent_name=agent_name,
+        model=model,
+        source_profile=source_profile,
+        budget_id=budget_id,
+    )
+
+
+def run_campaign(
+    campaign_id: str,
+    *,
+    mode: str | None = None,
+    max_iterations: int | None = None,
+    config: GapForgeConfig | None = None,
+) -> CampaignState:
+    """Run the v0.4 campaign controller."""
+
+    return CampaignController(_config(config)).run(campaign_id, mode=mode, max_iterations=max_iterations)
+
+
+def campaign_next(
+    campaign_id: str,
+    *,
+    max_iterations: int | None = None,
+    config: GapForgeConfig | None = None,
+) -> CampaignAction:
+    """Preview the next campaign controller action."""
+
+    return CampaignController(_config(config)).next_action(campaign_id, max_iterations=max_iterations)
+
+
+def create_campaign_task(
+    campaign_id: str,
+    task_type: str,
+    *,
+    config: GapForgeConfig | None = None,
+) -> CampaignTaskResult:
+    """Create a validation-gated Codex/GPT-5.4 campaign task pack."""
+
+    cfg = _config(config)
+    path = create_campaign_task_pack(cfg, campaign_id, task_type)
+    state = CampaignManager(cfg).load_campaign_state(campaign_id)
+    return CampaignTaskResult(state=state, task_id=state.campaign.task_ids[-1], path=path)
+
+
+def validate_campaign_output(
+    campaign_id: str,
+    task_id: str,
+    paths: list[str | Path] | None = None,
+    *,
+    config: GapForgeConfig | None = None,
+) -> CampaignImportRecord:
+    """Validate campaign output patches without mutating campaign state."""
+
+    return CampaignOutputImporter(_config(config)).validate(campaign_id, task_id, _paths(paths))
+
+
+def import_campaign_output(
+    campaign_id: str,
+    task_id: str,
+    paths: list[str | Path] | None = None,
+    *,
+    dry_run: bool = False,
+    config: GapForgeConfig | None = None,
+) -> CampaignImportRecord:
+    """Validate and import campaign output patches, preserving rollback metadata."""
+
+    return CampaignOutputImporter(_config(config)).import_outputs(campaign_id, task_id, _paths(paths), dry_run=dry_run)
+
+
+def attest_agent_run(
+    task_id: str,
+    *,
+    agent_name: str = "codex",
+    model: str = "gpt-5.4",
+    execution_method: str = "task_pack",
+    attester: str = "human",
+    statement: str = "",
+    config: GapForgeConfig | None = None,
+) -> AgentActualRunAttestation:
+    """Attest that a validated run-level or campaign-level task came from an actual agent.
+
+    Campaign task-pack and handoff attestations count only when a validated import
+    already exists for the task. Fake methods never count as actual-run evidence.
+    """
+
+    cfg = _config(config)
+    try:
+        state, _ = find_campaign_task(cfg, task_id)
+    except FileNotFoundError:
+        return _attest_run_task(
+            cfg,
+            task_id,
+            agent_name=agent_name,
+            model=model,
+            execution_method=execution_method,
+            attester=attester,
+            statement=statement,
+        )
+    return _attest_campaign_task(
+        cfg,
+        state,
+        task_id,
+        agent_name=agent_name,
+        model=model,
+        execution_method=execution_method,
+        attester=attester,
+        statement=statement,
+    )
+
+
+def review_campaign(
+    campaign_id: str,
+    *,
+    reviewer: str = "human",
+    accept: bool = False,
+    reject: bool = False,
+    reason: str = "",
+    notes: str = "",
+    source_coverage_score: int = 0,
+    full_text_grounding_score: int = 0,
+    citation_grounding_score: int = 0,
+    retrieval_quality_score: int = 0,
+    novelty_honesty_score: int = 0,
+    gap_quality_score: int = 0,
+    related_work_quality_score: int = 0,
+    experiment_quality_score: int = 0,
+    reviewer_panel_quality_score: int = 0,
+    uncertainty_visibility_score: int = 0,
+    stop_reason_quality_score: int = 0,
+    fake_citation_found: bool = False,
+    unsupported_high_confidence_claim_found: bool = False,
+    obvious_prior_work_missed: bool = False,
+    overclaimed_novelty: bool = False,
+    config: GapForgeConfig | None = None,
+) -> CampaignReviewResult:
+    """Record structured campaign human review."""
+
+    review, summary = CampaignReviewManager(_config(config)).review(
+        campaign_id,
+        reviewer=reviewer,
+        accept=accept,
+        reject=reject,
+        reason=reason,
+        notes=notes,
+        source_coverage_score=source_coverage_score,
+        full_text_grounding_score=full_text_grounding_score,
+        citation_grounding_score=citation_grounding_score,
+        retrieval_quality_score=retrieval_quality_score,
+        novelty_honesty_score=novelty_honesty_score,
+        gap_quality_score=gap_quality_score,
+        related_work_quality_score=related_work_quality_score,
+        experiment_quality_score=experiment_quality_score,
+        reviewer_panel_quality_score=reviewer_panel_quality_score,
+        uncertainty_visibility_score=uncertainty_visibility_score,
+        stop_reason_quality_score=stop_reason_quality_score,
+        fake_citation_found=fake_citation_found,
+        unsupported_high_confidence_claim_found=unsupported_high_confidence_claim_found,
+        obvious_prior_work_missed=obvious_prior_work_missed,
+        overclaimed_novelty=overclaimed_novelty,
+    )
+    return CampaignReviewResult(review=review, summary=summary)
+
+
+def campaign_acceptance(
+    campaign_id: str,
+    *,
+    config: GapForgeConfig | None = None,
+) -> CampaignAcceptanceSummary:
+    """Compute or load campaign acceptance summary."""
+
+    return CampaignReviewManager(_config(config)).summary(campaign_id)
+
+
+def v4_release_gate(
+    project_id: str | None = None,
+    *,
+    config: GapForgeConfig | None = None,
+) -> V04ReleaseGateResult:
+    """Evaluate the v0.4 actual-run release gate."""
+
+    return V04ReleaseGateEnforcer(_config(config)).evaluate(project_id=project_id or "")
+
+
+def generate_code_tasks(
+    campaign_id: str,
+    direction_id: str,
+    *,
+    allow_rejected: bool = False,
+    config: GapForgeConfig | None = None,
+) -> list[ExperimentCodeTask]:
+    """Generate Codex handoff tasks for experiment implementation."""
+
+    return ExperimentCodeTaskGenerator(_config(config)).generate_tasks(
+        campaign_id=campaign_id,
+        direction_id=direction_id,
+        allow_rejected=allow_rejected,
+    )
+
+
 def get_state(run_id: str, *, config: GapForgeConfig | None = None) -> ResearchRunState:
     """Load a persisted run state."""
 
@@ -297,22 +545,128 @@ def _require_one_scope(*, run_id: str | None, project_id: str | None) -> None:
         raise ValueError("Provide exactly one of run_id or project_id.")
 
 
+def _paths(paths: list[str | Path] | None) -> list[Path]:
+    return [Path(path) for path in paths or []]
+
+
+def _attest_run_task(
+    config: GapForgeConfig,
+    task_id: str,
+    *,
+    agent_name: str,
+    model: str,
+    execution_method: str,
+    attester: str,
+    statement: str,
+) -> AgentActualRunAttestation:
+    manager = ResearchStateManager(config)
+    state, task_spec = _find_run_task(manager, task_id)
+    attestation = create_run_actual_run_attestation(
+        state,
+        task_spec,
+        agent_name=agent_name,
+        model=model,
+        execution_method=execution_method,
+        attester=attester,
+        statement=statement,
+    )
+    manager.save_run(state)
+    return attestation
+
+
+def _find_run_task(manager: ResearchStateManager, task_id: str) -> tuple[ResearchRunState, AgentTaskSpec]:
+    if not manager.config.runs_dir.exists():
+        raise FileNotFoundError(f"No run task found for {task_id}")
+    for run_dir in sorted(path for path in manager.config.runs_dir.iterdir() if path.is_dir()):
+        try:
+            state = manager.load_run(run_dir.name)
+        except (FileNotFoundError, ValueError):
+            continue
+        for task_spec in state.agent_task_specs:
+            if task_spec.id == task_id:
+                return state, task_spec
+    raise FileNotFoundError(f"No run task found for {task_id}")
+
+
+def _attest_campaign_task(
+    config: GapForgeConfig,
+    state: CampaignState,
+    task_id: str,
+    *,
+    agent_name: str,
+    model: str,
+    execution_method: str,
+    attester: str,
+    statement: str,
+) -> AgentActualRunAttestation:
+    method = execution_method.replace("-", "_")
+    latest_import = next((record for record in reversed(state.imports) if record.task_id == task_id), None)
+    validation_passed = latest_import is not None and latest_import.status in {"valid", "applied", "partial"}
+    accepted = method != "fake" and agent_name.strip().lower() == "codex" and model.strip().lower() == "gpt-5.4" and validation_passed
+    if not statement:
+        statement = (
+            f"{attester} attests that {agent_name}/{model} produced campaign task {task_id} "
+            f"using {method}; validated import present={validation_passed}."
+        )
+    attestation = AgentActualRunAttestation(
+        id=f"agent-attestation-{utc_now_compact()}-{task_id}",
+        task_spec_id=task_id,
+        agent_run_record_id=latest_import.id if latest_import else "",
+        attester=attester,
+        agent_name=agent_name,
+        model=model,
+        execution_method=method,
+        statement=statement,
+        created_at=utc_now_iso(),
+        accepted_as_actual_run=accepted,
+        provenance=Provenance(
+            created_by_skill="api-agent-attestation",
+            source_ids=[task_id],
+            timestamp=utc_now_iso(),
+            reasoning_summary="Recorded API attestation for a validation-gated campaign agent task.",
+        ),
+    )
+    if latest_import is not None and accepted:
+        latest_import.accepted_objects.append(
+            {
+                "type": "agent_actual_run_attestation",
+                "id": attestation.id,
+                "accepted": True,
+            }
+        )
+        CampaignManager(config).save_campaign_state(state)
+    return attestation
+
+
 __all__ = [
     "AddPdfResult",
+    "CampaignReviewResult",
+    "CampaignTaskResult",
     "ParseFullTextResult",
     "ReportResult",
     "add_pdf",
+    "attest_agent_run",
     "build_index",
+    "campaign_acceptance",
+    "campaign_next",
+    "create_campaign",
+    "create_campaign_task",
     "create_direction",
     "create_project",
     "create_run",
     "export_paper_package",
     "export_report",
+    "generate_code_tasks",
     "get_project",
     "get_state",
+    "import_campaign_output",
     "mature_direction",
     "mine_gaps",
     "novelty_check",
     "parse_fulltext",
+    "review_campaign",
+    "run_campaign",
     "search_papers",
+    "v4_release_gate",
+    "validate_campaign_output",
 ]

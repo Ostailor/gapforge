@@ -733,6 +733,31 @@ class ExperimentProtocol:
 
 
 @dataclass(slots=True)
+class ExperimentCodeTask:
+    id: str
+    campaign_id: str
+    direction_id: str
+    experiment_protocol_id: str
+    task_type: str
+    instructions: str
+    required_files: list[str] = field(default_factory=list)
+    expected_outputs: list[str] = field(default_factory=list)
+    validation_commands: list[str] = field(default_factory=list)
+    status: str = "planned"
+    provenance: Provenance = field(default_factory=lambda: Provenance(created_by_skill="experiment-code-task"))
+
+
+@dataclass(slots=True)
+class ExperimentRepoScaffold:
+    id: str
+    direction_id: str
+    path: str
+    files: list[str] = field(default_factory=list)
+    created_at: str = ""
+    provenance: Provenance = field(default_factory=lambda: Provenance(created_by_skill="experiment-repo-scaffold"))
+
+
+@dataclass(slots=True)
 class ReviewerObjection:
     id: str
     experiment_id: str = ""
@@ -1000,6 +1025,179 @@ class RelatedWorkMatrix:
 
 
 @dataclass(slots=True)
+class ResearchCampaign:
+    id: str
+    project_id: str
+    topic: str
+    title: str = ""
+    status: str = "planned"
+    mode: str = "deterministic"
+    agent_name: str = ""
+    model: str = ""
+    source_profile: str = "generic"
+    budget_id: str = "small"
+    run_ids: list[str] = field(default_factory=list)
+    task_ids: list[str] = field(default_factory=list)
+    decision_ids: list[str] = field(default_factory=list)
+    milestone_ids: list[str] = field(default_factory=list)
+    review_ids: list[str] = field(default_factory=list)
+    created_at: str = ""
+    updated_at: str = ""
+    provenance: Provenance = field(default_factory=lambda: Provenance(created_by_skill="campaign"))
+
+
+@dataclass(slots=True)
+class CampaignStep:
+    id: str
+    campaign_id: str
+    name: str
+    step_type: str = "search"
+    status: str = "pending"
+    run_id: str = ""
+    task_spec_id: str = ""
+    input_artifacts: list[str] = field(default_factory=list)
+    output_artifacts: list[str] = field(default_factory=list)
+    blocking_issues: list[str] = field(default_factory=list)
+    started_at: str = ""
+    completed_at: str = ""
+    provenance: Provenance = field(default_factory=lambda: Provenance(created_by_skill="campaign-step"))
+
+
+@dataclass(slots=True)
+class CampaignDecision:
+    id: str
+    campaign_id: str
+    iteration: int = 0
+    decision_type: str = "stop"
+    reason: str = ""
+    evidence: list[str] = field(default_factory=list)
+    expected_value: str = ""
+    cost_estimate: str = ""
+    status: str = "pending"
+    provenance: Provenance = field(default_factory=lambda: Provenance(created_by_skill="campaign-decision"))
+
+
+@dataclass(slots=True)
+class CampaignMilestone:
+    id: str
+    campaign_id: str
+    milestone_type: str = "coverage_ready"
+    status: str = "pending"
+    linked_artifacts: list[str] = field(default_factory=list)
+    notes: str = ""
+    provenance: Provenance = field(default_factory=lambda: Provenance(created_by_skill="campaign-milestone"))
+
+
+@dataclass(slots=True)
+class CampaignBudget:
+    id: str
+    max_iterations: int = 3
+    max_papers: int = 50
+    max_full_text_papers: int = 10
+    max_agent_tasks: int = 5
+    max_agent_imports: int = 5
+    max_cost_usd: float = 0.0
+    max_wall_clock_minutes: int = 60
+    stop_when_coverage_sufficient: bool = True
+    stop_when_no_new_papers: bool = True
+    provenance: Provenance = field(default_factory=lambda: Provenance(created_by_skill="campaign-budget"))
+
+
+@dataclass(slots=True)
+class CampaignStopCondition:
+    id: str
+    campaign_id: str
+    reason: str = ""
+    triggered: bool = False
+    evidence: list[str] = field(default_factory=list)
+    created_at: str = ""
+    provenance: Provenance = field(default_factory=lambda: Provenance(created_by_skill="campaign-stop-condition"))
+
+
+@dataclass(slots=True)
+class CampaignImportRecord:
+    id: str
+    campaign_id: str
+    task_id: str
+    input_paths: list[str] = field(default_factory=list)
+    status: str = "rejected"
+    accepted_objects: list[dict[str, Any]] = field(default_factory=list)
+    rejected_objects: list[dict[str, Any]] = field(default_factory=list)
+    issues: list[str] = field(default_factory=list)
+    rollback_snapshot_path: str = ""
+    created_at: str = ""
+    provenance: Provenance = field(default_factory=lambda: Provenance(created_by_skill="campaign-import"))
+
+
+@dataclass(slots=True)
+class CampaignHumanReview:
+    id: str
+    campaign_id: str
+    reviewer: str = "human"
+    reviewed_at: str = ""
+    source_coverage_score: int = 0
+    full_text_grounding_score: int = 0
+    citation_grounding_score: int = 0
+    retrieval_quality_score: int = 0
+    novelty_honesty_score: int = 0
+    gap_quality_score: int = 0
+    related_work_quality_score: int = 0
+    experiment_quality_score: int = 0
+    reviewer_panel_quality_score: int = 0
+    uncertainty_visibility_score: int = 0
+    stop_reason_quality_score: int = 0
+    fake_citation_found: bool = False
+    unsupported_high_confidence_claim_found: bool = False
+    obvious_prior_work_missed: bool = False
+    overclaimed_novelty: bool = False
+    accepted: bool = False
+    reasons: list[str] = field(default_factory=list)
+    required_fixes: list[str] = field(default_factory=list)
+    notes: str = ""
+    provenance: Provenance = field(default_factory=lambda: Provenance(created_by_skill="campaign-human-review"))
+
+
+@dataclass(slots=True)
+class CampaignAcceptanceSummary:
+    campaign_id: str
+    accepted: bool = False
+    blocking_failures: list[str] = field(default_factory=list)
+    scores: dict[str, int] = field(default_factory=dict)
+    required_artifacts_present: dict[str, bool] = field(default_factory=dict)
+    actual_run_attestation_present: bool = False
+    accepted_real_agent_outputs: list[str] = field(default_factory=list)
+    release_gate_eligible: bool = False
+    provenance: Provenance = field(default_factory=lambda: Provenance(created_by_skill="campaign-acceptance"))
+
+
+@dataclass(slots=True)
+class AgentSearchRequest:
+    id: str
+    campaign_id: str
+    task_id: str = ""
+    query: str = ""
+    purpose: str = "coverage"
+    source_profile: str = "generic"
+    target_sources: list[str] = field(default_factory=list)
+    reason: str = ""
+    priority: int = 3
+    status: str = "proposed"
+    provenance: Provenance = field(default_factory=lambda: Provenance(created_by_skill="campaign-search-agent"))
+
+
+@dataclass(slots=True)
+class AgentSearchBatch:
+    id: str
+    campaign_id: str
+    requests: list[AgentSearchRequest] = field(default_factory=list)
+    validation_status: str = "pending"
+    executed_at: str = ""
+    result_paper_ids: list[str] = field(default_factory=list)
+    failures: list[str] = field(default_factory=list)
+    provenance: Provenance = field(default_factory=lambda: Provenance(created_by_skill="campaign-search-agent"))
+
+
+@dataclass(slots=True)
 class PaperPackage:
     id: str
     direction_id: str
@@ -1017,9 +1215,12 @@ class ResearchProgramState:
     corpus_papers: list[CorpusPaperRecord] = field(default_factory=list)
     memory_records: list[ProjectMemoryRecord] = field(default_factory=list)
     research_directions: list[ResearchDirection] = field(default_factory=list)
+    campaigns: list[ResearchCampaign] = field(default_factory=list)
     related_work_matrices: list[RelatedWorkMatrix] = field(default_factory=list)
     experiment_protocols: list[ExperimentProtocol] = field(default_factory=list)
     baseline_candidates: list[BaselineCandidate] = field(default_factory=list)
+    experiment_code_tasks: list[ExperimentCodeTask] = field(default_factory=list)
+    experiment_repo_scaffolds: list[ExperimentRepoScaffold] = field(default_factory=list)
     review_panels: list[ReviewPanel] = field(default_factory=list)
     review_queue: ReviewQueue | None = None
     claim_graph: ClaimGraph | None = None
@@ -1128,6 +1329,55 @@ class AgentValidationResult:
 
 
 @dataclass(slots=True)
+class AgentRepairRecord:
+    id: str
+    original_task_id: str
+    validation_result_id: str
+    repair_task_id: str
+    status: str = "created"
+    issues_to_fix: list[str] = field(default_factory=list)
+    created_at: str = ""
+    provenance: Provenance = field(default_factory=lambda: Provenance(created_by_skill="agent-repair"))
+
+
+@dataclass(slots=True)
+class AgentRuntimeCapability:
+    mode: str
+    available: bool = False
+    reason: str = ""
+    required_env: list[str] = field(default_factory=list)
+    command_template: str = ""
+    can_count_as_actual_run: bool = False
+    provenance: Provenance = field(default_factory=lambda: Provenance(created_by_skill="agent-runtime-capability"))
+
+
+@dataclass(slots=True)
+class AgentExecutionMethod:
+    method: str
+    agent_name: str = "codex"
+    model: str = "gpt-5.4"
+    counts_as_actual_run: bool = False
+    requires_human_attestation: bool = True
+    requires_validated_import: bool = True
+    notes: list[str] = field(default_factory=list)
+
+
+@dataclass(slots=True)
+class AgentActualRunAttestation:
+    id: str
+    task_spec_id: str
+    agent_run_record_id: str = ""
+    attester: str = "human"
+    agent_name: str = "codex"
+    model: str = "gpt-5.4"
+    execution_method: str = "task_pack"
+    statement: str = ""
+    created_at: str = ""
+    accepted_as_actual_run: bool = False
+    provenance: Provenance = field(default_factory=lambda: Provenance(created_by_skill="agent-actual-run-attestation"))
+
+
+@dataclass(slots=True)
 class CanaryRunProfile:
     id: str
     title: str
@@ -1165,6 +1415,43 @@ class CanaryRunRecord:
 
 
 @dataclass(slots=True)
+class CampaignCanaryProfile:
+    id: str
+    title: str
+    topic: str
+    source_profile: str = "generic"
+    campaign_mode: str = "deterministic"
+    agent_name: str = "codex"
+    model: str = "gpt-5.4"
+    budget: str = "small"
+    requires_codex: bool = False
+    requires_network: bool = False
+    requires_local_pdf: bool = False
+    required_milestones: list[str] = field(default_factory=list)
+    expected_stop_reason: str = ""
+    expected_artifacts: list[str] = field(default_factory=list)
+    acceptance_criteria: list[str] = field(default_factory=list)
+    known_risks: list[str] = field(default_factory=list)
+    provenance: Provenance = field(default_factory=lambda: Provenance(created_by_skill="campaign-canary-profile"))
+
+
+@dataclass(slots=True)
+class CampaignCanaryRecord:
+    id: str
+    profile_id: str
+    campaign_id: str = ""
+    project_id: str = ""
+    status: str = "planned"
+    milestones_reached: list[str] = field(default_factory=list)
+    artifacts: list[str] = field(default_factory=list)
+    actual_run_status: str = "not_applicable"
+    human_review_status: str = "not_required"
+    accepted: bool = False
+    failure_reason: str = ""
+    provenance: Provenance = field(default_factory=lambda: Provenance(created_by_skill="campaign-canary-runner"))
+
+
+@dataclass(slots=True)
 class CanaryHumanReview:
     id: str
     canary_run_id: str
@@ -1198,6 +1485,46 @@ class CanaryAcceptanceSummary:
     rejected_artifacts: list[str] = field(default_factory=list)
     release_gate_status: str = "not_passed"
     provenance: Provenance = field(default_factory=lambda: Provenance(created_by_skill="canary-acceptance"))
+
+
+@dataclass(slots=True)
+class AgentEnvironmentStatus:
+    real_runs_enabled: bool = False
+    agent_mode: str = "off"
+    agent_name: str = "codex"
+    codex_model: str = "gpt-5.4"
+    provider_mode: str = "off"
+    required_env_present: bool = False
+    missing_env: list[str] = field(default_factory=list)
+    safe_to_execute_real_agent: bool = False
+    notes: list[str] = field(default_factory=list)
+
+
+@dataclass(slots=True)
+class AgentPathStatus:
+    direct_execution_available: bool = False
+    task_pack_available: bool = False
+    manual_import_available: bool = False
+    fake_agent_available: bool = True
+    provider_llm_available: bool = False
+    failure_reason: str = ""
+    recommended_path: str = ""
+
+
+@dataclass(slots=True)
+class RealRunDiagnostic:
+    id: str
+    version: str
+    created_at: str
+    environment_status: AgentEnvironmentStatus
+    agent_runtime_status: AgentPathStatus
+    codex_execution_status: str = "unavailable"
+    task_pack_status: str = "unknown"
+    import_validator_status: str = "unknown"
+    canary_status: str = "unknown"
+    blocking_issues: list[str] = field(default_factory=list)
+    recommended_fixes: list[str] = field(default_factory=list)
+    provenance: Provenance = field(default_factory=lambda: Provenance(created_by_skill="real-run-diagnostics"))
 
 
 @dataclass(slots=True)
@@ -1261,6 +1588,8 @@ class ResearchRunState:
     agent_task_specs: list[AgentTaskSpec] = field(default_factory=list)
     agent_run_records: list[AgentRunRecord] = field(default_factory=list)
     agent_validation_results: list[AgentValidationResult] = field(default_factory=list)
+    agent_repair_records: list[AgentRepairRecord] = field(default_factory=list)
+    agent_actual_run_attestations: list[AgentActualRunAttestation] = field(default_factory=list)
     provenance: list[Provenance] = field(default_factory=list)
     completed_skills: list[str] = field(default_factory=list)
 

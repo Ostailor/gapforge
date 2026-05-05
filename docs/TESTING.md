@@ -20,6 +20,7 @@ Smoke workflows:
 make v2-smoke
 make v3-smoke
 GAPFORGE_DISABLE_NETWORK=1 gapforge run "low false positive collusion detection" --v3 --active --budget small
+GAPFORGE_DISABLE_NETWORK=1 gapforge campaign-canary-run --profile fake_agent_campaign_regression
 ```
 
 `make v3-smoke` creates a temporary project, runs the staged v0.3 path offline, builds a project retrieval index, writes a project report, and generates a static dashboard. The active-loop smoke command is separate; it writes active-loop decisions to `active_decisions.md`.
@@ -78,6 +79,25 @@ v0.3 tests should cover:
 - review queue generation
 - artifact redaction and safe bundle export
 
+## v0.4 Coverage
+
+v0.4 tests should cover campaign and agent behavior without live Codex:
+
+- campaign creation, persistence, stop/resume, and reports
+- campaign controller decisions and budgets
+- campaign task-pack generation and compact context selection
+- output validation, partial import, repair prompts, and rollback
+- fake-agent campaign canaries
+- novelty re-search loops
+- reviewer/rebuttal loops
+- experiment code task generation
+- dashboard actual-run pages
+- campaign human review and acceptance summaries
+- v4 release gate failure modes
+- `gapforge eval --v4`
+
+Fake-agent tests validate plumbing only. They must never assert that actual Codex/GPT-5.4 research behavior passed.
+
 ## Verification Before Completion
 
 Before claiming a v0.3 change is complete, run at least:
@@ -91,3 +111,12 @@ make eval
 ```
 
 For orchestration changes, also run an offline v0.3 smoke command in a temporary directory so generated artifacts do not pollute the repository.
+
+For v0.4 campaign changes, also run:
+
+```bash
+GAPFORGE_DISABLE_NETWORK=1 gapforge campaign-canary-run --profile fake_agent_campaign_regression
+gapforge eval --v4 --write-report
+```
+
+Real Codex/GPT-5.4 campaign validation is a release-gate activity, not a CI requirement.

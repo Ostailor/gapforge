@@ -1,0 +1,97 @@
+{
+  "topic": "invalid agent output validation fixture",
+  "decisions": [
+    {
+      "decision_type": "import_outputs",
+      "reason": "Codex output must be validated before state mutation.",
+      "evidence": ["fake citation", "unknown evidence span"],
+      "status": "blocked"
+    },
+    {
+      "decision_type": "request_human_review",
+      "reason": "Validation failure requires repair or human review.",
+      "evidence": ["campaign import rejected"],
+      "status": "pending"
+    }
+  ],
+  "expected_decisions": ["import_outputs", "request_human_review"],
+  "stop_reason": {
+    "actual": "agent_output_invalid",
+    "expected": "agent_output_invalid",
+    "recommended_direction": false,
+    "explanation": "Invalid agent output cannot mutate state."
+  },
+  "agent_outputs": {
+    "invalid_output_rejected": true,
+    "fake_citation_rejected": true,
+    "unsupported_high_confidence_rejected": true,
+    "unvalidated_imports": 0,
+    "validation_issues": [
+      "citation does not resolve to known corpus paper",
+      "unknown evidence_span_id",
+      "high-confidence claim lacks evidence locator"
+    ]
+  },
+  "actual_run_gate": {
+    "expected_pass": false,
+    "expected_blockers": ["validated imported outputs are missing"],
+    "campaigns": [
+      {
+        "id": "campaign-invalid-output",
+        "mode": "codex_task_pack",
+        "accepted": false,
+        "release_gate_eligible": false,
+        "attested": true,
+        "validated_imports": false,
+        "human_review_accepted": false
+      }
+    ]
+  },
+  "novelty_loop": {
+    "initial_verdict": "unknown",
+    "generated_search_requests": ["repair invalid novelty dossier output"],
+    "searches_recorded": true,
+    "retrieval_rebuilt": true,
+    "duplicate_prior_work": false,
+    "strong_novelty_blocked_when_missing_searches": true,
+    "direction_updated": true
+  },
+  "directions": [
+    {
+      "id": "direction-invalid",
+      "maturity": "candidate",
+      "has_protocol": false,
+      "has_novelty_dossier": false,
+      "has_related_work_matrix": false,
+      "rejected": false
+    }
+  ],
+  "report": {
+    "text": "Report labels agent_output_invalid and says no validated Codex-backed recommendation is available.",
+    "mentions_uncertainty": true,
+    "mentions_stop_reason": true,
+    "labels_fake_vs_real": true,
+    "overclaims": false,
+    "claims_novel_without_dossier": false
+  },
+  "review_queue": {
+    "expected_open": 1,
+    "items": [
+      {
+        "object_type": "agent_import",
+        "object_id": "import-invalid-output",
+        "priority": "high",
+        "reason": "Invalid output needs repair; rejected fields are preserved.",
+        "status": "open"
+      }
+    ]
+  },
+  "experiment_code_tasks": [],
+  "rollback": {
+    "snapshot_created": true,
+    "rollback_exercised": true,
+    "state_restored": true,
+    "audit_recorded": true,
+    "unsafe_mutation_after_reject": false
+  }
+}

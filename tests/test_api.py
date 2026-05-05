@@ -4,7 +4,8 @@ from pathlib import Path
 
 from gapforge import api
 from gapforge.config import GapForgeConfig
-from gapforge.models import PaperNote
+from gapforge.models import BaselineCandidate, ExperimentProtocol, PaperNote, ReproducibilityChecklist, ResearchDirection
+from gapforge.project_memory import ProjectMemoryManager
 from gapforge.state import ResearchStateManager
 
 
@@ -79,6 +80,159 @@ def test_api_export_report_without_cli(tmp_path: Path) -> None:
     assert result.path == Path(state.run_dir) / "final_report.md"
     assert result.path.exists()
     assert "GapForge Final Research Report" in result.path.read_text(encoding="utf-8")
+
+
+def test_api_create_and_run_fake_campaign(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("GAPFORGE_DISABLE_NETWORK", "1")
+    config = GapForgeConfig.from_cwd(tmp_path)
+    project = api.create_project("API Campaign Project", config=config)
+
+    campaign = api.create_campaign(
+        project.project.id,
+        "low false positive campaign workflow",
+        mode="fake_agent",
+        agent_name="fake",
+        model="fake",
+        config=config,
+    )
+    action = api.campaign_next(campaign.campaign.id, config=config)
+    result = api.run_campaign(campaign.campaign.id, mode="fake_agent", max_iterations=1, config=config)
+
+    assert campaign.campaign.project_id == project.project.id
+    assert action.decision_type
+    assert result.decisions
+
+
+def test_api_campaign_task_validate_and_import(tmp_path: Path) -> None:
+    config = GapForgeConfig.from_cwd(tmp_path)
+    project = api.create_project("API Task Project", config=config)
+    campaign = api.create_campaign(project.project.id, "campaign task import workflow", config=config)
+
+    task = api.create_campaign_task(campaign.campaign.id, "campaign_stop_decision", config=config)
+    outputs = task.path / "outputs"
+    stop_patch = outputs / "stop_condition_patch.json"
+    final_patch = outputs / "final_recommendation_patch.json"
+    stop_patch.write_text(
+        """{
+  "stop_condition_patch": [
+    {
+      "reason": "not_ready_poor_coverage",
+      "triggered": true,
+      "evidence": ["api fixture"]
+    }
+  ],
+  "public_reasoning_summary": "Stop because coverage is insufficient."
+}
+""",
+        encoding="utf-8",
+    )
+    final_patch.write_text(
+        """{
+  "final_recommendation_patch": [
+    {
+      "recommendation": "no_direction_ready",
+      "confidence": "low"
+    }
+  ],
+  "public_reasoning_summary": "No recommendation is ready."
+}
+""",
+        encoding="utf-8",
+    )
+
+    validation = api.validate_campaign_output(campaign.campaign.id, task.task_id, [stop_patch, final_patch], config=config)
+    imported = api.import_campaign_output(campaign.campaign.id, task.task_id, [stop_patch, final_patch], config=config)
+    attestation = api.attest_agent_run(
+        task.task_id,
+        agent_name="codex",
+        model="gpt-5.4",
+        execution_method="task_pack",
+        attester="tester",
+        config=config,
+    )
+
+    assert validation.status == "valid"
+    assert imported.status == "applied"
+    assert attestation.accepted_as_actual_run is True
+    assert api.campaign_acceptance(campaign.campaign.id, config=config).accepted is False
+
+
+def test_api_acceptance_fails_without_real_attestation(tmp_path: Path) -> None:
+    config = GapForgeConfig.from_cwd(tmp_path)
+    project = api.create_project("API Acceptance Project", config=config)
+    campaign = api.create_campaign(
+        project.project.id,
+        "acceptance without attestation",
+        mode="codex_task_pack",
+        agent_name="codex",
+        model="gpt-5.4",
+        config=config,
+    )
+
+    reviewed = api.review_campaign(campaign.campaign.id, accept=True, reviewer="tester", config=config)
+
+    assert reviewed.review.accepted is True
+    assert reviewed.summary.accepted is False
+    assert "Missing human attestation" in " ".join(reviewed.summary.blocking_failures)
+
+
+def test_api_v4_release_gate(tmp_path: Path) -> None:
+    config = GapForgeConfig.from_cwd(tmp_path)
+
+    result = api.v4_release_gate(config=config)
+
+    assert result.passed is False
+    assert result.blockers
+
+
+def test_api_generate_code_tasks(tmp_path: Path) -> None:
+    config = GapForgeConfig.from_cwd(tmp_path)
+    project = api.create_project("API Code Task Project", config=config)
+    campaign = api.create_campaign(project.project.id, "code task campaign", config=config)
+    program = ProjectMemoryManager(config).load_project(project.project.id)
+    program.research_directions.append(
+        ResearchDirection(
+            id="direction-api-ready",
+            project_id=project.project.id,
+            title="API ready direction",
+            maturity="experiment_ready",
+        )
+    )
+    program.experiment_protocols.append(
+        ExperimentProtocol(
+            id="protocol-api-ready",
+            direction_id="direction-api-ready",
+            linked_experiment_plan_id="experiment-api",
+            objective="Measure low false positive performance.",
+            hypothesis="A calibrated detector lowers false positives.",
+            datasets=["synthetic placeholder dataset"],
+            baselines=[BaselineCandidate(paper_id="paper-api", baseline_name="prior baseline", why_required="Required comparator.")],
+            metrics=["false positive rate"],
+            statistical_tests=["binomial confidence interval"],
+            power_or_sample_size_notes="Use enough negative examples for tight FPR intervals.",
+            ablations=["without calibration"],
+            implementation_modules=["detector", "metrics"],
+            expected_artifacts=["metrics report"],
+            evaluation_script_outline=["load data", "run baseline", "compute FPR"],
+            failure_modes=["baseline outperforms detector"],
+            reproducibility_checklist=ReproducibilityChecklist(
+                dataset_versioning="pin fixture version",
+                environment_spec="pyproject",
+                logging_plan="write JSONL metrics",
+                metric_definitions=["FPR"],
+                negative_controls=["random labels"],
+                error_analysis_plan="inspect false positives",
+            ),
+            compute_budget="local smoke",
+            timeline=["one day scaffold"],
+        )
+    )
+    ProjectMemoryManager(config).save_project(program)
+
+    tasks = api.generate_code_tasks(campaign.campaign.id, "direction-api-ready", config=config)
+
+    assert tasks
+    assert {task.task_type for task in tasks}
 
 
 def _tiny_pdf(text: str) -> bytes:

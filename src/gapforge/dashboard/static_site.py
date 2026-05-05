@@ -9,19 +9,30 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from gapforge.campaigns import CampaignState
 from gapforge.config import GapForgeConfig
 from gapforge.models import (
+    CampaignAcceptanceSummary,
+    CampaignBudget,
+    CampaignCanaryRecord,
+    CampaignDecision,
+    CampaignHumanReview,
+    CampaignImportRecord,
+    CampaignMilestone,
+    CampaignStep,
     EvidenceSpan,
     Gap,
     HumanReviewRecord,
     NoveltyDossier,
     Paper,
     RejectedIdea,
+    ResearchCampaign,
     ResearchProgramState,
     ResearchRunState,
     ReviewPanel,
     ReviewQueue,
     SourceCoverageReport,
+    from_dict,
 )
 from gapforge.project_memory import ProjectMemoryManager
 from gapforge.state import ResearchStateManager
@@ -35,6 +46,13 @@ PAGES = [
     ("evidence.html", "Evidence"),
     ("coverage.html", "Coverage"),
     ("reviews.html", "Reviews"),
+    ("campaigns.html", "Campaigns"),
+    ("actual_runs.html", "Actual Runs"),
+    ("canaries.html", "Canaries"),
+    ("agent_tasks.html", "Agent Tasks"),
+    ("imports.html", "Imports"),
+    ("human_reviews.html", "Human Reviews"),
+    ("release_gate.html", "Release Gate"),
 ]
 
 
@@ -88,6 +106,9 @@ class _DashboardContext:
         review_panels: list[ReviewPanel],
         review_queue: ReviewQueue | None,
         artifact_links: list[tuple[str, str]],
+        campaigns: list[ResearchCampaign] | None = None,
+        campaign_states: list[CampaignState] | None = None,
+        canary_records: list[CampaignCanaryRecord] | None = None,
     ) -> None:
         self.title = title
         self.subtitle = subtitle
@@ -103,6 +124,9 @@ class _DashboardContext:
         self.review_panels = review_panels
         self.review_queue = review_queue
         self.artifact_links = artifact_links
+        self.campaigns = campaigns or []
+        self.campaign_states = campaign_states or []
+        self.canary_records = canary_records or []
 
     @classmethod
     def from_run(cls, state: ResearchRunState) -> _DashboardContext:
@@ -121,11 +145,15 @@ class _DashboardContext:
             review_panels=[],
             review_queue=state.review_queue,
             artifact_links=_run_artifact_links(state),
+            campaigns=[],
+            campaign_states=[],
+            canary_records=[],
         )
 
     @classmethod
     def from_project(cls, program: ResearchProgramState, states: list[ResearchRunState]) -> _DashboardContext:
         coverage_reports = [state.source_coverage for state in states if state.source_coverage is not None]
+        campaign_states = _load_campaign_states(program)
         return cls(
             title=f"GapForge Project: {program.project.name}",
             subtitle=program.project.description or program.project.id,
@@ -152,6 +180,9 @@ class _DashboardContext:
             review_panels=program.review_panels,
             review_queue=program.review_queue,
             artifact_links=_project_artifact_links(program),
+            campaigns=program.campaigns,
+            campaign_states=campaign_states,
+            canary_records=_load_campaign_canaries(Path(program.project.root_dir).parents[1] / "data", program.project.id),
         )
 
 
@@ -166,6 +197,13 @@ def _write_dashboard(root: Path, context: _DashboardContext) -> DashboardResult:
         "evidence.html": _render_evidence(context),
         "coverage.html": _render_coverage(context),
         "reviews.html": _render_reviews(context),
+        "campaigns.html": _render_campaigns(context),
+        "actual_runs.html": _render_actual_runs(context),
+        "canaries.html": _render_canaries(context),
+        "agent_tasks.html": _render_agent_tasks(context),
+        "imports.html": _render_imports(context),
+        "human_reviews.html": _render_human_reviews(context),
+        "release_gate.html": _render_release_gate(context),
     }
     written = []
     for filename, body in pages.items():
@@ -418,6 +456,222 @@ def _render_reviews(context: _DashboardContext) -> str:
     return "\n".join(parts)
 
 
+def _render_campaigns(context: _DashboardContext) -> str:
+    rows = [
+        [
+            _code(campaign.id),
+            _e(campaign.status),
+            _e(campaign.mode),
+            _e(campaign.agent_name or "none"),
+            _e(campaign.model or "none"),
+            _e(campaign.source_profile),
+            str(len(campaign.run_ids)),
+            str(len(campaign.task_ids)),
+        ]
+        for campaign in context.campaigns
+    ]
+    return _filter_box() + _table(["ID", "Status", "Mode", "Agent", "Model", "Source Profile", "Runs", "Tasks"], rows)
+
+
+def _render_actual_runs(context: _DashboardContext) -> str:
+    rows = []
+    for state in context.campaign_states:
+        real_imports = _real_import_records(state.imports)
+        fake = state.campaign.mode == "fake_agent"
+        summary = state.acceptance_summary
+        rows.append(
+            [
+                _code(state.campaign.id),
+                _e("fake" if fake else "real-capable" if _campaign_requires_actual_run(state.campaign) else "deterministic"),
+                _e(state.campaign.mode),
+                _e(state.campaign.agent_name or "none"),
+                _e(state.campaign.model or "none"),
+                str(len(real_imports)),
+                str(_attested_output_count(state.imports)),
+                _e("eligible" if summary and summary.release_gate_eligible else "not eligible"),
+                _e("; ".join(summary.blocking_failures) if summary else _default_actual_run_blocker(state)),
+            ]
+        )
+    return (
+        "<p><strong>Fake-agent success is not actual-run acceptance.</strong> Actual-run acceptance requires attested "
+        "Codex/GPT-5.4 output, validated import, and human campaign review.</p>"
+        + _filter_box()
+        + _table(
+            [
+                "Campaign",
+                "Run Type",
+                "Mode",
+                "Agent",
+                "Model",
+                "Accepted Real Imports",
+                "Attested Outputs",
+                "Release Gate",
+                "Blockers",
+            ],
+            rows,
+        )
+    )
+
+
+def _render_canaries(context: _DashboardContext) -> str:
+    rows = [
+        [
+            _code(record.id),
+            _code(record.profile_id),
+            _code(record.campaign_id),
+            _e(record.status),
+            _e(record.actual_run_status),
+            _e(record.human_review_status),
+            _e("accepted" if record.accepted else "not accepted"),
+            _e(record.failure_reason),
+        ]
+        for record in context.canary_records
+    ]
+    return _filter_box() + _table(
+        ["ID", "Profile", "Campaign", "Status", "Actual Run", "Human Review", "Accepted", "Failure/Blocker"], rows
+    )
+
+
+def _render_agent_tasks(context: _DashboardContext) -> str:
+    rows = []
+    for state in context.campaign_states:
+        for step in state.steps:
+            if not step.task_spec_id:
+                continue
+            rows.append(
+                [
+                    _code(step.task_spec_id),
+                    _code(state.campaign.id),
+                    _e(step.step_type),
+                    _e(step.status),
+                    _e("fake" if state.campaign.mode == "fake_agent" else state.campaign.mode),
+                    _e("; ".join(step.blocking_issues)),
+                    _e(", ".join(step.output_artifacts)),
+                ]
+            )
+    return _filter_box() + _table(["Task", "Campaign", "Step Type", "Status", "Mode", "Blockers", "Outputs"], rows)
+
+
+def _render_imports(context: _DashboardContext) -> str:
+    rows = []
+    for state in context.campaign_states:
+        for record in state.imports:
+            rows.append(
+                [
+                    _code(record.id),
+                    _code(state.campaign.id),
+                    _code(record.task_id),
+                    _e(record.status),
+                    _e(
+                        "real-attested"
+                        if _record_has_actual_attestation(record)
+                        else "fake"
+                        if state.campaign.mode == "fake_agent"
+                        else "unattested"
+                    ),
+                    str(len(record.accepted_objects)),
+                    str(len(record.rejected_objects)),
+                    _e("; ".join(record.issues)),
+                ]
+            )
+    return _filter_box() + _table(
+        ["Import", "Campaign", "Task", "Status", "Actual-Run Label", "Accepted Objects", "Rejected Objects", "Issues"], rows
+    )
+
+
+def _render_human_reviews(context: _DashboardContext) -> str:
+    campaign_rows = []
+    for state in context.campaign_states:
+        for review in state.human_reviews:
+            campaign_rows.append(
+                [
+                    _code(review.id),
+                    _code(state.campaign.id),
+                    _e(review.reviewer),
+                    _e("accepted" if review.accepted else "rejected/not accepted"),
+                    _e(str(review.fake_citation_found)),
+                    _e(str(review.unsupported_high_confidence_claim_found)),
+                    _e(str(review.overclaimed_novelty)),
+                    _e("; ".join(review.reasons + review.required_fixes + ([review.notes] if review.notes else []))),
+                ]
+            )
+    run_rows = [
+        [_code(review.id), _e(f"{review.object_type}:{review.object_id}"), _e(review.action), _e(review.reviewer), _e(review.note)]
+        for review in context.human_reviews
+    ]
+    return "\n".join(
+        [
+            "<h2>Campaign Human Reviews</h2>",
+            _filter_box(),
+            _table(
+                [
+                    "Review",
+                    "Campaign",
+                    "Reviewer",
+                    "Accepted",
+                    "Fake Citation",
+                    "Unsupported High Confidence",
+                    "Overclaimed Novelty",
+                    "Notes/Fixes",
+                ],
+                campaign_rows,
+            ),
+            "<h2>Run-Level Human Reviews</h2>",
+            _table(["Review", "Object", "Action", "Reviewer", "Note"], run_rows),
+        ]
+    )
+
+
+def _render_release_gate(context: _DashboardContext) -> str:
+    eligible = [state for state in context.campaign_states if state.acceptance_summary and state.acceptance_summary.release_gate_eligible]
+    blockers = _release_gate_blockers(context)
+    status = "PASSED" if eligible and not blockers else "NOT PASSED"
+    css = "card" if status == "PASSED" else "card warning"
+    fake_warnings = [
+        f"`{state.campaign.id}` is fake-agent only and cannot count as actual-run acceptance."
+        for state in context.campaign_states
+        if state.campaign.mode == "fake_agent"
+    ]
+    return "\n".join(
+        [
+            f'<div class="{css}"><h2>v0.4 Actual-Run Release Gate: {_e(status)}</h2>'
+            f"<p>Eligible real campaigns: {_e(str(len(eligible)))}</p></div>",
+            "<h2>Fake Run Warnings</h2>",
+            _list(fake_warnings, css_class="warning"),
+            "<h2>Acceptance Blockers</h2>",
+            _list(blockers, css_class="warning"),
+            "<h2>Eligible Campaigns</h2>",
+            _table(
+                ["Campaign", "Mode", "Agent", "Model", "Accepted Real Imports"],
+                [
+                    [
+                        _code(state.campaign.id),
+                        _e(state.campaign.mode),
+                        _e(state.campaign.agent_name or "codex"),
+                        _e(state.campaign.model or "gpt-5.4"),
+                        _e(", ".join(state.acceptance_summary.accepted_real_agent_outputs) if state.acceptance_summary else ""),
+                    ]
+                    for state in eligible
+                ],
+            ),
+            "<h2>All Campaign Gate Summaries</h2>",
+            _table(
+                ["Campaign", "Accepted", "Attestation", "Release Eligible", "Blockers"],
+                [
+                    [
+                        _code(state.campaign.id),
+                        _e(str(state.acceptance_summary.accepted if state.acceptance_summary else False)),
+                        _e(str(state.acceptance_summary.actual_run_attestation_present if state.acceptance_summary else False)),
+                        _e(str(state.acceptance_summary.release_gate_eligible if state.acceptance_summary else False)),
+                        _e("; ".join(state.acceptance_summary.blocking_failures) if state.acceptance_summary else "No acceptance summary."),
+                    ]
+                    for state in context.campaign_states
+                ],
+            ),
+        ]
+    )
+
+
 def _run_artifact_links(state: ResearchRunState) -> list[tuple[str, str]]:
     names = [
         "run_report.md",
@@ -451,6 +705,61 @@ def _project_artifact_links(program: ResearchProgramState) -> list[tuple[str, st
     return [(name, f"../{name}") for name in names if (base / name).exists()]
 
 
+def _load_campaign_states(program: ResearchProgramState) -> list[CampaignState]:
+    states: list[CampaignState] = []
+    project_dir = Path(program.project.root_dir)
+    for campaign in program.campaigns:
+        campaign_dir = project_dir / "campaigns" / campaign.id
+        campaign_path = campaign_dir / "campaign.json"
+        if not campaign_path.exists():
+            continue
+        raw_campaign = json.loads(campaign_path.read_text(encoding="utf-8"))
+        raw_budget = _read_json_if_exists(campaign_dir / "budget.json")
+        raw_acceptance = _read_json_if_exists(campaign_dir / "campaign_acceptance_summary.json")
+        states.append(
+            CampaignState(
+                campaign=from_dict(ResearchCampaign, raw_campaign),
+                steps=[from_dict(CampaignStep, item) for item in _read_list(campaign_dir / "steps.json")],
+                decisions=[from_dict(CampaignDecision, item) for item in _read_list(campaign_dir / "decisions.json")],
+                milestones=[from_dict(CampaignMilestone, item) for item in _read_list(campaign_dir / "milestones.json")],
+                imports=[from_dict(CampaignImportRecord, item) for item in _read_list(campaign_dir / "imports.json")],
+                human_reviews=[from_dict(CampaignHumanReview, item) for item in _read_list(campaign_dir / "campaign_reviews.json")],
+                acceptance_summary=from_dict(CampaignAcceptanceSummary, raw_acceptance) if raw_acceptance else None,
+                budget=from_dict(CampaignBudget, raw_budget) if raw_budget else None,
+            )
+        )
+    return states
+
+
+def _load_campaign_canaries(data_dir: Path, project_id: str) -> list[CampaignCanaryRecord]:
+    root = data_dir / "campaign_canaries"
+    records: list[CampaignCanaryRecord] = []
+    if not root.exists():
+        return records
+    for path in sorted(root.glob("*/record.json")):
+        try:
+            record = from_dict(CampaignCanaryRecord, json.loads(path.read_text(encoding="utf-8")))
+        except (OSError, json.JSONDecodeError, TypeError, ValueError):
+            continue
+        if not record.project_id or record.project_id == project_id:
+            records.append(record)
+    return records
+
+
+def _read_json_if_exists(path: Path) -> dict[str, Any]:
+    if not path.exists():
+        return {}
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    return raw if isinstance(raw, dict) else {}
+
+
+def _read_list(path: Path) -> list[dict[str, Any]]:
+    if not path.exists():
+        return []
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    return raw if isinstance(raw, list) else []
+
+
 def _coverage_warnings(reports: list[SourceCoverageReport]) -> list[str]:
     warnings = []
     for report in reports:
@@ -458,6 +767,70 @@ def _coverage_warnings(reports: list[SourceCoverageReport]) -> list[str]:
         warnings.extend(report.missing_source_types)
         warnings.extend(f"Failed source: {source}" for source in report.failed_sources)
     return warnings
+
+
+def _campaign_requires_actual_run(campaign: ResearchCampaign) -> bool:
+    return campaign.mode in {"codex_task_pack", "codex_direct", "manual_handoff"}
+
+
+def _record_has_actual_attestation(record: CampaignImportRecord) -> bool:
+    return any(item.get("type") == "agent_actual_run_attestation" and item.get("accepted") is True for item in record.accepted_objects)
+
+
+def _real_import_records(imports: list[CampaignImportRecord]) -> list[CampaignImportRecord]:
+    return [record for record in imports if record.status in {"applied", "partial", "valid"} and _record_has_actual_attestation(record)]
+
+
+def _attested_output_count(imports: list[CampaignImportRecord]) -> int:
+    return sum(
+        1
+        for record in imports
+        for item in record.accepted_objects
+        if item.get("type") == "agent_actual_run_attestation" and item.get("accepted") is True
+    )
+
+
+def _default_actual_run_blocker(state: CampaignState) -> str:
+    if state.campaign.mode == "fake_agent":
+        return "Fake-agent campaign never counts as actual-run acceptance."
+    if not _campaign_requires_actual_run(state.campaign):
+        return "Deterministic campaign does not require actual-run acceptance."
+    if not _real_import_records(state.imports):
+        return "No attested validated Codex/GPT-5.4 import is present."
+    if not state.human_reviews:
+        return "No campaign human review is recorded."
+    return "No campaign acceptance summary is recorded."
+
+
+def _release_gate_blockers(context: _DashboardContext) -> list[str]:
+    blockers: list[str] = []
+    if not context.campaign_states:
+        blockers.append("No campaigns are recorded for this project.")
+    if not any(state.acceptance_summary and state.acceptance_summary.release_gate_eligible for state in context.campaign_states):
+        blockers.append("No campaign is release-gate eligible with attested real Codex/GPT-5.4 output and human acceptance.")
+    for state in context.campaign_states:
+        if state.campaign.mode == "fake_agent" and not any(
+            candidate.acceptance_summary and candidate.acceptance_summary.release_gate_eligible for candidate in context.campaign_states
+        ):
+            blockers.append(f"`{state.campaign.id}` is fake-agent only and cannot count as actual-run acceptance.")
+        elif _campaign_requires_actual_run(state.campaign):
+            if not _real_import_records(state.imports):
+                blockers.append(f"`{state.campaign.id}` lacks an attested validated Codex/GPT-5.4 import.")
+            if not state.human_reviews:
+                blockers.append(f"`{state.campaign.id}` lacks campaign human review.")
+        if state.acceptance_summary:
+            blockers.extend(f"`{state.campaign.id}`: {item}" for item in state.acceptance_summary.blocking_failures)
+    return _dedupe(blockers)
+
+
+def _dedupe(items: list[str]) -> list[str]:
+    seen: set[str] = set()
+    result: list[str] = []
+    for item in items:
+        if item and item not in seen:
+            result.append(item)
+            seen.add(item)
+    return result
 
 
 def _metric(label: str, value: object) -> str:

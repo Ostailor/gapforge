@@ -1,0 +1,82 @@
+{
+  "topic": "intentionally undercovered sparse topic fixture",
+  "decisions": [
+    {
+      "decision_type": "search_more",
+      "reason": "Source policy requirements are not satisfied.",
+      "evidence": ["no full text", "missing Semantic Scholar", "missing OpenReview"],
+      "status": "complete"
+    },
+    {
+      "decision_type": "stop",
+      "reason": "Budget exhausted before source coverage was sufficient.",
+      "evidence": ["coverage confidence low"],
+      "status": "complete"
+    }
+  ],
+  "expected_decisions": ["search_more", "stop"],
+  "stop_reason": {
+    "actual": "not_ready_poor_coverage",
+    "expected": "not_ready_poor_coverage",
+    "recommended_direction": false,
+    "explanation": "Strict report refuses a top direction because coverage is poor."
+  },
+  "agent_outputs": {
+    "invalid_output_rejected": true,
+    "fake_citation_rejected": true,
+    "unsupported_high_confidence_rejected": true,
+    "unvalidated_imports": 0,
+    "validation_issues": ["coverage too weak for strong novelty"]
+  },
+  "actual_run_gate": {
+    "expected_pass": false,
+    "expected_blockers": ["no actual Codex campaign and no accepted real outputs"],
+    "campaigns": []
+  },
+  "novelty_loop": {
+    "initial_verdict": "unknown",
+    "generated_search_requests": ["sparse topic systematic review", "sparse topic closest prior work"],
+    "searches_recorded": true,
+    "retrieval_rebuilt": true,
+    "duplicate_prior_work": false,
+    "strong_novelty_blocked_when_missing_searches": true,
+    "direction_updated": true
+  },
+  "directions": [
+    {
+      "id": "direction-undercovered",
+      "maturity": "candidate",
+      "has_protocol": false,
+      "has_novelty_dossier": false,
+      "has_related_work_matrix": false,
+      "rejected": false
+    }
+  ],
+  "report": {
+    "text": "Strict campaign report states stop reason not_ready_poor_coverage, missing searches, and uncertainty. It refuses a recommendation.",
+    "mentions_uncertainty": true,
+    "mentions_stop_reason": true,
+    "labels_fake_vs_real": true,
+    "overclaims": false,
+    "claims_novel_without_dossier": false
+  },
+  "review_queue": {
+    "expected_open": 1,
+    "items": [
+      {
+        "object_type": "source_policy_waiver",
+        "object_id": "coverage-waiver-undercovered",
+        "priority": "high",
+        "reason": "Human waiver required before novelty can be treated as sufficient.",
+        "status": "open"
+      }
+    ]
+  },
+  "experiment_code_tasks": [],
+  "rollback": {
+    "snapshot_created": true,
+    "rollback_exercised": true,
+    "state_restored": true,
+    "audit_recorded": true
+  }
+}

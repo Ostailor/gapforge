@@ -1,0 +1,97 @@
+{
+  "topic": "fake-agent campaign regression fixture",
+  "campaign": {
+    "id": "campaign-fake-agent",
+    "mode": "fake_agent",
+    "status": "complete"
+  },
+  "decisions": [
+    {
+      "decision_type": "ask_codex",
+      "reason": "Exercise fake-agent schema validation without counting as actual-run acceptance.",
+      "evidence": ["fake agent mode", "offline fixture"],
+      "status": "complete"
+    },
+    {
+      "decision_type": "stop",
+      "reason": "Fake campaign completed deterministic regression checks.",
+      "evidence": ["validated fake output"],
+      "status": "complete"
+    }
+  ],
+  "expected_decisions": ["ask_codex", "stop"],
+  "stop_reason": {
+    "actual": "no_new_information",
+    "expected": "no_new_information",
+    "recommended_direction": false,
+    "explanation": "Fake-agent regression is not a research recommendation."
+  },
+  "agent_outputs": {
+    "invalid_output_rejected": true,
+    "fake_citation_rejected": true,
+    "unsupported_high_confidence_rejected": true,
+    "unvalidated_imports": 0,
+    "validation_issues": ["fake agent output cannot count as actual Codex acceptance"]
+  },
+  "actual_run_gate": {
+    "expected_pass": false,
+    "expected_blockers": ["fake-agent campaigns cannot count as actual-run acceptance"],
+    "campaigns": [
+      {
+        "id": "campaign-fake-agent",
+        "mode": "fake_agent",
+        "accepted": true,
+        "release_gate_eligible": false,
+        "attested": false,
+        "validated_imports": true,
+        "human_review_accepted": false
+      }
+    ]
+  },
+  "novelty_loop": {
+    "initial_verdict": "unknown",
+    "generated_search_requests": ["fake-agent regression query"],
+    "searches_recorded": true,
+    "retrieval_rebuilt": true,
+    "duplicate_prior_work": false,
+    "strong_novelty_blocked_when_missing_searches": true,
+    "direction_updated": true
+  },
+  "directions": [
+    {
+      "id": "direction-fake",
+      "maturity": "candidate",
+      "has_protocol": false,
+      "has_novelty_dossier": false,
+      "has_related_work_matrix": false,
+      "rejected": false
+    }
+  ],
+  "report": {
+    "text": "Fake-agent regression report labels fake mode and stop reason. It states uncertainty and no actual-run acceptance.",
+    "mentions_uncertainty": true,
+    "mentions_stop_reason": true,
+    "labels_fake_vs_real": true,
+    "overclaims": false,
+    "claims_novel_without_dossier": false
+  },
+  "review_queue": {
+    "expected_open": 1,
+    "items": [
+      {
+        "object_type": "campaign",
+        "object_id": "campaign-fake-agent",
+        "priority": "medium",
+        "reason": "Fake output must not be confused with actual Codex output.",
+        "status": "open"
+      }
+    ]
+  },
+  "experiment_code_tasks": [],
+  "rollback": {
+    "snapshot_created": true,
+    "rollback_exercised": true,
+    "state_restored": true,
+    "audit_recorded": true
+  }
+}

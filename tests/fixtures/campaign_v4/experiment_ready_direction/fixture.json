@@ -1,0 +1,110 @@
+{
+  "topic": "experiment-ready campaign fixture",
+  "decisions": [
+    {
+      "decision_type": "design_experiment",
+      "reason": "Validated gap has novelty dossier, related work matrix, and source coverage.",
+      "evidence": ["novelty dossier", "related-work matrix", "protocol"],
+      "status": "complete"
+    },
+    {
+      "decision_type": "stop",
+      "reason": "Direction reached experiment-ready protocol gate.",
+      "evidence": ["experiment protocol", "baseline candidates"],
+      "status": "complete"
+    }
+  ],
+  "expected_decisions": ["design_experiment", "stop"],
+  "stop_reason": {
+    "actual": "ready_experiment_protocol",
+    "expected": "ready_experiment_protocol",
+    "recommended_direction": true,
+    "evidence": ["direction-ready", "protocol-ready"]
+  },
+  "agent_outputs": {
+    "invalid_output_rejected": true,
+    "fake_citation_rejected": true,
+    "unsupported_high_confidence_rejected": true,
+    "unvalidated_imports": 0,
+    "validation_issues": ["validation was strict; accepted outputs cited known paper ids"]
+  },
+  "actual_run_gate": {
+    "expected_pass": false,
+    "expected_blockers": ["single fixture campaign is not enough for v0.4 release acceptance"],
+    "campaigns": [
+      {
+        "id": "campaign-experiment-ready",
+        "mode": "codex_task_pack",
+        "accepted": true,
+        "release_gate_eligible": true,
+        "attested": true,
+        "validated_imports": true,
+        "human_review_accepted": true,
+        "experiment_ready": true,
+        "refusal": false,
+        "full_text": false
+      }
+    ]
+  },
+  "novelty_loop": {
+    "initial_verdict": "revise",
+    "generated_search_requests": ["experiment ready closest prior work", "benchmark baseline survey"],
+    "searches_recorded": true,
+    "retrieval_rebuilt": true,
+    "duplicate_prior_work": false,
+    "strong_novelty_blocked_when_missing_searches": true,
+    "direction_updated": true
+  },
+  "directions": [
+    {
+      "id": "direction-ready",
+      "maturity": "experiment_ready",
+      "has_protocol": true,
+      "has_novelty_dossier": true,
+      "has_related_work_matrix": true,
+      "rejected": false
+    },
+    {
+      "id": "direction-premature-control",
+      "maturity": "candidate",
+      "has_protocol": false,
+      "has_novelty_dossier": true,
+      "has_related_work_matrix": false,
+      "rejected": false
+    }
+  ],
+  "report": {
+    "text": "Report recommends exactly one experiment-ready direction with novelty dossier, related work, protocol, evidence, and uncertainty.",
+    "mentions_uncertainty": true,
+    "mentions_stop_reason": true,
+    "labels_fake_vs_real": true,
+    "overclaims": false,
+    "claims_novel_without_dossier": false
+  },
+  "review_queue": {
+    "expected_open": 0,
+    "items": []
+  },
+  "experiment_code_tasks": [
+    {
+      "task_type": "scaffold_repo",
+      "instructions": "Create a placeholder experiment repo. Do not write fake results; expected results are hypothetical.",
+      "required_files": ["README.md", "pyproject.toml", "tests/test_smoke.py"],
+      "expected_outputs": ["experiment_repos/direction-ready/README.md"],
+      "validation_commands": ["pytest"]
+    },
+    {
+      "task_type": "implement_metric",
+      "instructions": "Implement metric definitions from the protocol and smoke tests.",
+      "required_files": ["metrics/specificity.py"],
+      "expected_outputs": ["metrics/specificity.py", "tests/test_metrics.py"],
+      "validation_commands": ["pytest tests/test_metrics.py"]
+    }
+  ],
+  "rollback": {
+    "snapshot_created": true,
+    "rollback_exercised": true,
+    "state_restored": true,
+    "audit_recorded": true
+  }
+}

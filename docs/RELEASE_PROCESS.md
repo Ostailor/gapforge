@@ -26,8 +26,9 @@ GAPFORGE_DISABLE_NETWORK=1 gapforge report --strict
 9. For v0.3 releases that claim actual-run validation, complete the real-run canary process in `docs/V0_3_REAL_RUN_ACCEPTANCE.md` and `docs/V0_3_CANARY_RUNS.md`.
 10. Confirm at least one actual Codex/GPT-5.4 canary has an accepted canary record before using the phrase "actual-run acceptance passed."
 11. Record human review using `docs/REAL_RUN_REVIEW_CHECKLIST.md`.
-12. Commit with a message that records constraints, rejected alternatives if useful, confidence, scope risk, tested commands, and known gaps.
-13. Tag the release only after the checks pass.
+12. For v0.4 releases, complete the campaign process in `docs/V0_4_AGENTIC_CAMPAIGNS.md` and `docs/V0_4_REAL_RUN_ACCEPTANCE.md`.
+13. Commit with a message that records constraints, rejected alternatives if useful, confidence, scope risk, tested commands, and known gaps.
+14. Tag the release only after the checks pass.
 
 ## v0.3 Validation Levels
 
@@ -44,7 +45,44 @@ If Codex/GPT-5.4 is unavailable, the release cannot claim actual-run validation 
 
 For v0.3, actual-run validation requires an accepted canary record. A failed, rejected, planned, prompt-pack-only, or fake-agent canary is not sufficient.
 
-For future v0.4 releases, require multiple accepted agentic campaigns, not a single skill-level canary. Those campaigns should cover literature search/reading, novelty, experiment planning, reviewer/rebuttal planning, and manuscript package review.
+## v0.4 Actual-Run Gate
+
+v0.4 is the actual Codex/GPT-5.4 agentic campaign release. It must not claim actual-run acceptance unless multiple real Codex/GPT-5.4 campaigns completed and were accepted by human review.
+
+For v0.4 releases:
+
+- require multiple accepted real campaigns, not a single skill-level canary
+- require campaign artifacts, validation records, imported-output summaries, strict-report behavior, and human review records
+- require coverage across literature/novelty, local-PDF full-text reading, and undercoverage strict-refusal campaigns
+- fake-agent campaigns remain CI checks only
+- prompt-pack-only handoff does not count unless real Codex outputs are imported, validated, and reviewed
+- release notes must say either `v0.4 actual-run acceptance passed` or `v0.4 actual-run acceptance not completed`
+
+Those campaigns should cover literature search/reading, novelty, experiment planning, reviewer/rebuttal planning, and manuscript package review where practical.
+
+Recommended v0.4 release-gate commands:
+
+```bash
+make ci
+gapforge eval --v4 --write-report
+GAPFORGE_DISABLE_NETWORK=1 gapforge campaign-canary-run --profile fake_agent_campaign_regression
+gapforge campaign-canary-plan --profile agentic_low_fpr_collusion
+gapforge campaign-canary-run --profile agentic_low_fpr_collusion --real
+gapforge campaign-review --campaign-id <campaign-id> --accept --reviewer "<name>"
+gapforge v4-release-gate --project-id <project-id> --write-report --json
+```
+
+If direct Codex execution is unavailable, use task-pack handoff:
+
+```bash
+gapforge campaign-task --campaign-id <campaign-id> --type novelty_reviewer
+gapforge task-handoff --task-id <task-id>
+gapforge campaign-validate-output --campaign-id <campaign-id> --task-id <task-id>
+gapforge campaign-import-output --campaign-id <campaign-id> --task-id <task-id>
+gapforge attest-agent-run --task-id <task-id> --agent codex --model gpt-5.4 --method task_pack --attester "<name>"
+```
+
+Never mark the handoff as accepted until the outputs were actually produced by Codex/GPT-5.4 and the validated import plus human review artifacts exist.
 
 ## Tagging
 
@@ -74,4 +112,5 @@ Release notes should include:
 - Do not claim exhaustive literature review capability.
 - Do not claim actual Codex/GPT-5.4 canary validation unless the canary ran and human review was recorded.
 - Do not claim actual-run acceptance unless the release-gate front matter says `actual_run_acceptance_passed: true` and at least one real canary is accepted.
+- For v0.4, do not claim actual-run acceptance unless multiple real Codex/GPT-5.4 campaigns are accepted and the campaign release gate passes.
 - Do not publish generated `runs/`, caches, or local environment artifacts as source.

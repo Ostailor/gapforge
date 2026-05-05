@@ -55,6 +55,34 @@ v0.3 adds project memory, hybrid retrieval, active-loop decisions, optional LLM-
 - presenting fixture/fallback data as real literature conclusions
 - exporting fake results or publication-ready claims without human validation
 
+## v0.4 Target and Limits
+
+v0.4 is the actual Codex/GPT-5.4 agentic campaign release path. Its main goal is to fix the v0.3 actual-run gap by making real Codex/GPT-5.4 campaigns executable or handoff/import-completable, validated, recoverable, and human-reviewable.
+
+v0.4 must still preserve these limits:
+
+- deterministic mode remains available
+- normal CI does not require Codex/GPT-5.4
+- fake-agent canaries do not count as actual-run acceptance
+- prompt-pack-only workflows do not count unless real Codex outputs are imported, validated, and reviewed
+- unvalidated model output cannot mutate state
+- actual-run acceptance cannot be claimed without multiple accepted real campaigns
+- GapForge still does not perform exhaustive autonomous literature review
+- direct Codex execution depends on `GAPFORGE_CODEX_COMMAND` and may be unavailable in some environments
+- task-pack/manual-handoff workflows require disciplined external Codex execution and validated import
+- v4 eval fixtures are offline behavior checks, not proof of research quality
+
+See `docs/V0_4_REAL_RUN_ACCEPTANCE.md` for the release gate.
+
+## v0.4 Non-Goals
+
+- removing deterministic or fake-agent paths
+- requiring Codex/GPT-5.4 for normal CI
+- accepting unvalidated agent output
+- treating human attestation as evidence
+- counting fake-agent campaigns as actual-run acceptance
+- claiming autonomous exhaustive literature review
+
 ## Operational Guidance
 
 Use strict mode and coverage assessment before interpreting outputs:
@@ -70,4 +98,4 @@ When in doubt, treat GapForge output as a to-do list for search, reading, and re
 
 ## Latest Verification Limitation
 
-The May 5, 2026 deterministic verification pass succeeded, including v2/v3 evals, coverage, and v2/v3 smoke runs. The fake-agent canary succeeded. Actual Codex/GPT-5.4 canaries were recorded as failed/not passed because the real-run environment variables were unset. Therefore v0.3 actual-run validation remains incomplete until a real Codex/GPT-5.4 canary is executed and accepted by human review.
+The May 5, 2026 deterministic verification pass succeeded, including v2/v3/v4 evals, coverage, and v2/v3/v4 smoke runs. The v0.4 fake-agent campaign canary succeeded. Actual Codex/GPT-5.4 campaign canaries were not accepted because the real-run environment variables were unset. Therefore v0.4 actual-run acceptance is not completed until multiple real Codex/GPT-5.4 campaigns are executed through direct or task-pack/manual-handoff mode, validated, attested, imported, reviewed by a human, and accepted by `gapforge v4-release-gate`.

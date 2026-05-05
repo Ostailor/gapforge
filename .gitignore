@@ -22,6 +22,9 @@ prompt_packs/
 **/paper_packages/
 **/safe_bundles/
 **/artifacts/papers/**/*.pdf
+**/agent_tasks/*/outputs/
+**/agent_tasks/*/repair_outputs/
+**/task_outputs/
 artifacts_audit.json
 artifacts_audit.md
 
@@ -31,6 +34,8 @@ data/*
 !data/.gitkeep
 projects/*
 !projects/.gitkeep
+campaigns/*
+!campaigns/.gitkeep
 
 .omx/state/
 .omx/logs/

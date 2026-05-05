@@ -6,13 +6,28 @@ import sys
 from pathlib import Path
 
 from gapforge.evals.benchmark import run_evals
-from gapforge.evals.fixtures import FIXTURE_NAMES, V2_FIXTURE_NAMES, V3_FIXTURE_NAMES, list_fixtures, load_fixture, load_v3_fixture
+from gapforge.evals.fixtures import (
+    FIXTURE_NAMES,
+    V2_FIXTURE_NAMES,
+    V3_FIXTURE_NAMES,
+    V4_FIXTURE_NAMES,
+    list_fixtures,
+    load_fixture,
+    load_v3_fixture,
+    load_v4_fixture,
+)
 from gapforge.evals.metrics import (
+    actual_run_gate_correctness,
+    agent_output_validation_strictness,
     direction_maturity_accuracy,
+    direction_maturity_gate_accuracy_from_fixture,
     gap_evidence_matrix_score,
     manuscript_package_honesty,
+    novelty_research_loop_quality,
     retrieval_relevance_at_k,
+    rollback_safety,
     source_policy_compliance,
+    stop_reason_correctness,
     unsupported_claim_rate,
 )
 from gapforge.models import Claim, ResearchRunState, ResearchTopic, SourceCoverageReport
@@ -60,6 +75,18 @@ def test_v3_eval_fixtures_are_complete_and_offline() -> None:
         assert fixture.human_gold_reviewer_objections
         assert fixture.expected_source_coverage is not None
         assert fixture.expected_source_coverage.searched_sources == ["fixture-source"]
+
+
+def test_v4_eval_fixtures_are_complete_and_offline() -> None:
+    for name in V4_FIXTURE_NAMES:
+        fixture = load_v4_fixture(name)
+        assert fixture.is_v4
+        assert fixture.topic
+        assert fixture.papers
+        assert fixture.known_good_gaps
+        assert fixture.campaign_fixture["decisions"]
+        assert fixture.campaign_fixture["stop_reason"]
+        assert fixture.campaign_fixture["actual_run_gate"]
 
 
 def test_run_evals_single_fixture_writes_report(tmp_path: Path) -> None:
@@ -133,6 +160,28 @@ def test_eval_cli_v3_writes_report(tmp_path: Path) -> None:
     report_path.unlink()
 
 
+def test_eval_cli_v4_writes_report(tmp_path: Path) -> None:
+    env = {**os.environ, "GAPFORGE_DISABLE_NETWORK": "1"}
+    env["PYTHONPATH"] = str(Path.cwd() / "src")
+    result = subprocess.run(
+        [sys.executable, "-m", "gapforge.cli", "eval", "--fixture", "fake_agent_campaign", "--v4", "--write-report"],
+        cwd=Path.cwd(),
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "eval_report.md" in result.stdout
+    report_path = Path.cwd() / "eval_report.md"
+    assert report_path.exists()
+    text = report_path.read_text(encoding="utf-8")
+    assert "### v0.4 Scores" in text
+    assert "actual_run_gate_correctness" in text
+    report_path.unlink()
+
+
 def test_fixture_duplicate_ideas_are_intentionally_rejected() -> None:
     report = run_evals(fixture="quantum_portfolio_optimization", write_report=False)
     result = report.results[0]
@@ -168,6 +217,20 @@ def test_run_v3_evals_includes_v3_metrics_offline(tmp_path: Path, monkeypatch) -
     assert "### v0.2 Scores" in text
     assert "### v0.3 Scores" in text
     assert "source_policy_compliance" in text
+
+
+def test_run_v4_evals_includes_campaign_metrics_offline(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("GAPFORGE_DISABLE_NETWORK", "1")
+
+    report = run_evals(v4=True, output_dir=tmp_path, write_report=True)
+
+    assert len(report.results) == len(V4_FIXTURE_NAMES)
+    assert all(result.scores.campaign_decision_quality is not None for result in report.results)
+    assert all(result.scores.actual_run_gate_correctness is not None for result in report.results)
+    text = (tmp_path / "eval_report.md").read_text(encoding="utf-8")
+    assert "### v0.1 Scores" in text
+    assert "### v0.4 Scores" in text
+    assert "v0.4 overall score" in text
 
 
 def test_v2_duplicate_ideas_are_rejected_by_dossier_aware_novelty_gate() -> None:
@@ -240,3 +303,63 @@ def test_v3_source_policy_compliance_catches_insufficient_coverage(tmp_path: Pat
     )
 
     assert source_policy_compliance(state, ["fixture-source", "pubmed"]) < 0.8
+
+
+def test_v4_invalid_agent_output_is_rejected() -> None:
+    fixture = load_v4_fixture("invalid_agent_output").campaign_fixture
+
+    assert agent_output_validation_strictness(fixture) == 1.0
+
+
+def test_v4_undercovered_campaign_refuses_recommendation() -> None:
+    fixture = load_v4_fixture("undercovered_refusal").campaign_fixture
+
+    assert stop_reason_correctness(fixture) == 1.0
+
+
+def test_v4_duplicate_prior_work_rejects_direction() -> None:
+    fixture = load_v4_fixture("novelty_research_loop").campaign_fixture
+
+    assert novelty_research_loop_quality(fixture) == 1.0
+
+
+def test_v4_experiment_ready_requires_protocol_novelty_and_related_work() -> None:
+    ready = load_v4_fixture("experiment_ready_direction").campaign_fixture
+    fatal = load_v4_fixture("reviewer_fatal_flaw").campaign_fixture
+
+    assert direction_maturity_gate_accuracy_from_fixture(ready) == 1.0
+    assert direction_maturity_gate_accuracy_from_fixture(fatal) == 1.0
+    broken = {
+        "directions": [
+            {
+                "id": "premature",
+                "maturity": "experiment_ready",
+                "has_protocol": True,
+                "has_novelty_dossier": False,
+                "has_related_work_matrix": True,
+                "rejected": False,
+            }
+        ]
+    }
+    assert direction_maturity_gate_accuracy_from_fixture(broken) == 0.0
+
+
+def test_v4_release_gate_fails_fake_only_campaigns() -> None:
+    fixture = load_v4_fixture("fake_agent_campaign").campaign_fixture
+
+    assert actual_run_gate_correctness(fixture) == 1.0
+
+
+def test_v4_rollback_safety_metric_works() -> None:
+    fixture = load_v4_fixture("invalid_agent_output").campaign_fixture
+    unsafe = {
+        "rollback": {
+            "snapshot_created": True,
+            "rollback_exercised": False,
+            "state_restored": False,
+            "unsafe_mutation_after_reject": True,
+        }
+    }
+
+    assert rollback_safety(fixture) == 1.0
+    assert rollback_safety(unsafe) < 0.6

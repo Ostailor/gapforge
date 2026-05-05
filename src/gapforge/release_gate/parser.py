@@ -29,7 +29,7 @@ class ReleaseGateStatus:
 def parse_release_gate(path: str | Path) -> ReleaseGateStatus:
     """Parse JSON front matter from a release-gate Markdown file."""
     text = Path(path).read_text(encoding="utf-8")
-    metadata = _parse_json_front_matter(text)
+    metadata = parse_json_front_matter(text)
     return ReleaseGateStatus(
         version=str(metadata.get("version", "")),
         actual_run_acceptance=str(metadata.get("actual_run_acceptance", "not_completed")),
@@ -39,7 +39,7 @@ def parse_release_gate(path: str | Path) -> ReleaseGateStatus:
     )
 
 
-def _parse_json_front_matter(text: str) -> dict[str, Any]:
+def parse_json_front_matter(text: str) -> dict[str, Any]:
     lines = text.splitlines()
     if not lines or lines[0].strip() != "---":
         raise ValueError("Release gate file must start with JSON front matter delimited by ---")

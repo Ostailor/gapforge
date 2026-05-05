@@ -2,6 +2,57 @@
 
 All notable project changes should be recorded here.
 
+## 0.4.0
+
+GapForge v0.4 prepares the system for actual Codex/GPT-5.4 agentic research campaigns. It does not claim exhaustive autonomous literature review, and it does not count fake-agent success as real-run acceptance.
+
+### Agentic Campaigns
+
+- Added first-class campaign state, campaign steps, campaign decisions, campaign milestones, campaign budgets, stop conditions, and campaign reports.
+- Added campaign controller logic for deterministic, fake-agent, Codex task-pack, Codex direct, and manual-handoff modes.
+- Added explicit stop reasons so campaigns can end as ready, not ready, blocked, pending handoff, invalid-output, or budget-exhausted.
+- Added campaign canary profiles for low-FPR collusion, monitor evasion, cross-domain specificity, undercovered refusal, manual PDF, and fake-agent regression.
+
+### Codex/GPT-5.4 Actual-Run Path
+
+- Added real-run diagnostics for environment status, agent runtime status, task-pack status, import validator status, canary status, blockers, and recommended next commands.
+- Upgraded the AgentClient runtime contract with direct, task-pack, manual-handoff, and fake capabilities plus actual-run attestation rules.
+- Added runtime capability reporting for direct, task-pack, manual-handoff, and fake execution methods.
+- Added Codex runner and handoff support with configured command execution, task-pack handoff files, validation/import commands, and redacted command logs.
+- Added campaign-level Codex task packs for planning, literature scouting, batch reading, gap synthesis, novelty review, experiment architecture, reviewer panel, and stop decisions.
+- Added actual-run attestation records so task-pack/manual-handoff outputs can count only when real Codex/GPT-5.4 execution is attested, validated, imported, and human-reviewed.
+- Added diagnostics for real-run blockers and setup guidance for direct versus task-pack/handoff execution.
+
+### Validation, Import, and Recovery
+
+- Added robust campaign output validation, partial import, rollback snapshots, import records, and rollback commands.
+- Added agent output repair task generation so invalid Codex JSON can be corrected without weakening validation.
+- Added retrieval-backed task context selection with explicit budgets and context-limited flags.
+- Added agentic search requests and novelty re-search loops so Codex can propose searches while GapForge validates and executes them.
+
+### Research Workflows
+
+- Added campaign-level reviewer and rebuttal loops.
+- Added experiment code task generation and experiment repository scaffolding for experiment-ready directions.
+- Added campaign-level human review and acceptance summaries.
+- Added dashboard pages for campaigns, actual runs, canaries, agent tasks, imports, human reviews, rejected outputs, fake-vs-real labels, and release-gate status.
+- Added campaign reports with explicit stop reasons and acceptance blockers.
+
+### Evaluation, API, and Release Gates
+
+- Added v4 campaign eval fixtures and metrics for campaign decisions, stop reasons, output validation strictness, actual-run gates, novelty loops, direction maturity, report honesty, review queues, code tasks, and rollback safety.
+- Exposed v0.4 campaign and actual-run workflows through the Python API.
+- Added a machine-checkable v0.4 release gate requiring deterministic evidence, fake-agent campaign canary success, at least three accepted real Codex/GPT-5.4 campaigns, a strict-refusal campaign, an experiment-ready campaign, and a manual-PDF/full-text campaign.
+- Added `make v4-smoke` for CI-safe fake-agent campaign smoke validation. The target writes a release-gate report but expects the actual-run gate to fail unless real campaigns have been accepted.
+- Updated v0.4 docs and Codex-readable skills for campaign control, Codex campaign tasks, output validation, novelty loops, experiment code tasks, reviewer panels, and real-run acceptance.
+
+### Validation
+
+- Deterministic checks passed locally on May 5, 2026: `make format`, `make format-check`, `make lint`, `make typecheck`, `make test`, `make eval`, `gapforge eval --v2 --write-report`, `gapforge eval --v3 --write-report`, `gapforge eval --v4 --write-report`, `make coverage`, `make v2-smoke`, `make v3-smoke`, and `make v4-smoke`.
+- Fake campaign canary `fake_agent_campaign_regression` passed.
+- Actual Codex/GPT-5.4 campaign acceptance was **not completed** in this environment. `GAPFORGE_ENABLE_REAL_RUNS`, `GAPFORGE_AGENT_NAME`, and `GAPFORGE_CODEX_MODEL` were not configured, so real campaign canaries were refused or recorded as non-actual.
+- `gapforge v4-release-gate --write-report` correctly fails because there are zero accepted real Codex/GPT-5.4 campaigns.
+
 ## 0.3.0
 
 GapForge v0.3 extends the v0.2 full-text evidence system with project memory, hybrid retrieval, optional Codex/GPT-5.4 task-pack workflows, research direction maturation, and manuscript package exports. It is still not an exhaustive autonomous literature reviewer.

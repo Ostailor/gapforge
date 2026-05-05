@@ -2,13 +2,14 @@
 
 GapForge is a Codex-powered Research Ideation OS. It turns a broad topic into auditable research state: papers, notes, claims, evidence, gaps, novelty dossiers, experiment plans, reviewer objections, and reports.
 
-GapForge v0.3 is a semantic, project-memory-aware, optionally LLM-assisted research ideation system. It is still not an exhaustive autonomous literature reviewer. It is full-text-aware and evidence-located, with hybrid retrieval, conservative novelty checking, and manuscript package export. Deterministic and offline-safe paths remain the default.
+GapForge v0.4 adds campaign-level Codex/GPT-5.4 actual-run workflows on top of the v0.3 semantic, project-memory-aware, optionally LLM-assisted research system. It is still not an exhaustive autonomous literature reviewer. It is full-text-aware and evidence-located, with hybrid retrieval, conservative novelty checking, manuscript package export, campaign task packs, validated imports, human acceptance review, and a machine-checkable release gate. Deterministic and offline-safe paths remain the default.
 
 ## Version Lineage
 
 - **v0.1**: deterministic research OS foundation with run state, source connectors, skill orchestration, claim ledger, novelty gate, evals, and reports.
 - **v0.2**: full-text evidence and novelty dossier upgrade with PDF artifacts, sections, evidence spans, source coverage, citation graph, gap evidence matrices, human review, and strict reports.
 - **v0.3**: semantic plus LLM-assisted plus multi-run project-memory upgrade with hybrid retrieval, source policy profiles, active loop decisions, related-work matrices, direction maturation, protocols, review queues, dashboard, and paper packages.
+- **v0.4**: actual Codex/GPT-5.4 agentic campaign release path with campaign-level state, task packs, direct/handoff runner support, strict validated import, repair/rollback, campaign dashboards/reports, v4 evals, and release gates. Fake-agent success still does not count as real-run acceptance.
 
 ## Why Not Just Summarization?
 
@@ -71,12 +72,96 @@ Expected behavior:
 - strict report remains conservative and may refuse a top direction
 - outputs are smoke-test artifacts, not real literature conclusions
 
+## v0.4 Campaign Quickstarts
+
+v0.4 introduces project-level campaigns. Campaigns coordinate search, source coverage, retrieval, Codex task packs, validated imports, novelty loops, reviewer loops, experiment protocols, code-task handoff, dashboards, and human acceptance.
+
+### Deterministic Campaign
+
+This is the safest first run. It does not use Codex/GPT-5.4 and does not count as actual-run acceptance.
+
+```bash
+export GAPFORGE_DISABLE_NETWORK=1
+gapforge init-project "v4 deterministic campaign"
+gapforge campaign-create "low false positive collusion detection" --project-id v4-deterministic-campaign
+gapforge campaign-run --campaign-id <campaign-id> --mode deterministic --max-iterations 3
+gapforge campaign-report --campaign-id <campaign-id>
+gapforge dashboard --project-id v4-deterministic-campaign --include-actual-runs
+```
+
+### Fake-Agent Campaign Smoke
+
+Fake-agent mode is CI-safe. It exercises task-pack, schema, validation, import, and campaign-state plumbing. It is never evidence that Codex/GPT-5.4 worked.
+
+```bash
+export GAPFORGE_DISABLE_NETWORK=1
+gapforge campaign-canary-run --profile fake_agent_campaign_regression
+gapforge eval --v4 --write-report
+```
+
+### Codex Task-Pack Actual-Run Workflow
+
+Use this when there is no stable direct Codex runner configured. It can count as real actual-run evidence only after a real Codex/GPT-5.4 user or process writes outputs, GapForge validates/imports them, a human attests the task, and a campaign review accepts the result.
+
+```bash
+export GAPFORGE_ENABLE_REAL_RUNS=1
+gapforge init-project "v4 codex campaign"
+gapforge campaign-create "low false positive collusion detection in LLM agents" \
+  --project-id v4-codex-campaign \
+  --mode codex_task_pack \
+  --agent-name codex \
+  --model gpt-5.4 \
+  --source-profile ai_safety
+
+gapforge campaign-task --campaign-id <campaign-id> --type literature_scout
+gapforge task-handoff --task-id <task-id>
+# Run Codex/GPT-5.4 externally against HANDOFF.md and write outputs into outputs/.
+gapforge campaign-validate-output --campaign-id <campaign-id> --task-id <task-id>
+gapforge campaign-import-output --campaign-id <campaign-id> --task-id <task-id>
+gapforge attest-agent-run --task-id <task-id> --agent codex --model gpt-5.4 --method task_pack --attester "<name>"
+gapforge campaign-review --campaign-id <campaign-id> --accept --reviewer "<name>"
+gapforge campaign-acceptance --campaign-id <campaign-id>
+```
+
+If validation fails, repair without weakening validation:
+
+```bash
+gapforge repair-agent-output --task-id <task-id> --path <bad-output.json> --handoff
+```
+
+### Direct Runner Workflow
+
+Use direct mode only when a trusted local Codex command runner is configured. If it is missing, GapForge must fail clearly or produce handoff instructions; it must not fake success.
+
+```bash
+export GAPFORGE_ENABLE_REAL_RUNS=1
+export GAPFORGE_CODEX_MODEL=gpt-5.4
+export GAPFORGE_CODEX_COMMAND='codex run --model {model} --task-pack {task_pack}'
+gapforge agent-capabilities
+gapforge codex-run --task-id <task-id> --direct
+gapforge codex-run-status --agent-run-id <agent-run-id>
+gapforge campaign-import-output --campaign-id <campaign-id> --task-id <task-id>
+```
+
+### Campaign Acceptance and Release Gate
+
+Campaign completion is not acceptance. Acceptance requires validated imports, actual-run attestation when required, source coverage, explicit stop reason, campaign report, and human review. Fake-agent campaigns are excluded.
+
+```bash
+gapforge campaign-review --campaign-id <campaign-id>
+gapforge campaign-review --campaign-id <campaign-id> --accept --reviewer "<name>"
+gapforge campaign-acceptance --campaign-id <campaign-id>
+gapforge v4-release-gate --project-id <project-id> --write-report
+```
+
+`gapforge v4-release-gate` requires deterministic CI evidence, a passed fake-agent campaign canary, at least three accepted real Codex/GPT-5.4 campaigns, one experiment-ready campaign, one strict-refusal campaign, and one manual-PDF/full-text campaign. If those artifacts are missing, the gate fails closed.
+
 Current verification status from the May 5, 2026 local pass:
 
-- Deterministic checks passed: `make format`, `make format-check`, `make lint`, `make typecheck`, `make test`, `make eval`, `gapforge eval --v2 --write-report`, `gapforge eval --v3 --write-report`, `make coverage`, `make v2-smoke`, and `make v3-smoke`.
-- Fake-agent canary passed with valid schema validation.
-- Actual Codex/GPT-5.4 canaries did not run because `GAPFORGE_ENABLE_REAL_RUNS` and agent settings were not configured in the environment.
-- Real-run acceptance is therefore **not complete** and must not be claimed until a human-reviewed actual Codex/GPT-5.4 canary is accepted.
+- Deterministic checks passed: `make format`, `make format-check`, `make lint`, `make typecheck`, `make test`, `make eval`, `gapforge eval --v2 --write-report`, `gapforge eval --v3 --write-report`, `gapforge eval --v4 --write-report`, `make coverage`, `make v2-smoke`, `make v3-smoke`, and `make v4-smoke`.
+- Fake-agent campaign canary passed with valid schema validation.
+- Actual Codex/GPT-5.4 campaign canaries that require real runs were refused because `GAPFORGE_ENABLE_REAL_RUNS` and agent settings were not configured in the environment.
+- Real-run acceptance is therefore **not complete** and must not be claimed until multiple human-reviewed actual Codex/GPT-5.4 campaigns are accepted and `gapforge v4-release-gate` passes.
 
 ## Project Memory Workflow
 
@@ -158,13 +243,23 @@ GapForge separates automated validation from actual research-agent validation:
 
 CI must not require Codex/GPT-5.4. Actual Codex/GPT-5.4 assisted runs are required before a v0.3 release can claim real-run validation, but they are not part of normal automated tests. If Codex/GPT-5.4 is unavailable, actual-run validation has not passed. Never fake a canary pass.
 
+For v0.4, the bar is higher: fake-agent tests and prompt-pack dry runs remain necessary but are not sufficient. v0.4 actual-run acceptance requires multiple real Codex/GPT-5.4 agentic campaigns with validated imports, campaign artifacts, strict-report checks, and human acceptance reviews. A prompt-pack handoff may support acceptance only after real Codex/GPT-5.4 outputs are imported, validated, and reviewed.
+
 See:
 
 - `docs/V0_3_REAL_RUN_ACCEPTANCE.md`
 - `docs/V0_3_CANARY_RUNS.md`
+- `docs/V0_4_ROADMAP.md`
+- `docs/V0_4_ACCEPTANCE_CRITERIA.md`
+- `docs/V0_4_AGENTIC_CAMPAIGNS.md`
+- `docs/V0_4_REAL_RUN_ACCEPTANCE.md`
 - `docs/CODEX_RESEARCH_AGENT.md`
 - `docs/REAL_RUN_REVIEW_CHECKLIST.md`
 - `docs/releases/v0.3.0-real-run-acceptance.md`
+- `docs/releases/v0.4.0-real-run-acceptance.md`
+- `docs/releases/v0.4.0.md`
+
+Latest v0.4 validation status: deterministic checks and the fake-agent campaign canary passed on May 5, 2026. Actual Codex/GPT-5.4 campaign acceptance is not completed because the real-run environment was not configured and no real Codex/GPT-5.4 campaign outputs were validated, attested, imported, and human-accepted.
 
 ## Manuscript Package Workflow
 
@@ -229,6 +324,7 @@ Evals are offline and fixture-driven. They measure behavior such as specificity,
 make eval
 gapforge eval --v2
 gapforge eval --v3
+gapforge eval --v4
 ```
 
 ## Limitations and Safety Notes
@@ -237,6 +333,8 @@ gapforge eval --v3
 - Offline fallback outputs are smoke tests.
 - Semantic retrieval is a ranking aid, not proof of novelty.
 - LLM outputs are untrusted until schema-valid and evidence-located.
+- Fake-agent outputs validate plumbing only and never count as real Codex/GPT-5.4 research.
+- Prompt-pack handoff counts as real only after Codex/GPT-5.4 outputs are validated, attested, and human-reviewed.
 - PDFs, transcripts, and generated dashboards may be unsafe to commit.
 - Human review is required before treating any direction as research-ready.
 
@@ -252,4 +350,5 @@ gapforge export-safe-bundle --project-id <project-id>
 - v0.1: deterministic research OS foundation
 - v0.2: full-text evidence and novelty dossier upgrade
 - v0.3: semantic, optional LLM-assisted, multi-run project-memory upgrade
+- v0.4: actual Codex/GPT-5.4 agentic campaign execution path, campaign recovery, multi-step canaries, v4 evals, and strict human-reviewed real-run acceptance gates
 - Future: stronger real-world evaluations, richer layout/OCR extraction, external reference-manager integration, experiment execution adapters, and collaborative review workflows

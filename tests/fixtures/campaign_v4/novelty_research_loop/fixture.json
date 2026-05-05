@@ -1,0 +1,111 @@
+{
+  "topic": "novelty re-search loop duplicate prior work fixture",
+  "duplicate_ideas": [
+    {
+      "id": "dup-v4-novelty",
+      "title": "Existing low-FPR monitor benchmark",
+      "description": "The proposed idea duplicates prior low-FPR benchmark evaluation.",
+      "expected_verdict": "reject"
+    }
+  ],
+  "known_good_gaps": [
+    {
+      "id": "dup-v4-novelty",
+      "title": "Existing low-FPR monitor benchmark",
+      "description": "The campaign should reject this duplicate after novelty re-search.",
+      "supporting_paper_ids": ["paper-novelty-loop"],
+      "why_existing_work_does_not_solve_it": "Fixture starts unknown, then finds the duplicate.",
+      "minimum_experiment_needed": "No experiment; reject duplicate.",
+      "risk_that_gap_is_fake": "Closest prior work may already solve it.",
+      "confidence": "medium"
+    }
+  ],
+  "papers": [
+    {
+      "id": "paper-novelty-loop",
+      "title": "Prior low-FPR monitor benchmark",
+      "authors": ["Fixture Author"],
+      "abstract": "Synthetic fixture prior work already evaluates the proposed low-FPR benchmark.",
+      "year": 2026,
+      "source": "fixture"
+    }
+  ],
+  "decisions": [
+    {
+      "decision_type": "check_novelty",
+      "reason": "Initial dossier is unknown and missing closest prior work.",
+      "evidence": ["missing_searches", "unknown novelty"],
+      "status": "complete"
+    },
+    {
+      "decision_type": "search_more",
+      "reason": "Run exact title and benchmark prior-work queries.",
+      "evidence": ["novelty dossier missing searches"],
+      "status": "complete"
+    },
+    {
+      "decision_type": "stop",
+      "reason": "Closest prior work rejects the duplicate direction.",
+      "evidence": ["paper-novelty-loop"],
+      "status": "complete"
+    }
+  ],
+  "expected_decisions": ["check_novelty", "search_more", "stop"],
+  "stop_reason": {
+    "actual": "rejected_duplicate_prior_work",
+    "expected": "rejected_duplicate_prior_work",
+    "recommended_direction": false,
+    "evidence": ["paper-novelty-loop"]
+  },
+  "agent_outputs": {
+    "invalid_output_rejected": true,
+    "fake_citation_rejected": true,
+    "unsupported_high_confidence_rejected": true,
+    "unvalidated_imports": 0,
+    "validation_issues": ["strong novelty blocked until missing searches are complete"]
+  },
+  "actual_run_gate": {
+    "expected_pass": false,
+    "expected_blockers": ["fixture is offline and has no actual Codex attestation"],
+    "campaigns": []
+  },
+  "novelty_loop": {
+    "initial_verdict": "unknown",
+    "generated_search_requests": ["\"Existing low-FPR monitor benchmark\"", "low false positive monitor benchmark prior work"],
+    "searches_recorded": true,
+    "retrieval_rebuilt": true,
+    "duplicate_prior_work": true,
+    "duplicate_rejected": true,
+    "strong_novelty_blocked_when_missing_searches": true,
+    "direction_updated": true
+  },
+  "directions": [
+    {
+      "id": "direction-duplicate",
+      "maturity": "rejected",
+      "has_protocol": false,
+      "has_novelty_dossier": true,
+      "has_related_work_matrix": true,
+      "rejected": true
+    }
+  ],
+  "report": {
+    "text": "Campaign stop reason is rejected_duplicate_prior_work. Novelty is not claimed because closest prior work covers the proposal.",
+    "mentions_uncertainty": true,
+    "mentions_stop_reason": true,
+    "labels_fake_vs_real": true,
+    "overclaims": false,
+    "claims_novel_without_dossier": false
+  },
+  "review_queue": {
+    "expected_open": 0,
+    "items": []
+  },
+  "experiment_code_tasks": [],
+  "rollback": {
+    "snapshot_created": true,
+    "rollback_exercised": true,
+    "state_restored": true,
+    "audit_recorded": true
+  }
+}
