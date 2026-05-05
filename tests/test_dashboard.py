@@ -5,18 +5,9 @@ import subprocess
 import sys
 from pathlib import Path
 
+import gapforge.models as gf_models
 from gapforge.config import GapForgeConfig
 from gapforge.dashboard import StaticDashboardBuilder
-from gapforge.models import (
-    EvidenceSpan,
-    Gap,
-    HumanReviewRecord,
-    Paper,
-    RejectedIdea,
-    ResearchDirection,
-    SearchQueryRecord,
-    SourceCoverageReport,
-)
 from gapforge.project_memory import ProjectMemoryManager
 from gapforge.state import ResearchStateManager
 
@@ -65,7 +56,7 @@ def test_static_project_dashboard_shows_directions_and_human_reviews(tmp_path: P
     project_manager.attach_run(program.project.id, state.run_id)
     program = project_manager.load_project(program.project.id)
     program.research_directions = [
-        ResearchDirection(
+        gf_models.ResearchDirection(
             id="direction-1",
             project_id=program.project.id,
             title="Dashboard Direction",
@@ -111,7 +102,7 @@ def _dashboard_run(config: GapForgeConfig):
     manager = ResearchStateManager(config)
     state = manager.create_run("dashboard topic")
     state.papers = [
-        Paper(
+        gf_models.Paper(
             id="paper-1",
             title="<script>alert(1)</script> Low-FPR Paper",
             authors=["Ada"],
@@ -122,7 +113,7 @@ def _dashboard_run(config: GapForgeConfig):
         )
     ]
     state.gaps = [
-        Gap(
+        gf_models.Gap(
             id="gap-1",
             title="Dashboard gap",
             description="Inspect evidence and uncertainty.",
@@ -133,7 +124,7 @@ def _dashboard_run(config: GapForgeConfig):
         )
     ]
     state.evidence_spans = [
-        EvidenceSpan(
+        gf_models.EvidenceSpan(
             id="span-1",
             paper_id="paper-1",
             section_id="section-1",
@@ -142,12 +133,12 @@ def _dashboard_run(config: GapForgeConfig):
             evidence_type="result",
         )
     ]
-    state.source_coverage = SourceCoverageReport(
+    state.source_coverage = gf_models.SourceCoverageReport(
         run_id=state.run_id,
         topic=state.topic.text,
         searched_sources=["fixture-source"],
         query_records=[
-            SearchQueryRecord(
+            gf_models.SearchQueryRecord(
                 id="query-1",
                 query="dashboard topic",
                 source_names=["fixture-source"],
@@ -160,9 +151,9 @@ def _dashboard_run(config: GapForgeConfig):
         coverage_warnings=["offline smoke warning"],
         confidence="low",
     )
-    state.rejected_ideas = [RejectedIdea(id="rej-1", idea="Rejected duplicate idea", reason="Already covered.")]
+    state.rejected_ideas = [gf_models.RejectedIdea(id="rej-1", idea="Rejected duplicate idea", reason="Already covered.")]
     state.human_reviews = [
-        HumanReviewRecord(
+        gf_models.HumanReviewRecord(
             id="review-1",
             object_type="gap",
             object_id="gap-1",
