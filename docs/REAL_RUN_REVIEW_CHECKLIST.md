@@ -1,86 +1,108 @@
 # Real-Run Review Checklist
 
-Use this checklist for Level 5 human-reviewed acceptance of v0.3 canary runs and v0.4 campaign runs. For v0.4, review the entire campaign, not just one task output.
+Use this checklist for human-reviewed acceptance of Codex/GPT-5.4 task-pack, manual-handoff, direct, and campaign runs. For v0.4 and v0.4.1, review the whole campaign or canary workflow, not just one JSON file.
 
-## Run Identity
+## Identity
 
-- [ ] Run ID recorded.
-- [ ] Project ID recorded if used.
-- [ ] Campaign ID recorded if this is a v0.4 campaign.
+- [ ] Run ID recorded if a run exists.
+- [ ] Project ID recorded if a project exists.
+- [ ] Campaign ID recorded.
+- [ ] Task ID recorded.
+- [ ] Canary ID recorded if this is a canary.
 - [ ] Topic recorded.
-- [ ] Agent mode recorded: deterministic, fake-agent, task-pack, manual-handoff, or direct.
-- [ ] Commands or workflow notes saved.
-- [ ] Codex/GPT-5.4 availability recorded.
-- [ ] Reviewer name/date recorded.
+- [ ] Mode recorded: deterministic, fake-agent, task-pack, manual-handoff, or direct.
+- [ ] Agent/model recorded: `codex` / `gpt-5.4`.
+- [ ] Reviewer name and date recorded.
 
-## Source Coverage
+## Actual-Run Eligibility
 
-- [ ] `source_coverage.md` inspected.
-- [ ] `coverage_stopping_assessment.md` inspected.
-- [ ] Search queries and failed sources are visible.
+- [ ] Fake-agent output is not counted as actual Codex/GPT-5.4 acceptance.
+- [ ] Task-pack/manual-handoff output was produced by Codex/GPT-5.4.
+- [ ] Direct output came from the configured direct runner, not fake fallback.
+- [ ] Output was validated before import.
+- [ ] Imported objects are visible in import records.
+- [ ] Task-pack/manual-handoff output has attestation:
+
+```bash
+gapforge attest-agent-run --task-id <task-id> --agent codex --model gpt-5.4 --method task_pack --attester "<name>"
+```
+
+- [ ] Actual-run status was checked:
+
+```bash
+gapforge actual-run-status --campaign-id <campaign-id>
+```
+
+## Source and Evidence
+
+- [ ] Source coverage is visible.
+- [ ] Missing searches and failed sources are visible.
 - [ ] Offline/fallback data is labeled.
-- [ ] Missing source families are not hidden.
-
-## Full Text and Evidence
-
-- [ ] `full_text_coverage.md` inspected.
-- [ ] Local PDF artifacts are allowed for use.
-- [ ] Parsed sections or parser warnings are visible.
-- [ ] Full-text claims cite EvidenceSpan locators.
+- [ ] Full-text or PDF coverage is visible when relevant.
+- [ ] Evidence-backed claims cite paper IDs and EvidenceSpan locators.
 - [ ] Abstract-only claims are not high confidence.
 
-## Claim Ledger
+## Codex Output Safety
 
-- [ ] No supported claim lacks evidence.
-- [ ] No high-confidence claim lacks adequate support.
-- [ ] Counterevidence is represented where found.
-- [ ] Uncertain claims are labeled.
-- [ ] No hidden chain-of-thought appears in persisted artifacts.
+- [ ] JSON output matches the expected task schema.
+- [ ] Every paper ID resolves to a known paper.
+- [ ] Every EvidenceSpan ID/locator resolves to known evidence.
+- [ ] No fake citations, invented DOIs, invented arXiv IDs, or invented papers.
+- [ ] No invented datasets, metrics, baselines, quotes, or results.
+- [ ] No supported/high-confidence claim lacks evidence.
+- [ ] No hidden chain-of-thought is requested or stored.
+- [ ] Public reasoning summaries are concise and safe.
 
-## Novelty Dossiers
+## Novelty and Recommendations
 
-- [ ] Every recommended gap/direction has a novelty dossier.
+- [ ] Every recommended direction has a novelty dossier or explicit refusal reason.
 - [ ] Closest prior work is listed, or novelty is marked unknown.
 - [ ] Missing searches are visible.
-- [ ] No fake citations or fake prior work.
 - [ ] Strong novelty is not claimed under poor coverage.
+- [ ] If coverage is poor, strict mode refuses to recommend a direction.
 
-## LLM-Assisted Outputs
+## Repair and Revalidation
 
-- [ ] Codex/GPT-5.4 outputs are schema-valid before import.
-- [ ] Campaign output import records accepted and rejected fields.
-- [ ] Task-pack/manual-handoff output has human attestation if it is counted as actual Codex/GPT-5.4 work.
-- [ ] Unsupported model claims were rejected, downgraded, or marked uncertain.
-- [ ] Model outputs cite paper IDs and locators where source-backed.
-- [ ] Model transcripts/prompts do not expose secrets.
-- [ ] Fake LLM or fake-agent output is not counted as real canary/campaign validation.
+If validation failed:
 
-## v0.4 Campaign Review
+```bash
+gapforge codex-doctor --task-id <task-id>
+gapforge repair-agent-output --task-id <task-id> --latest-invalid --handoff --print-prompt
+gapforge validate-repair-output --repair-id <repair-id>
+gapforge import-repair-output --repair-id <repair-id>
+```
+
+- [ ] Repair prompt included exact validation errors.
+- [ ] Repair prompt included known paper IDs and evidence locators.
+- [ ] Repair did not ask Codex to invent evidence or citations.
+- [ ] Repaired output was validated before import.
+
+## Campaign Acceptance
 
 - [ ] `campaign_report.md` inspected.
-- [ ] `campaign_acceptance_summary.json` inspected if present.
-- [ ] Campaign steps and decisions show why each action was taken.
 - [ ] Stop reason is explicit and appropriate.
-- [ ] Invalid or missing outputs did not mutate state.
-- [ ] Repair prompts did not ask Codex to invent evidence.
-- [ ] Rollback snapshot exists for imported campaign output.
-- [ ] Dashboard actual-run pages distinguish fake, task-pack, handoff, and real/direct modes.
-- [ ] `gapforge v4-release-gate` output inspected when this campaign is intended for release acceptance.
+- [ ] Human review was recorded:
 
-## Report and Recommendations
+```bash
+gapforge campaign-review --campaign-id <campaign-id> --accept --reviewer "<name>"
+```
 
-- [ ] Strict report inspected.
-- [ ] Report distinguishes evidence-backed claims, hypotheses, and unsupported claims.
-- [ ] Report does not claim exhaustive literature review.
-- [ ] If coverage is poor, report recommends next search/review steps instead of a paper-ready direction.
-- [ ] Rejected ideas are visible.
+- [ ] `gapforge campaign-acceptance --campaign-id <campaign-id>` inspected.
+- [ ] Dashboard actual-run pages distinguish fake, task-pack, handoff, and direct modes.
+- [ ] `gapforge v4-release-gate --explain` inspected if this contributes to release acceptance.
 
-## Human Review Record
+## Blocking Failures
 
-- [ ] Human review was recorded with `approve`, `reject`, `annotate`, or review queue completion.
-- [ ] Any acceptance waiver is explicit and scoped.
-- [ ] Blocking issues are recorded.
-- [ ] Artifact audit was run before sharing.
+Reject the campaign if any are true:
+
+- [ ] Fake citation found.
+- [ ] Unsupported high-confidence claim found.
+- [ ] Obvious prior work missed.
+- [ ] Strong novelty claimed without closest prior work.
+- [ ] Strict report overclaimed readiness or novelty.
+- [ ] Task-pack output imported without attestation.
+- [ ] Human review accepted a fake-agent-only campaign as actual.
+- [ ] Hidden chain-of-thought was requested or stored.
 
 ## Decision
 
@@ -88,24 +110,11 @@ Use this checklist for Level 5 human-reviewed acceptance of v0.3 canary runs and
 - [ ] Pass with limitations.
 - [ ] Fail.
 
-## Current Review Outcome
-
-May 5, 2026 verification outcome:
-
-- Fake-agent canary: passed as CI-safe fake-agent validation.
-- `low_fpr_collusion_codex`: failed/not passed because actual Codex/GPT-5.4 real-run environment was not configured.
-- `manual_pdf_fulltext_codex`: failed/not passed because actual Codex/GPT-5.4 real-run environment was not configured.
-- Real-run acceptance: not passed.
-
-Do not mark Level 5 accepted until an actual Codex/GPT-5.4 canary completes, outputs are inspected against this checklist, and the canary is explicitly accepted.
-
-For v0.4, do not mark actual-run acceptance passed until multiple real campaigns are accepted and `gapforge v4-release-gate` passes. Fake-agent canaries can pass CI but cannot satisfy the real-run gate.
-
-Notes:
-
 ```text
 Reviewer:
 Date:
+Campaign ID:
+Task ID:
 Decision:
 Blocking issues:
 Required fixes:

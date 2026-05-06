@@ -2,6 +2,51 @@
 
 All notable project changes should be recorded here.
 
+## 0.4.1
+
+GapForge v0.4.1 is a focused Codex workflow usability patch. It does not add new research claims or count fake-agent canaries as real acceptance.
+
+### Codex Workflow Usability
+
+- Added `gapforge setup-codex` as a setup wizard that reports direct, task-pack, manual-handoff, and fake mode availability.
+- Added `gapforge codex-doctor` to diagnose task-pack paths, outputs, validation/import status, attestation, review, and actual-run blockers.
+- Added copy-paste handoff v2 files: `README_FIRST.md`, `CODEX_PROMPT.md`, `OUTPUT_CONTRACT.md`, `VALIDATE_AND_IMPORT.sh`, minimal output skeletons, and examples.
+- Added direct command preview and dry-run support for Codex command templates.
+- Added a local direct Codex runner wrapper for `codex exec` when real runs are enabled and the Codex CLI is available.
+- Improved command-template validation, placeholder warnings, redaction, output directory handling, and direct-run failure messages.
+
+### Validation, Import, and Attestation
+
+- Added flexible output contract levels so partial but useful Codex output can validate without weakening evidence/citation rules.
+- Added `validate-import-all`, task output discovery, latest task lookup, and easier validate/import command flows.
+- Added valid and invalid Codex output examples for deep reading, gap mining, novelty, reviewer, manuscript, fake-citation rejection, and unsupported-claim rejection.
+- Improved actual-run attestation status so users can see validation/import, attestation, human review, and remaining blockers.
+- Improved repair UX with latest-invalid lookup, repair handoff prompts, exact validation errors, known valid IDs, and repair validate/import commands.
+- Improved release-gate messaging with blocker categories, next commands, accepted-real-campaign counters, and fake-vs-real explanations.
+
+### Canary Workflows
+
+- Added `single_task_codex_handoff` and `single_task_fake_handoff_regression` to debug the smallest Codex task-pack workflow.
+- Added `manual_pdf_codex_reading_handoff` and a fake companion to validate local-PDF/full-text Codex reading workflow mechanics.
+- Validated three real Codex/GPT-5.4 workflow canaries locally on May 6, 2026: one conservative refusal workflow, one manual-PDF/full-text reading workflow, and one fixture-backed experiment-ready workflow.
+- `gapforge v4-release-gate --write-report --json` passed locally with 3 accepted real campaigns and no blockers.
+
+### Documentation
+
+- Added `docs/CODEX_QUICKSTART.md`.
+- Added v0.4.1 fix plan, acceptance, troubleshooting, release notes, and Codex usage status docs.
+- Rewrote Codex usage documentation around setup, task-pack handoff, direct command dry run, validation/import, attestation, review, repair, and release-gate acceptance.
+
+### Validation
+
+- `make format-check` passes.
+- `make lint` passes.
+- `make typecheck` passes.
+- `make test` passes with 465 tests.
+- `make eval` passes offline.
+- `gapforge eval --v4 --write-report` passes offline.
+- `gapforge v4-release-gate --write-report --json` passes with 3 accepted real Codex/GPT-5.4 workflow canaries.
+
 ## 0.4.0
 
 GapForge v0.4 prepares the system for actual Codex/GPT-5.4 agentic research campaigns. It does not claim exhaustive autonomous literature review, and it does not count fake-agent success as real-run acceptance.

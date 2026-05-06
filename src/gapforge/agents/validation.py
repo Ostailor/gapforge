@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from gapforge.agents.attestation import attestation_can_count, run_attestation_status
 from gapforge.agents.records import append_attestation, utc_now_iso
 from gapforge.agents.schema_validator import validate_task_outputs
 from gapforge.models import AgentActualRunAttestation, AgentTaskSpec, AgentValidationResult, Provenance, ResearchRunState
@@ -28,13 +29,12 @@ def create_actual_run_attestation(
     method = _normalize_method(execution_method)
     latest_record = _latest_run_record(state, task_spec.id)
     latest_validation = _latest_validation(state, task_spec.id)
-    validation_passed = latest_validation is not None and latest_validation.status == "valid"
-    accepted = (
-        method != "fake"
-        and agent_name.strip().lower() == "codex"
-        and model.strip().lower() == "gpt-5.4"
-        and validation_passed
-        and latest_record is not None
+    validation_status = latest_validation.status if latest_validation else "missing"
+    accepted = latest_record is not None and attestation_can_count(
+        agent_name=agent_name,
+        model=model,
+        method=method,
+        validation_import_status=validation_status,
     )
     if not statement:
         statement = (
@@ -70,15 +70,13 @@ def actual_run_status(state: ResearchRunState) -> dict[str, Any]:
         latest_record = _latest_run_record(state, task_spec.id)
         latest_validation = _latest_validation(state, task_spec.id)
         latest_attestation = _latest_attestation(state, task_spec.id)
-        method = latest_attestation.execution_method if latest_attestation else _record_method(latest_record)
-        validation_passed = latest_validation is not None and latest_validation.status == "valid"
-        blockers = _task_blockers(
-            method=method,
-            latest_record=latest_record is not None,
-            validation_passed=validation_passed,
-            latest_attestation=latest_attestation,
+        status = run_attestation_status(
+            task_spec,
+            validations=[latest_validation] if latest_validation else [],
+            run_records=[latest_record] if latest_record else [],
+            attestations=[latest_attestation] if latest_attestation else [],
         )
-        counts = not blockers
+        counts = status.accepted_as_actual_run
         if counts:
             accepted_task_ids.append(task_spec.id)
         task_statuses.append(
@@ -92,9 +90,10 @@ def actual_run_status(state: ResearchRunState) -> dict[str, Any]:
                 "validation_status": latest_validation.status if latest_validation else "missing",
                 "attestation_id": latest_attestation.id if latest_attestation else "",
                 "attested": latest_attestation is not None,
-                "execution_method": method,
+                "execution_method": status.method,
                 "counts_as_actual_run": counts,
-                "blockers": blockers,
+                "blockers": status.blockers,
+                "next_commands": status.next_commands,
             }
         )
     return {
@@ -104,27 +103,6 @@ def actual_run_status(state: ResearchRunState) -> dict[str, Any]:
         "task_statuses": task_statuses,
         "blockers": _aggregate_blockers(task_statuses),
     }
-
-
-def _task_blockers(
-    *,
-    method: str,
-    latest_record: bool,
-    validation_passed: bool,
-    latest_attestation: AgentActualRunAttestation | None,
-) -> list[str]:
-    blockers: list[str] = []
-    if method == "fake":
-        blockers.append("Fake agent output never counts as actual-run acceptance.")
-    if not latest_record:
-        blockers.append("No agent run/import record exists for this task.")
-    if not validation_passed:
-        blockers.append("No passing output import validation exists for this task.")
-    if latest_attestation is None:
-        blockers.append("No human attestation records Codex/GPT-5.4 as the producer.")
-    elif not latest_attestation.accepted_as_actual_run:
-        blockers.append("Latest attestation was not accepted as actual Codex/GPT-5.4 work.")
-    return blockers
 
 
 def _latest_run_record(state: ResearchRunState, task_id: str):

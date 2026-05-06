@@ -1,0 +1,17 @@
+{
+  "reviewer_objections": [
+    {
+      "id": "reviewer-objection-example-baseline",
+      "experiment_id": "experiment-1",
+      "severity": "major",
+      "category": "baseline",
+      "objection": "The protocol needs a baseline tied to known fixture paper paper-1.",
+      "why_reviewer_would_care": "Without a baseline, improvements cannot be interpreted.",
+      "evidence_or_prior_work": ["paper-1"],
+      "suggested_fix": "Add paper-1 as a baseline or justify why it is not comparable.",
+      "blocks_submission": true,
+      "confidence": "medium"
+    }
+  ],
+  "public_reasoning_summary": "The objection names a known paper ID rather than inventing prior work."
+}

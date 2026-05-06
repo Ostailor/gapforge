@@ -33,8 +33,7 @@ def validate_campaign_patch(
     rejected_objects: list[dict[str, Any]] = []
 
     present = {path.name for path in paths_to_check if path.exists()}
-    for missing in sorted(expected - present):
-        issues.append(f"missing required output file: {missing}")
+    issues.extend(_file_contract_issues(task_type, expected, present))
 
     for path in paths_to_check:
         resolved = path.expanduser().resolve()
@@ -54,7 +53,11 @@ def validate_campaign_patch(
             rejected_objects.append(_rejected("file", str(resolved), reason))
             continue
         file_accepted = False
-        for index, item in enumerate(_items(payload[top_key])):
+        items = _items(payload[top_key])
+        if not items:
+            accepted_objects.append({"type": "file", "id": resolved.name, "source_path": str(resolved)})
+            continue
+        for index, item in enumerate(items):
             object_id = _object_id(item, fallback=f"{resolved.name}:{index}")
             object_issues = validate_patch_object(
                 item,
@@ -139,6 +142,27 @@ def resolve_paths(config: GapForgeConfig, campaign_id: str, task_id: str, paths:
         return [path.expanduser().resolve() for path in paths]
     outputs_dir = campaign_task_pack_dir(config, campaign_id, task_id) / "outputs"
     return [outputs_dir / name for name in sorted(expected)]
+
+
+def _file_contract_issues(task_type: str, expected: set[str], present: set[str]) -> list[str]:
+    useful_groups = {
+        "campaign_planning": {"campaign_plan_patch.json", "proposed_steps.json", "risk_register.json"},
+        "literature_scout": {"search_queries_patch.json", "source_coverage_requests.json", "papers_to_prioritize.json"},
+        "deep_reader_batch": {"paper_notes_patch.json", "claims_patch.json", "evidence_spans_patch.json"},
+        "gap_synthesis": {"gaps_patch.json", "gap_evidence_matrices_patch.json"},
+        "novelty_reviewer": {"novelty_dossiers_patch.json", "rejected_ideas_patch.json", "missing_searches_patch.json"},
+        "experiment_architect": {
+            "experiment_protocols_patch.json",
+            "baseline_requests.json",
+            "reproducibility_checklists_patch.json",
+        },
+        "reviewer_panel": {"review_panel_patch.json", "rebuttal_plan_patch.json", "required_fixes.json"},
+        "campaign_stop_decision": {"stop_condition_patch.json", "final_recommendation_patch.json"},
+    }
+    useful = useful_groups.get(task_type, expected)
+    if not (useful & present):
+        return ["missing required output file: one of " + ", ".join(sorted(useful))]
+    return [f"missing optional output file: {name}" for name in sorted(expected - present)]
 
 
 def task_type_from_id(task_id: str) -> str:

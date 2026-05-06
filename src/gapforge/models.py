@@ -474,7 +474,7 @@ class FieldMap:
 class Claim:
     id: str
     text: str
-    type: str
+    type: str = "background"
     status: str = "unsupported"
     confidence: str = "medium"
     supporting_evidence: list[Evidence] = field(default_factory=list)
@@ -1325,6 +1325,8 @@ class AgentValidationResult:
     unsupported_claim_count: int = 0
     invalid_locator_count: int = 0
     invalid_prior_work_count: int = 0
+    warning_messages: list[str] = field(default_factory=list)
+    missing_optional_outputs: list[str] = field(default_factory=list)
     provenance: Provenance = field(default_factory=lambda: Provenance(created_by_skill="agent-validation"))
 
 
@@ -1375,6 +1377,71 @@ class AgentActualRunAttestation:
     created_at: str = ""
     accepted_as_actual_run: bool = False
     provenance: Provenance = field(default_factory=lambda: Provenance(created_by_skill="agent-actual-run-attestation"))
+
+
+@dataclass(slots=True)
+class CodexSetupStatus:
+    real_runs_enabled: bool = False
+    agent_mode: str = "off"
+    agent_name: str = "codex"
+    model: str = "gpt-5.4"
+    codex_command: str = ""
+    command_template_valid: bool = False
+    command_template_missing_placeholders: list[str] = field(default_factory=list)
+    direct_available: bool = False
+    task_pack_available: bool = True
+    manual_handoff_available: bool = True
+    fake_available: bool = True
+    recommended_mode: str = "task-pack"
+    missing_env: list[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
+    next_commands: list[str] = field(default_factory=list)
+    provenance: Provenance = field(default_factory=lambda: Provenance(created_by_skill="codex-setup"))
+
+
+@dataclass(slots=True)
+class CodexTaskDoctorReport:
+    task_id: str
+    run_id: str = ""
+    campaign_id: str = ""
+    task_pack_path: str = ""
+    outputs_dir: str = ""
+    expected_files: list[str] = field(default_factory=list)
+    existing_outputs: list[str] = field(default_factory=list)
+    missing_outputs: list[str] = field(default_factory=list)
+    invalid_outputs: list[str] = field(default_factory=list)
+    validation_status: str = "not_run"
+    import_status: str = "not_imported"
+    attestation_status: str = "missing"
+    human_review_status: str = "missing"
+    actual_run_eligible: bool = False
+    blockers: list[str] = field(default_factory=list)
+    next_commands: list[str] = field(default_factory=list)
+    provenance: Provenance = field(default_factory=lambda: Provenance(created_by_skill="codex-doctor"))
+
+
+@dataclass(slots=True)
+class CommandTemplateValidation:
+    valid: bool = False
+    missing_recommended_placeholders: list[str] = field(default_factory=list)
+    unknown_placeholders: list[str] = field(default_factory=list)
+    shell_risk_warnings: list[str] = field(default_factory=list)
+    rendered_preview: str = ""
+    notes: list[str] = field(default_factory=list)
+
+
+@dataclass(slots=True)
+class AttestationStatus:
+    task_id: str
+    has_attestation: bool = False
+    attestation_id: str = ""
+    agent_name: str = ""
+    model: str = ""
+    method: str = ""
+    accepted_as_actual_run: bool = False
+    validation_import_status: str = "missing"
+    blockers: list[str] = field(default_factory=list)
+    next_commands: list[str] = field(default_factory=list)
 
 
 @dataclass(slots=True)

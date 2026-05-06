@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 from gapforge.campaigns import CampaignManager
+from gapforge.campaigns.acceptance import campaign_task_attestation_status, create_campaign_actual_run_attestation
 from gapforge.campaigns.context_builder import build_task_context
 from gapforge.campaigns.controller import CampaignController
 from gapforge.campaigns.import_workflow import validate_import_all
@@ -1270,8 +1271,7 @@ def test_campaign_task_pack_size_and_handoff_commands(tmp_path: Path, monkeypatc
     assert budget["total_chars"] < budget["threshold_chars"]
     assert budget["warnings"] == []
     assert "schema_examples.json" in task
-    assert "gapforge campaign-validate-output" in handoff
-    assert "gapforge campaign-import-output" in handoff
+    assert "gapforge validate-import-all --task-id" in handoff
     assert "gapforge attest-agent-run" in handoff
 
 
@@ -1448,6 +1448,41 @@ def test_campaign_review_cli_form_acceptance_and_gate(tmp_path: Path) -> None:
     )
     assert gate.returncode == 0, gate.stderr
     assert json.loads(gate.stdout)["passed"] is True
+
+
+def test_campaign_acceptance_uses_stored_attestation_status(tmp_path: Path) -> None:
+    config, campaign_id, _run_id = _campaign_ready_for_acceptance(tmp_path, with_actual_output=False)
+    campaign_manager = CampaignManager(config)
+    campaign_state = campaign_manager.load_campaign_state(campaign_id)
+    task_id = "campaign-task-attested"
+    campaign_state.campaign.task_ids.append(task_id)
+    campaign_state.imports.append(
+        CampaignImportRecord(
+            id="campaign-import-attested",
+            campaign_id=campaign_id,
+            task_id=task_id,
+            status="applied",
+            accepted_objects=[{"type": "file", "id": "novelty_dossiers_patch.json", "source_path": "agent-output"}],
+        )
+    )
+    create_campaign_actual_run_attestation(
+        campaign_state,
+        task_id,
+        agent_name="codex",
+        model="gpt-5.4",
+        execution_method="task_pack",
+        attester="Reviewer",
+    )
+    campaign_manager.save_campaign_state(campaign_state)
+    pending_status = campaign_task_attestation_status(campaign_state, task_id)
+    assert pending_status.accepted_as_actual_run is True
+    assert "Campaign human review acceptance is missing." in pending_status.blockers
+
+    _, summary = CampaignReviewManager(config).review(campaign_id, accept=True, reviewer="Reviewer")
+
+    assert summary.actual_run_attestation_present is True
+    assert summary.accepted_real_agent_outputs == ["campaign-import-attested"]
+    assert summary.release_gate_eligible is True
 
 
 def _campaign_context_fixture(tmp_path: Path, *, long_text: bool = False):

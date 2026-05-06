@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from gapforge.agents.records import append_run_record, append_validation_result, task_pack_dir, utc_now_iso
+from gapforge.agents.records import append_run_record, append_validation_result, discover_task_output_paths, task_pack_dir, utc_now_iso
 from gapforge.agents.schema_validator import expected_output_files, validate_task_outputs
 from gapforge.config import GapForgeConfig
 from gapforge.models import (
@@ -39,18 +39,31 @@ class AgentOutputImporter:
         self.model = model
         self.state_manager = ResearchStateManager(config)
 
-    def validate(self, task_spec: AgentTaskSpec, output_paths: list[Path] | None = None) -> AgentValidationResult:
+    def validate(
+        self,
+        task_spec: AgentTaskSpec,
+        output_paths: list[Path] | None = None,
+        *,
+        strict_files: bool = False,
+    ) -> AgentValidationResult:
         state = self.state_manager.load_run(task_spec.run_id)
-        validation = validate_task_outputs(state, task_spec, output_paths)
+        validation = validate_task_outputs(state, task_spec, output_paths, strict_files=strict_files)
         _write_validation(task_spec, state, validation)
         return validation
 
-    def import_outputs(self, task_spec: AgentTaskSpec, output_paths: list[Path] | None = None) -> AgentValidationResult:
+    def import_outputs(
+        self,
+        task_spec: AgentTaskSpec,
+        output_paths: list[Path] | None = None,
+        *,
+        strict_files: bool = False,
+    ) -> AgentValidationResult:
         state = self.state_manager.load_run(task_spec.run_id)
         before = state.to_dict()
-        validation = validate_task_outputs(state, task_spec, output_paths)
+        validation = validate_task_outputs(state, task_spec, output_paths, strict_files=strict_files)
         append_validation_result(state, validation)
-        if validation.status == "valid":
+        can_import = validation.status in {"valid", "warning"}
+        if can_import:
             _apply_patches(state, task_spec, validation.accepted_output_paths)
         record = AgentRunRecord(
             id=f"agent-import-{utc_now_compact()}-{task_spec.id}",
@@ -59,15 +72,18 @@ class AgentOutputImporter:
             task_spec_id=task_spec.id,
             run_id=task_spec.run_id,
             project_id=task_spec.project_id,
-            status="imported" if validation.status == "valid" else "rejected",
+            status="imported" if can_import else "rejected",
             started_at=utc_now_iso(),
             completed_at=utc_now_iso(),
-            output_paths=validation.accepted_output_paths if validation.status == "valid" else validation.rejected_output_paths,
+            output_paths=validation.accepted_output_paths if can_import else validation.rejected_output_paths,
             validation_result_id=validation.id,
-            error="; ".join(validation.issues) if validation.status != "valid" else "",
+            error="; ".join(validation.issues) if not can_import else "",
             usage_summary={
-                "validated_import": validation.status == "valid",
-                "mutated_state": validation.status == "valid",
+                "validated_import": can_import,
+                "partial_import": validation.status == "warning",
+                "missing_optional_outputs": validation.missing_optional_outputs,
+                "warning_messages": validation.warning_messages,
+                "mutated_state": can_import,
                 "state_changed": before != state.to_dict(),
             },
             provenance=Provenance(
@@ -86,6 +102,15 @@ class AgentOutputImporter:
 def output_paths_for_task(state: ResearchRunState, task_spec: AgentTaskSpec) -> list[Path]:
     output_dir = task_pack_dir(state, task_spec) / "outputs"
     return [output_dir / filename for filename in expected_output_files(task_spec)]
+
+
+def discover_output_paths_for_task(
+    state: ResearchRunState,
+    task_spec: AgentTaskSpec,
+    *,
+    user_paths: list[Path] | None = None,
+) -> list[Path]:
+    return discover_task_output_paths(state, task_spec, user_paths=user_paths)
 
 
 def _apply_patches(state: ResearchRunState, task_spec: AgentTaskSpec, accepted_paths: list[str]) -> None:

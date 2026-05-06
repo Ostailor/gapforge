@@ -76,13 +76,36 @@ If direct Codex execution is unavailable, use task-pack handoff:
 
 ```bash
 gapforge campaign-task --campaign-id <campaign-id> --type novelty_reviewer
-gapforge task-handoff --task-id <task-id>
-gapforge campaign-validate-output --campaign-id <campaign-id> --task-id <task-id>
-gapforge campaign-import-output --campaign-id <campaign-id> --task-id <task-id>
+gapforge codex-handoff --task-id <task-id> --print-prompt
+gapforge validate-import-all --task-id <task-id>
 gapforge attest-agent-run --task-id <task-id> --agent codex --model gpt-5.4 --method task_pack --attester "<name>"
 ```
 
 Never mark the handoff as accepted until the outputs were actually produced by Codex/GPT-5.4 and the validated import plus human review artifacts exist.
+
+## v0.4.1 Codex Usability Patch Gate
+
+v0.4.1 is a patch release for Codex workflow usability and actual-run reliability. It should not add new research features or weaken acceptance gates.
+
+Before tagging v0.4.1:
+
+```bash
+make ci
+gapforge eval --v4 --write-report
+GAPFORGE_DISABLE_NETWORK=1 gapforge campaign-canary-run --profile fake_agent_campaign_regression
+gapforge setup-codex
+gapforge campaign-canary-plan --profile agentic_low_fpr_collusion
+gapforge campaign-canary-run --profile agentic_low_fpr_collusion --real
+gapforge campaign-task --campaign-id <campaign-id> --type novelty_reviewer
+gapforge codex-handoff --task-id <task-id>
+gapforge codex-doctor --task-id <task-id>
+gapforge validate-import-all --task-id <task-id>
+gapforge attest-agent-run --task-id <task-id> --agent codex --model gpt-5.4 --method task_pack --attester "<name>"
+gapforge campaign-review --campaign-id <campaign-id> --accept --reviewer "<name>"
+gapforge campaign-acceptance --campaign-id <campaign-id>
+```
+
+Release notes must state whether the v0.4.1 task-pack Codex usability canary completed. That is not the same as full v0.4 actual-run acceptance, which still requires the v4 release gate and multiple accepted real campaigns.
 
 ## Tagging
 

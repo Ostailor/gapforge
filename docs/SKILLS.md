@@ -25,8 +25,8 @@ The Python skills transform `ResearchRunState`. The Codex skill packages tell a 
 | Direction Maturation | - | - | seed to manuscript-ready gates | campaign stop/readiness input | `gapforge create-direction`, `gapforge mature-direction` |
 | Manuscript Export | - | - | paper package and BibTeX | campaign package/export step | `gapforge export-paper-package` |
 | Campaign Controller | - | - | - | auditable campaign loop | `gapforge campaign-run`, `gapforge campaign-next` |
-| Codex Campaign Task | - | - | task packs | campaign task packs/handoff | `gapforge campaign-task`, `gapforge task-handoff` |
-| Agent Output Validator | - | - | validated import | repair/rollback campaign import | `gapforge campaign-validate-output`, `gapforge campaign-import-output` |
+| Codex Campaign Task | - | - | task packs | campaign task packs/handoff | `gapforge campaign-task`, `gapforge codex-handoff` |
+| Agent Output Validator | - | - | validated import | repair/rollback campaign import | `gapforge validate-import-all`, `gapforge codex-doctor` |
 | Novelty Research Loop | - | - | novelty dossiers | iterative novelty re-search | `gapforge novelty-loop` |
 | Experiment Code Task | - | - | protocols | Codex code task handoff | `gapforge generate-code-tasks`, `gapforge codex-code-task` |
 | Campaign Reviewer Panel | - | - | review panels | campaign rebuttal/fix loop | `gapforge reviewer-loop` |
@@ -66,8 +66,8 @@ The v0.4 skill packages guide campaign-level work. They do not authorize unvalid
 
 ```bash
 gapforge campaign-task --campaign-id <campaign-id> --type <task-type>
-gapforge campaign-validate-output --campaign-id <campaign-id> --task-id <task-id>
-gapforge campaign-import-output --campaign-id <campaign-id> --task-id <task-id>
+gapforge codex-handoff --task-id <task-id> --print-prompt
+gapforge validate-import-all --task-id <task-id>
 gapforge campaign-review --campaign-id <campaign-id>
 gapforge v4-release-gate --project-id <project-id>
 ```

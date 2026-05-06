@@ -36,7 +36,7 @@ def find_campaign_task(config: GapForgeConfig, task_id: str) -> tuple[CampaignSt
 
 def write_task_handoff(config: GapForgeConfig, task_id: str, *, model: str = "gpt-5.4") -> Path:
     state, pack_dir = find_campaign_task(config, task_id)
-    return write_campaign_handoff(state, task_id, pack_dir, model=model)
+    return write_campaign_handoff(state, task_id, pack_dir, model=model, expected_outputs=expected_campaign_files(task_id))
 
 
 def validate_import_all(config: GapForgeConfig, campaign_id: str) -> dict[str, Any]:

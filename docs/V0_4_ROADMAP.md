@@ -133,9 +133,8 @@ gapforge campaign-canary-run --profile fake_agent_campaign_regression
 
 # Manual Codex/GPT-5.4 handoff
 gapforge campaign-task --campaign-id <id> --type novelty_reviewer
-gapforge task-handoff --task-id <task-id>
-gapforge campaign-validate-output --campaign-id <id> --task-id <task-id>
-gapforge campaign-import-output --campaign-id <id> --task-id <task-id>
+gapforge codex-handoff --task-id <task-id> --print-prompt
+gapforge validate-import-all --task-id <task-id>
 gapforge attest-agent-run --task-id <task-id> --agent codex --model gpt-5.4 --method task_pack --attester "<name>"
 
 # Direct runner when configured

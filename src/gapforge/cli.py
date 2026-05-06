@@ -16,18 +16,32 @@ from gapforge.agents import (
     actual_run_status,
     agent_capabilities,
     agent_status,
-    create_actual_run_attestation,
     create_agent_task_spec,
 )
+from gapforge.agents.attestation import run_attestation_status
+from gapforge.agents.codex_doctor import doctor_codex_task, doctor_to_json, render_codex_doctor_report
+from gapforge.agents.codex_handoff_v2 import open_handoff_readme
+from gapforge.agents.codex_setup import build_codex_setup_status, render_codex_setup_status, write_codex_setup_report
+from gapforge.agents.command_runner import render_codex_command_template, run_command_template, validate_codex_command_template
 from gapforge.agents.handoff import write_handoff
+from gapforge.agents.output_importer import AgentOutputImporter, discover_output_paths_for_task
 from gapforge.agents.repair import (
     create_agent_repair_task,
     find_agent_repair_record,
+    import_repair_output,
     render_agent_repair_status,
     repair_from_campaign_validation,
+    validate_repair_output,
 )
 from gapforge.agents.setup import render_real_run_setup
+from gapforge.agents.validation import create_actual_run_attestation as create_run_actual_run_attestation
 from gapforge.campaigns import CampaignManager, CampaignState
+from gapforge.campaigns.acceptance import (
+    campaign_actual_run_status,
+    campaign_attestation_statuses,
+    campaign_task_attestation_status,
+    create_campaign_actual_run_attestation,
+)
 from gapforge.campaigns.context_builder import inspect_task_context, write_task_context
 from gapforge.campaigns.controller import CampaignController
 from gapforge.campaigns.import_workflow import expected_campaign_files, find_campaign_task, validate_import_all, write_task_handoff
@@ -68,7 +82,7 @@ from gapforge.llm.config import LLMRuntimeConfig
 from gapforge.llm.fake import FakeLLMClient
 from gapforge.llm.providers import ProviderLLMClient, ProviderUnavailableError, llm_status
 from gapforge.llm.transcripts import LLMTranscriptLogger
-from gapforge.models import IndexManifest, ResearchProgramState, ResearchRunState, RetrievalResult, to_plain
+from gapforge.models import AgentTaskSpec, IndexManifest, ResearchProgramState, ResearchRunState, RetrievalResult, to_plain
 from gapforge.orchestration.budgets import budget_from_name
 from gapforge.orchestrator import Orchestrator
 from gapforge.project_memory import ProjectMemoryManager
@@ -454,19 +468,50 @@ def build_parser() -> argparse.ArgumentParser:
 
     subparsers.add_parser("setup-real-run", help="Print setup guidance for real Codex/GPT-5.4 runs.")
 
+    setup_codex_parser = subparsers.add_parser("setup-codex", help="Diagnose Codex/GPT-5.4 setup and recommend an execution mode.")
+    setup_codex_parser.add_argument("--json", action="store_true")
+    setup_codex_parser.add_argument("--write-report", action="store_true")
+
     agent_capabilities_parser = subparsers.add_parser("agent-capabilities", help="Show v0.4 AgentClient runtime capabilities.")
     agent_capabilities_parser.add_argument("--json", action="store_true")
 
     task_handoff_parser = subparsers.add_parser("task-handoff", help="Write HANDOFF.md for a run or campaign agent task.")
     task_handoff_parser.add_argument("--task-id", required=True)
 
+    codex_handoff_parser = subparsers.add_parser("codex-handoff", help="Write a copy-paste-ready Codex/GPT-5.4 handoff bundle.")
+    codex_handoff_target = codex_handoff_parser.add_mutually_exclusive_group(required=True)
+    codex_handoff_target.add_argument("--task-id")
+    codex_handoff_target.add_argument("--campaign-id")
+    codex_handoff_parser.add_argument("--latest-task", action="store_true", help="Use the latest task in the campaign.")
+    codex_handoff_parser.add_argument("--print-prompt", action="store_true")
+    codex_handoff_parser.add_argument("--open", action="store_true")
+
+    codex_doctor_parser = subparsers.add_parser(
+        "codex-doctor",
+        help="Diagnose Codex task-pack outputs, validation, import, and acceptance state.",
+    )
+    codex_doctor_target = codex_doctor_parser.add_mutually_exclusive_group(required=True)
+    codex_doctor_target.add_argument("--task-id")
+    codex_doctor_target.add_argument("--campaign-id")
+    codex_doctor_parser.add_argument("--json", action="store_true")
+
     repair_agent_output_parser = subparsers.add_parser("repair-agent-output", help="Explain how to fix invalid agent output.")
     repair_agent_output_parser.add_argument("--task-id", required=True)
     repair_agent_output_parser.add_argument("--path", action="append", default=[])
+    repair_agent_output_parser.add_argument("--latest-invalid", action="store_true")
     repair_agent_output_parser.add_argument("--handoff", action="store_true")
+    repair_agent_output_parser.add_argument("--print-prompt", action="store_true")
 
     repair_status_parser = subparsers.add_parser("repair-status", help="Print an agent repair record.")
     repair_status_parser.add_argument("--repair-id", required=True)
+
+    validate_repair_parser = subparsers.add_parser("validate-repair-output", help="Validate outputs for a generated repair task.")
+    validate_repair_parser.add_argument("--repair-id", required=True)
+
+    import_repair_parser = subparsers.add_parser(
+        "import-repair-output", help="Import outputs for a generated repair task after validation."
+    )
+    import_repair_parser.add_argument("--repair-id", required=True)
 
     agent_task_parser = subparsers.add_parser("agent-task", help="Create a Codex/GPT-5.4 task pack for a research skill.")
     agent_task_parser.add_argument("--run-id", required=True)
@@ -485,11 +530,17 @@ def build_parser() -> argparse.ArgumentParser:
 
     agent_import_parser = subparsers.add_parser("agent-import-output", help="Validate and import agent output metadata.")
     agent_import_parser.add_argument("--task-id", required=True)
-    agent_import_parser.add_argument("--path", action="append", required=True)
+    agent_import_parser.add_argument("--path", action="append", default=[])
+    agent_import_parser.add_argument("--all", action="store_true")
+    agent_import_parser.add_argument("--allow-partial", action="store_true", default=True)
+    agent_import_parser.add_argument("--strict-files", action="store_true")
 
     agent_validate_parser = subparsers.add_parser("agent-validate-output", help="Validate agent output without importing it.")
     agent_validate_parser.add_argument("--task-id", required=True)
     agent_validate_parser.add_argument("--path", action="append")
+    agent_validate_parser.add_argument("--all", action="store_true")
+    agent_validate_parser.add_argument("--allow-partial", action="store_true", default=True)
+    agent_validate_parser.add_argument("--strict-files", action="store_true")
 
     attest_agent_run_parser = subparsers.add_parser(
         "attest-agent-run", help="Attest that a validated agent output came from Codex/GPT-5.4."
@@ -505,10 +556,20 @@ def build_parser() -> argparse.ArgumentParser:
     attest_agent_run_parser.add_argument("--attester", required=True)
     attest_agent_run_parser.add_argument("--statement", default="")
 
+    attestation_status_parser = subparsers.add_parser(
+        "attestation-status", help="Show validation/import/attestation/human-review blockers for actual-run tasks."
+    )
+    attestation_status_scope = attestation_status_parser.add_mutually_exclusive_group(required=True)
+    attestation_status_scope.add_argument("--task-id")
+    attestation_status_scope.add_argument("--campaign-id")
+
     actual_run_status_parser = subparsers.add_parser(
         "actual-run-status", help="Report whether a run has auditable actual-agent acceptance."
     )
-    actual_run_status_parser.add_argument("--run-id", required=True)
+    actual_run_status_scope = actual_run_status_parser.add_mutually_exclusive_group(required=True)
+    actual_run_status_scope.add_argument("--run-id")
+    actual_run_status_scope.add_argument("--project-id")
+    actual_run_status_scope.add_argument("--campaign-id")
 
     codex_task_parser = subparsers.add_parser("codex-task", help="Create a Codex-compatible research task pack.")
     codex_task_parser.add_argument("--run-id", required=True)
@@ -523,20 +584,42 @@ def build_parser() -> argparse.ArgumentParser:
 
     validate_agent_output_parser = subparsers.add_parser("validate-agent-output", help="Validate outputs in a Codex task outputs/ dir.")
     validate_agent_output_parser.add_argument("--task-id", required=True)
+    validate_agent_output_parser.add_argument("--all", action="store_true")
+    validate_agent_output_parser.add_argument("--allow-partial", action="store_true", default=True)
+    validate_agent_output_parser.add_argument("--strict-files", action="store_true")
 
     import_agent_output_parser = subparsers.add_parser(
         "import-agent-output", help="Import outputs in a Codex task outputs/ dir after validation."
     )
     import_agent_output_parser.add_argument("--task-id", required=True)
+    import_agent_output_parser.add_argument("--all", action="store_true")
+    import_agent_output_parser.add_argument("--allow-partial", action="store_true", default=True)
+    import_agent_output_parser.add_argument("--strict-files", action="store_true")
 
     list_agent_tasks_parser = subparsers.add_parser("list-agent-tasks", help="List Codex/GPT-5.4 agent task packs for a run.")
     list_agent_tasks_parser.add_argument("--run-id", required=True)
+
+    list_task_outputs_parser = subparsers.add_parser("list-task-outputs", help="List discovered output files for a Codex task.")
+    list_task_outputs_parser.add_argument("--task-id", required=True)
+
+    latest_codex_task_parser = subparsers.add_parser("latest-codex-task", help="Print the latest Codex task ID for a campaign.")
+    latest_codex_task_parser.add_argument("--campaign-id", required=True)
 
     codex_run_parser = subparsers.add_parser("codex-run", help="Run a Codex task through direct command or handoff mode.")
     codex_run_parser.add_argument("--task-id", required=True)
     codex_run_parser.add_argument("--direct", action="store_true", help="Prefer the configured direct Codex command path.")
     codex_run_parser.add_argument("--handoff", action="store_true", help="Write explicit handoff instructions instead of running directly.")
     codex_run_parser.add_argument("--require-direct", action="store_true", help="Fail if the direct Codex command path is unavailable.")
+    codex_run_parser.add_argument("--dry-run", action="store_true", help="Render the direct command preview without executing it.")
+    codex_run_parser.add_argument(
+        "--allow-unknown-placeholders",
+        action="store_true",
+        help="Render unknown command placeholders literally instead of failing validation.",
+    )
+
+    codex_command_preview_parser = subparsers.add_parser("codex-command-preview", help="Preview the direct Codex command for a task.")
+    codex_command_preview_parser.add_argument("--task-id", required=True)
+    codex_command_preview_parser.add_argument("--allow-unknown-placeholders", action="store_true")
 
     codex_run_status_parser = subparsers.add_parser("codex-run-status", help="Print a Codex runner AgentRunRecord.")
     codex_run_status_parser.add_argument("--agent-run-id", required=True)
@@ -554,6 +637,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     campaign_canary_status_parser = subparsers.add_parser("campaign-canary-status", help="Print a campaign canary record.")
     campaign_canary_status_parser.add_argument("--canary-id", required=True)
+
+    campaign_canary_complete_parser = subparsers.add_parser(
+        "campaign-canary-complete", help="Check whether a single-task handoff canary has completed acceptance."
+    )
+    campaign_canary_complete_parser.add_argument("--canary-id", required=True)
 
     canary_plan_parser = subparsers.add_parser("canary-plan", help="Print a repeatable canary run plan.")
     canary_plan_parser.add_argument("--profile", required=True)
@@ -695,8 +783,10 @@ def build_parser() -> argparse.ArgumentParser:
     campaign_imports_parser = subparsers.add_parser("campaign-imports", help="List campaign import records.")
     campaign_imports_parser.add_argument("--campaign-id", required=True)
 
-    validate_import_all_parser = subparsers.add_parser("validate-import-all", help="Validate and import all pending campaign task outputs.")
-    validate_import_all_parser.add_argument("--campaign-id", required=True)
+    validate_import_all_parser = subparsers.add_parser("validate-import-all", help="Validate and import all discovered task outputs.")
+    validate_import_all_target = validate_import_all_parser.add_mutually_exclusive_group(required=True)
+    validate_import_all_target.add_argument("--task-id")
+    validate_import_all_target.add_argument("--campaign-id")
 
     campaign_propose_searches_parser = subparsers.add_parser(
         "campaign-propose-searches", help="Create validated campaign literature search requests."
@@ -765,6 +855,8 @@ def build_parser() -> argparse.ArgumentParser:
     v4_release_gate_parser.add_argument("--project-id", default="")
     v4_release_gate_parser.add_argument("--write-report", action="store_true")
     v4_release_gate_parser.add_argument("--json", action="store_true")
+    v4_release_gate_parser.add_argument("--explain", action="store_true")
+    v4_release_gate_parser.add_argument("--next-commands", action="store_true")
 
     rollback_import_parser = subparsers.add_parser("rollback-import", help="Rollback a campaign import by import ID.")
     rollback_import_parser.add_argument("--import-id", required=True)
@@ -1510,6 +1602,18 @@ def _dispatch(
     if args.command == "setup-real-run":
         print(render_real_run_setup(AgentRuntimeConfig.from_env()), end="")
         return 0
+    if args.command == "setup-codex":
+        codex_setup_status = build_codex_setup_status(AgentRuntimeConfig.from_env())
+        if args.write_report:
+            json_path, markdown_path = write_codex_setup_report(config, codex_setup_status)
+            if not args.json:
+                print(f"Wrote Codex setup report to {markdown_path}")
+                print(f"Wrote Codex setup JSON to {json_path}")
+        if args.json:
+            print(json.dumps(to_plain(codex_setup_status), indent=2))
+        elif not args.write_report:
+            print(render_codex_setup_status(codex_setup_status), end="")
+        return 0
     if args.command == "agent-capabilities":
         capabilities = agent_capabilities(AgentRuntimeConfig.from_env())
         if args.json:
@@ -1535,6 +1639,48 @@ def _dispatch(
             print(f"Wrote agent handoff to {handoff_path}")
             print(f"Outputs directory: {pack_dir / 'outputs'}")
         return 0
+    if args.command == "codex-handoff":
+        handoff_task_id = args.task_id or ""
+        if args.campaign_id:
+            campaign_state = CampaignManager(config).load_campaign_state(args.campaign_id)
+            if not args.latest_task:
+                raise ValueError("--campaign-id requires --latest-task for codex-handoff.")
+            if not campaign_state.campaign.task_ids:
+                raise ValueError(f"Campaign {args.campaign_id} has no agent tasks.")
+            handoff_task_id = campaign_state.campaign.task_ids[-1]
+        try:
+            task_spec = _load_agent_task(config, handoff_task_id)
+        except FileNotFoundError:
+            campaign_state, pack_dir = find_campaign_task(config, handoff_task_id)
+            handoff_path = write_task_handoff(config, handoff_task_id, model=campaign_state.campaign.model or "gpt-5.4")
+            prompt_path = pack_dir / "CODEX_PROMPT.md"
+            readme_path = pack_dir / "README_FIRST.md"
+        else:
+            state = ResearchStateManager(config).load_run(task_spec.run_id)
+            pack_dir = CodexAgentClient(config, AgentRuntimeConfig(mode="task-pack")).create_task_pack(state, task_spec)
+            handoff_path = write_handoff(task_spec, pack_dir, model=AgentRuntimeConfig.from_env().codex_model)
+            prompt_path = pack_dir / "CODEX_PROMPT.md"
+            readme_path = pack_dir / "README_FIRST.md"
+        if args.print_prompt:
+            print(prompt_path.read_text(encoding="utf-8"), end="")
+        else:
+            print(f"Wrote Codex handoff bundle to {pack_dir}")
+            print(f"Read first: {readme_path}")
+            print(f"Prompt: {prompt_path}")
+            print(f"Handoff: {handoff_path}")
+            print(f"Outputs directory: {pack_dir / 'outputs'}")
+            print(f"Validate/import: {pack_dir / 'VALIDATE_AND_IMPORT.sh'}")
+        if args.open:
+            open_handoff_readme(readme_path)
+        return 0
+    if args.command == "codex-doctor":
+        codex_doctor_report = doctor_codex_task(config, task_id=args.task_id or "", campaign_id=args.campaign_id or "")
+        if args.json:
+            print(doctor_to_json(codex_doctor_report), end="")
+        else:
+            print(render_codex_doctor_report(codex_doctor_report), end="")
+        codex_doctor_reports = codex_doctor_report if isinstance(codex_doctor_report, list) else [codex_doctor_report]
+        return 0 if all(item.actual_run_eligible or item.blockers for item in codex_doctor_reports) else 1
     if args.command == "repair-agent-output":
         paths = [Path(path) for path in args.path]
         try:
@@ -1552,9 +1698,18 @@ def _dispatch(
                 end="",
             )
             return 0 if campaign_import_record.status in {"valid", "applied"} else 1
-        repair_record, validation, repair_pack_dir = create_agent_repair_task(config, task_spec, paths, handoff=args.handoff)
+        repair_record, validation, repair_pack_dir = create_agent_repair_task(
+            config,
+            task_spec,
+            paths,
+            handoff=args.handoff,
+            latest_invalid=args.latest_invalid,
+        )
         if repair_record is None:
             print(json.dumps({"task_id": args.task_id, "validation": to_plain(validation), "repair_created": False}, indent=2))
+            return 0
+        if args.print_prompt and repair_pack_dir is not None:
+            print((repair_pack_dir / "REPAIR.md").read_text(encoding="utf-8"), end="")
             return 0
         print(
             json.dumps(
@@ -1574,6 +1729,14 @@ def _dispatch(
         repair_record, run_dir = find_agent_repair_record(config, args.repair_id)
         print(render_agent_repair_status(repair_record, run_dir), end="")
         return 0
+    if args.command == "validate-repair-output":
+        repair_record, validation = validate_repair_output(config, args.repair_id)
+        print(json.dumps({"repair_record": to_plain(repair_record), "validation": to_plain(validation)}, indent=2))
+        return 0 if validation.status in {"valid", "warning"} else 1
+    if args.command == "import-repair-output":
+        repair_record, validation = import_repair_output(config, args.repair_id)
+        print(json.dumps({"repair_record": to_plain(repair_record), "validation": to_plain(validation)}, indent=2))
+        return 0 if validation.status in {"valid", "warning"} else 1
     if args.command in {"agent-task", "codex-task"}:
         manager = ResearchStateManager(config)
         state = manager.load_run(args.run_id)
@@ -1596,22 +1759,45 @@ def _dispatch(
         print(json.dumps(to_plain(record), indent=2))
         return 0
     if args.command == "agent-import-output":
-        task_spec = _load_agent_task(config, args.task_id)
-        agent_client = CodexAgentClient(config, AgentRuntimeConfig(mode="task-pack"))
-        validation = agent_client.import_outputs(task_spec, [Path(path) for path in args.path])
+        state, task_spec = _load_agent_task_with_state(config, args.task_id)
+        output_paths = _agent_output_paths_for_cli(state, task_spec, [Path(path) for path in args.path], discover_all=args.all)
+        validation = AgentOutputImporter(config).import_outputs(
+            task_spec,
+            output_paths,
+            strict_files=args.strict_files,
+        )
         print(json.dumps(to_plain(validation), indent=2))
-        return 0 if validation.status == "valid" else 1
+        return 0 if validation.status in {"valid", "warning"} else 1
     if args.command == "agent-validate-output":
-        task_spec = _load_agent_task(config, args.task_id)
-        agent_client = CodexAgentClient(config, AgentRuntimeConfig(mode="task-pack"))
-        validation = agent_client.validate_outputs(task_spec, [Path(path) for path in args.path] if args.path else [])
+        state, task_spec = _load_agent_task_with_state(config, args.task_id)
+        output_paths = _agent_output_paths_for_cli(state, task_spec, [Path(path) for path in args.path or []], discover_all=args.all)
+        validation = AgentOutputImporter(config).validate(
+            task_spec,
+            output_paths,
+            strict_files=args.strict_files,
+        )
         print(json.dumps(to_plain(validation), indent=2))
-        return 0 if validation.status == "valid" else 1
+        return 0 if validation.status in {"valid", "warning"} else 1
     if args.command == "attest-agent-run":
-        task_spec = _load_agent_task(config, args.task_id)
+        try:
+            state, task_spec = _load_agent_task_with_state(config, args.task_id)
+        except FileNotFoundError:
+            campaign_state, _ = find_campaign_task(config, args.task_id)
+            attestation = create_campaign_actual_run_attestation(
+                campaign_state,
+                args.task_id,
+                agent_name=args.agent,
+                model=args.model,
+                execution_method=args.method,
+                attester=args.attester,
+                statement=args.statement,
+            )
+            CampaignManager(config).save_campaign_state(campaign_state)
+            status = campaign_task_attestation_status(campaign_state, args.task_id)
+            print(json.dumps({"attestation": to_plain(attestation), "status": to_plain(status)}, indent=2))
+            return _attestation_command_exit(status)
         manager = ResearchStateManager(config)
-        state = manager.load_run(task_spec.run_id)
-        attestation = create_actual_run_attestation(
+        attestation = create_run_actual_run_attestation(
             state,
             task_spec,
             agent_name=args.agent,
@@ -1621,22 +1807,50 @@ def _dispatch(
             statement=args.statement,
         )
         manager.save_run(state)
-        print(json.dumps(to_plain(attestation), indent=2))
-        return 0 if attestation.accepted_as_actual_run else 1
+        status = _run_task_attestation_status(state, task_spec)
+        print(json.dumps({"attestation": to_plain(attestation), "status": to_plain(status)}, indent=2))
+        return _attestation_command_exit(status)
+    if args.command == "attestation-status":
+        if args.task_id:
+            payload = _attestation_status_for_task(config, args.task_id)
+        else:
+            campaign_state = CampaignManager(config).load_campaign_state(args.campaign_id)
+            payload = {
+                "campaign_id": args.campaign_id,
+                "statuses": [to_plain(status) for status in campaign_attestation_statuses(campaign_state)],
+            }
+        print(json.dumps(payload, indent=2))
+        return 0
     if args.command == "actual-run-status":
-        state = ResearchStateManager(config).load_run(args.run_id)
-        print(json.dumps(actual_run_status(state), indent=2))
+        if args.run_id:
+            state = ResearchStateManager(config).load_run(args.run_id)
+            print(json.dumps(actual_run_status(state), indent=2))
+        elif args.campaign_id:
+            campaign_state = CampaignManager(config).load_campaign_state(args.campaign_id)
+            print(json.dumps(campaign_actual_run_status(campaign_state), indent=2))
+        else:
+            print(json.dumps(_project_actual_run_status(config, args.project_id), indent=2))
         return 0
     if args.command == "validate-agent-output":
-        task_spec = _load_agent_task(config, args.task_id)
-        validation = CodexAgentClient(config, AgentRuntimeConfig(mode="task-pack")).validate_outputs(task_spec, [])
+        state, task_spec = _load_agent_task_with_state(config, args.task_id)
+        output_paths = _agent_output_paths_for_cli(state, task_spec, [], discover_all=args.all)
+        validation = AgentOutputImporter(config).validate(task_spec, output_paths, strict_files=args.strict_files)
         print(json.dumps(to_plain(validation), indent=2))
-        return 0 if validation.status == "valid" else 1
+        return 0 if validation.status in {"valid", "warning"} else 1
     if args.command == "import-agent-output":
-        task_spec = _load_agent_task(config, args.task_id)
-        validation = CodexAgentClient(config, AgentRuntimeConfig(mode="task-pack")).import_outputs(task_spec, [])
+        state, task_spec = _load_agent_task_with_state(config, args.task_id)
+        output_paths = _agent_output_paths_for_cli(state, task_spec, [], discover_all=args.all)
+        validation = AgentOutputImporter(config).import_outputs(task_spec, output_paths, strict_files=args.strict_files)
         print(json.dumps(to_plain(validation), indent=2))
-        return 0 if validation.status == "valid" else 1
+        return 0 if validation.status in {"valid", "warning"} else 1
+    if args.command == "list-task-outputs":
+        payload = _list_task_outputs_payload(config, args.task_id)
+        print(json.dumps(payload, indent=2))
+        return 0
+    if args.command == "latest-codex-task":
+        task_id = _latest_campaign_task_id(config, args.campaign_id)
+        print(task_id)
+        return 0
     if args.command == "list-agent-tasks":
         state = ResearchStateManager(config).load_run(args.run_id)
         if not state.agent_task_specs:
@@ -1644,19 +1858,51 @@ def _dispatch(
             return 0
         for task_spec in state.agent_task_specs:
             validations = [item for item in state.agent_validation_results if item.task_spec_id == task_spec.id]
-            status = validations[-1].status if validations else "not_validated"
-            print(f"{task_spec.id}\t{task_spec.skill_name}\t{task_spec.task_type}\t{status}")
+            validation_status_text = validations[-1].status if validations else "not_validated"
+            print(f"{task_spec.id}\t{task_spec.skill_name}\t{task_spec.task_type}\t{validation_status_text}")
         return 0
     if args.command == "codex-run":
-        task_spec = _load_agent_task(config, args.task_id)
-        codex_run_record = CodexRunner(config, AgentRuntimeConfig.from_env()).run(
-            task_spec,
-            prefer_direct=args.direct,
-            handoff=args.handoff,
-            require_direct=args.require_direct,
-        )
-        print(json.dumps(to_plain(codex_run_record), indent=2))
-        return 0 if codex_run_record.status in {"complete", "planned"} else 1
+        try:
+            task_spec = _load_agent_task(config, args.task_id)
+        except FileNotFoundError:
+            payload = _codex_run_campaign_task(
+                config,
+                args.task_id,
+                prefer_direct=args.direct,
+                handoff=args.handoff,
+                require_direct=args.require_direct,
+                dry_run=args.dry_run,
+                allow_unknown_placeholders=args.allow_unknown_placeholders,
+            )
+            print(json.dumps(payload, indent=2))
+            return 0 if payload.get("status") in {"complete", "planned", "preview"} else 1
+        else:
+            codex_run_record = CodexRunner(config, AgentRuntimeConfig.from_env()).run(
+                task_spec,
+                prefer_direct=args.direct,
+                handoff=args.handoff,
+                require_direct=args.require_direct,
+                dry_run=args.dry_run,
+                allow_unknown_placeholders=args.allow_unknown_placeholders,
+            )
+            print(json.dumps(to_plain(codex_run_record), indent=2))
+            return 0 if codex_run_record.status in {"complete", "planned"} else 1
+    if args.command == "codex-command-preview":
+        try:
+            task_spec = _load_agent_task(config, args.task_id)
+        except FileNotFoundError:
+            preview = _campaign_codex_command_preview(
+                config,
+                args.task_id,
+                allow_unknown_placeholders=args.allow_unknown_placeholders,
+            )
+        else:
+            preview = CodexRunner(config, AgentRuntimeConfig.from_env()).preview(
+                task_spec,
+                allow_unknown_placeholders=args.allow_unknown_placeholders,
+            )
+        print(json.dumps(preview, indent=2))
+        return 0 if preview["command_template_valid"] else 1
     if args.command == "codex-run-status":
         codex_run_record = CodexRunner(config, AgentRuntimeConfig.from_env()).status(args.agent_run_id)
         print(json.dumps(to_plain(codex_run_record), indent=2))
@@ -1688,6 +1934,10 @@ def _dispatch(
         campaign_canary_record = CampaignCanaryRunManager(config).load_record(args.canary_id)
         print(json.dumps(to_plain(campaign_canary_record), indent=2))
         return 0
+    if args.command == "campaign-canary-complete":
+        campaign_canary_record = CampaignCanaryRunManager(config).complete(args.canary_id)
+        print(json.dumps(to_plain(campaign_canary_record), indent=2))
+        return 0 if campaign_canary_record.accepted else 1
     if args.command == "canary-plan":
         print(CanaryRunManager(config).plan(args.profile), end="")
         return 0
@@ -1875,9 +2125,12 @@ def _dispatch(
         print(json.dumps(to_plain(records), indent=2))
         return 0
     if args.command == "validate-import-all":
-        payload = validate_import_all(config, args.campaign_id)
+        if args.task_id:
+            payload = _validate_import_all_task(config, args.task_id)
+        else:
+            payload = validate_import_all(config, args.campaign_id)
         print(json.dumps(payload, indent=2))
-        return 0 if payload["status"] in {"applied", "partial", "no_tasks_processed"} else 1
+        return 0 if payload["status"] in {"valid", "warning", "imported", "applied", "partial", "no_tasks_processed"} else 1
     if args.command == "campaign-propose-searches":
         batch = CampaignSearchAgent(config).propose_searches(args.campaign_id)
         payload = CampaignSearchAgent(config).status(args.campaign_id)
@@ -1907,8 +2160,8 @@ def _dispatch(
         payload = CampaignReviewerLoop(config).run(args.campaign_id, args.direction_id)
         print(json.dumps(payload, indent=2))
         reviewer_validation = payload.get("validation", {})
-        status = reviewer_validation.get("status", "invalid") if isinstance(reviewer_validation, dict) else "invalid"
-        return 0 if status in {"valid", "warning"} else 1
+        reviewer_status_text = reviewer_validation.get("status", "invalid") if isinstance(reviewer_validation, dict) else "invalid"
+        return 0 if reviewer_status_text in {"valid", "warning"} else 1
     if args.command == "rebuttal-tasks":
         payload = CampaignReviewerLoop(config).rebuttal_tasks(args.campaign_id, args.direction_id)
         print(json.dumps(payload, indent=2))
@@ -1959,6 +2212,9 @@ def _dispatch(
         gate_result = V04ReleaseGateEnforcer(config).evaluate(project_id=args.project_id)
         if args.write_report:
             V04ReleaseGateEnforcer(config).write_outputs(gate_result)
+        if args.next_commands:
+            print("\n".join(gate_result.next_commands))
+            return 0 if gate_result.passed else 1
         if args.json:
             print(json.dumps(gate_result.to_dict(), indent=2))
         else:
@@ -2301,6 +2557,11 @@ def _run_agent_skill_command(
 
 
 def _load_agent_task(config: GapForgeConfig, task_id: str):
+    _, task_spec = _load_agent_task_with_state(config, task_id)
+    return task_spec
+
+
+def _load_agent_task_with_state(config: GapForgeConfig, task_id: str) -> tuple[ResearchRunState, AgentTaskSpec]:
     manager = ResearchStateManager(config)
     for run_dir in sorted(config.runs_dir.glob("*"), reverse=True):
         if not run_dir.is_dir():
@@ -2311,8 +2572,328 @@ def _load_agent_task(config: GapForgeConfig, task_id: str):
             continue
         for task_spec in state.agent_task_specs:
             if task_spec.id == task_id:
-                return task_spec
+                return state, task_spec
     raise FileNotFoundError(f"No agent task found for {task_id}")
+
+
+def _attestation_status_for_task(config: GapForgeConfig, task_id: str) -> dict[str, object]:
+    try:
+        state, task_spec = _load_agent_task_with_state(config, task_id)
+    except FileNotFoundError:
+        campaign_state, _ = find_campaign_task(config, task_id)
+        return to_plain(campaign_task_attestation_status(campaign_state, task_id))
+    return to_plain(_run_task_attestation_status(state, task_spec))
+
+
+def _run_task_attestation_status(state: ResearchRunState, task_spec: AgentTaskSpec):
+    validations = [item for item in state.agent_validation_results if item.task_spec_id == task_spec.id]
+    records = [item for item in state.agent_run_records if item.task_spec_id == task_spec.id]
+    attestations = [item for item in state.agent_actual_run_attestations if item.task_spec_id == task_spec.id]
+    return run_attestation_status(
+        task_spec,
+        validations=validations[-1:] if validations else [],
+        run_records=records[-1:] if records else [],
+        attestations=attestations[-1:] if attestations else [],
+    )
+
+
+def _attestation_command_exit(status) -> int:  # noqa: ANN001
+    hard_blockers = (
+        "Fake agent",
+        "fake agent",
+        "Attestation agent must be codex",
+        "Attestation model is missing",
+        "Attestation model must be gpt-5.4",
+    )
+    if any(any(token in blocker for token in hard_blockers) for blocker in status.blockers):
+        return 1
+    return 0 if status.has_attestation else 1
+
+
+def _agent_output_paths_for_cli(
+    state: ResearchRunState,
+    task_spec: AgentTaskSpec,
+    user_paths: list[Path],
+    *,
+    discover_all: bool,
+) -> list[Path]:
+    if discover_all or user_paths:
+        return discover_output_paths_for_task(state, task_spec, user_paths=user_paths)
+    return []
+
+
+def _list_task_outputs_payload(config: GapForgeConfig, task_id: str) -> dict[str, object]:
+    try:
+        state, task_spec = _load_agent_task_with_state(config, task_id)
+    except FileNotFoundError:
+        campaign_state, pack_dir = find_campaign_task(config, task_id)
+        paths = _discover_campaign_output_paths(pack_dir, expected_campaign_files(task_id))
+        return {
+            "task_id": task_id,
+            "kind": "campaign",
+            "campaign_id": campaign_state.campaign.id,
+            "task_pack": str(pack_dir),
+            "outputs_dir": str(pack_dir / "outputs"),
+            "repair_outputs_dir": str(pack_dir / "repair_outputs"),
+            "expected_files": expected_campaign_files(task_id),
+            "existing_outputs": [str(path) for path in paths],
+        }
+    paths = discover_output_paths_for_task(state, task_spec)
+    pack_dir = Path(state.run_dir) / "agent_tasks" / task_id
+    from gapforge.agents.schema_validator import expected_output_files
+
+    return {
+        "task_id": task_id,
+        "kind": "run",
+        "run_id": state.run_id,
+        "task_pack": str(pack_dir),
+        "outputs_dir": str(pack_dir / "outputs"),
+        "repair_outputs_dir": str(pack_dir / "repair_outputs"),
+        "expected_files": expected_output_files(task_spec),
+        "existing_outputs": [str(path) for path in paths],
+    }
+
+
+def _validate_import_all_task(config: GapForgeConfig, task_id: str) -> dict[str, object]:
+    try:
+        state, task_spec = _load_agent_task_with_state(config, task_id)
+    except FileNotFoundError:
+        campaign_state, pack_dir = find_campaign_task(config, task_id)
+        paths = _discover_campaign_output_paths(pack_dir, expected_campaign_files(task_id))
+        if not paths:
+            return _no_outputs_payload(
+                task_id,
+                expected_campaign_files(task_id),
+                handoff_command=f"gapforge codex-handoff --task-id {task_id}",
+            )
+        record = CampaignOutputImporter(config).import_outputs(campaign_state.campaign.id, task_id, paths)
+        return {
+            "task_id": task_id,
+            "kind": "campaign",
+            "campaign_id": campaign_state.campaign.id,
+            "status": record.status,
+            "validation": to_plain(record),
+            "outputs": [str(path) for path in paths],
+            "next_commands": _post_import_commands(task_id, campaign_id=campaign_state.campaign.id, invalid=record.status == "rejected"),
+        }
+    paths = discover_output_paths_for_task(state, task_spec)
+    if not paths:
+        from gapforge.agents.schema_validator import expected_output_files
+
+        return _no_outputs_payload(
+            task_id,
+            expected_output_files(task_spec),
+            handoff_command=f"gapforge codex-handoff --task-id {task_id}",
+        )
+    validation = AgentOutputImporter(config).import_outputs(task_spec, paths)
+    return {
+        "task_id": task_id,
+        "kind": "run",
+        "run_id": state.run_id,
+        "status": "imported" if validation.status in {"valid", "warning"} else "invalid",
+        "validation": to_plain(validation),
+        "outputs": [str(path) for path in paths],
+        "next_commands": _post_import_commands(task_id, run_id=state.run_id, invalid=validation.status == "invalid"),
+    }
+
+
+def _campaign_codex_command_preview(
+    config: GapForgeConfig,
+    task_id: str,
+    *,
+    allow_unknown_placeholders: bool = False,
+) -> dict[str, object]:
+    campaign_state, pack_dir = find_campaign_task(config, task_id)
+    write_task_handoff(config, task_id, model=campaign_state.campaign.model or AgentRuntimeConfig.from_env().codex_model)
+    runtime = AgentRuntimeConfig.from_env()
+    outputs_dir = pack_dir / "outputs"
+    outputs_dir.mkdir(parents=True, exist_ok=True)
+    validation = validate_codex_command_template(
+        runtime.command_template,
+        task_pack=pack_dir,
+        outputs_dir=outputs_dir,
+        task_id=task_id,
+        run_id="",
+        model=runtime.codex_model,
+        allow_unknown_placeholders=allow_unknown_placeholders,
+    )
+    rendered_command = ""
+    if runtime.command_template:
+        try:
+            rendered_command = render_codex_command_template(
+                runtime.command_template,
+                task_pack=pack_dir,
+                outputs_dir=outputs_dir,
+                task_id=task_id,
+                run_id="",
+                model=runtime.codex_model,
+                allow_unknown_placeholders=allow_unknown_placeholders,
+            )
+        except ValueError as exc:
+            rendered_command = str(exc)
+    return {
+        "task_id": task_id,
+        "kind": "campaign",
+        "campaign_id": campaign_state.campaign.id,
+        "cwd": str(runtime.codex_workdir or pack_dir),
+        "task_pack": str(pack_dir),
+        "outputs_dir": str(outputs_dir),
+        "expected_output_files": expected_campaign_files(task_id),
+        "command_template_valid": validation.valid,
+        "template_validation": to_plain(validation),
+        "rendered_command": rendered_command,
+        "will_execute": False,
+    }
+
+
+def _codex_run_campaign_task(
+    config: GapForgeConfig,
+    task_id: str,
+    *,
+    prefer_direct: bool,
+    handoff: bool,
+    require_direct: bool,
+    dry_run: bool,
+    allow_unknown_placeholders: bool = False,
+) -> dict[str, object]:
+    runtime = AgentRuntimeConfig.from_env()
+    campaign_state, pack_dir = find_campaign_task(config, task_id)
+    write_task_handoff(config, task_id, model=campaign_state.campaign.model or runtime.codex_model)
+    outputs_dir = pack_dir / "outputs"
+    if handoff:
+        return {
+            "task_id": task_id,
+            "kind": "campaign",
+            "campaign_id": campaign_state.campaign.id,
+            "status": "planned",
+            "mode": "handoff",
+            "task_pack": str(pack_dir),
+            "outputs_dir": str(outputs_dir),
+            "next_commands": [f"gapforge codex-handoff --task-id {task_id} --print-prompt"],
+        }
+    if dry_run:
+        preview = _campaign_codex_command_preview(config, task_id, allow_unknown_placeholders=allow_unknown_placeholders)
+        preview["status"] = "preview"
+        return preview
+    if require_direct and not runtime.direct_execution_available:
+        return {
+            "task_id": task_id,
+            "kind": "campaign",
+            "campaign_id": campaign_state.campaign.id,
+            "status": "failed",
+            "error": "Direct Codex execution requires GAPFORGE_ENABLE_REAL_RUNS=1 and a valid GAPFORGE_CODEX_COMMAND.",
+            "next_commands": [f"gapforge codex-handoff --task-id {task_id} --print-prompt"],
+        }
+    if not runtime.direct_execution_available and not prefer_direct:
+        return {
+            "task_id": task_id,
+            "kind": "campaign",
+            "campaign_id": campaign_state.campaign.id,
+            "status": "planned",
+            "mode": "handoff",
+            "reason": "No direct Codex command is configured.",
+            "next_commands": [f"gapforge codex-handoff --task-id {task_id} --print-prompt"],
+        }
+    if not runtime.direct_execution_available:
+        return {
+            "task_id": task_id,
+            "kind": "campaign",
+            "campaign_id": campaign_state.campaign.id,
+            "status": "failed",
+            "error": "Direct Codex execution is unavailable.",
+            "next_commands": ["gapforge setup-codex", f"gapforge codex-handoff --task-id {task_id} --print-prompt"],
+        }
+    command_result = run_command_template(
+        runtime.command_template,
+        task_pack=pack_dir,
+        outputs_dir=outputs_dir,
+        task_id=task_id,
+        run_id="",
+        model=runtime.codex_model,
+        cwd=runtime.codex_workdir or pack_dir,
+        timeout_seconds=runtime.codex_timeout_seconds,
+        allow_unknown_placeholders=allow_unknown_placeholders,
+    )
+    outputs = _discover_campaign_output_paths(pack_dir, expected_campaign_files(task_id))
+    if not command_result.succeeded:
+        return {
+            "task_id": task_id,
+            "kind": "campaign",
+            "campaign_id": campaign_state.campaign.id,
+            "status": "failed",
+            "command": to_plain(command_result),
+            "outputs": [str(path) for path in outputs],
+            "next_commands": [f"gapforge codex-doctor --task-id {task_id}", f"gapforge codex-handoff --task-id {task_id} --print-prompt"],
+        }
+    if not outputs:
+        return {
+            "task_id": task_id,
+            "kind": "campaign",
+            "campaign_id": campaign_state.campaign.id,
+            "status": "failed",
+            "error": f"Codex command completed but did not write expected outputs to {outputs_dir}.",
+            "expected_output_files": expected_campaign_files(task_id),
+            "command": to_plain(command_result),
+            "next_commands": [f"gapforge codex-doctor --task-id {task_id}", f"gapforge codex-handoff --task-id {task_id} --print-prompt"],
+        }
+    import_payload = _validate_import_all_task(config, task_id)
+    return {
+        "task_id": task_id,
+        "kind": "campaign",
+        "campaign_id": campaign_state.campaign.id,
+        "status": "complete" if import_payload.get("status") in {"applied", "partial"} else "failed",
+        "command": to_plain(command_result),
+        "import": import_payload,
+        "next_commands": import_payload.get("next_commands", []),
+    }
+
+
+def _discover_campaign_output_paths(pack_dir: Path, expected_files: list[str]) -> list[Path]:
+    expected = set(expected_files)
+    paths: list[Path] = []
+    for directory in (pack_dir / "outputs", pack_dir / "repair_outputs"):
+        if not directory.exists():
+            continue
+        files = [path for path in sorted(directory.iterdir()) if path.is_file()]
+        paths.extend([path for path in files if path.name in expected] or files)
+    return list(dict.fromkeys(path.resolve() for path in paths if path.exists()))
+
+
+def _latest_campaign_task_id(config: GapForgeConfig, campaign_id: str) -> str:
+    state = CampaignManager(config).load_campaign_state(campaign_id)
+    if not state.campaign.task_ids:
+        raise ValueError(f"Campaign {campaign_id} has no Codex tasks.")
+    return state.campaign.task_ids[-1]
+
+
+def _no_outputs_payload(task_id: str, expected_files: list[str], *, handoff_command: str) -> dict[str, object]:
+    return {
+        "task_id": task_id,
+        "status": "no_outputs",
+        "expected_files": expected_files,
+        "next_commands": [
+            handoff_command,
+            f"gapforge list-task-outputs --task-id {task_id}",
+            f"gapforge validate-import-all --task-id {task_id}",
+        ],
+    }
+
+
+def _post_import_commands(
+    task_id: str,
+    *,
+    run_id: str = "",
+    campaign_id: str = "",
+    invalid: bool,
+) -> list[str]:
+    if invalid:
+        return [f"gapforge repair-agent-output --task-id {task_id} --path <bad-output.json> --handoff"]
+    commands = [f'gapforge attest-agent-run --task-id {task_id} --agent codex --model gpt-5.4 --method task_pack --attester "<name>"']
+    if campaign_id:
+        commands.append(f'gapforge campaign-review --campaign-id {campaign_id} --accept --reviewer "<name>"')
+    if run_id:
+        commands.append(f"gapforge actual-run-status --run-id {run_id}")
+    return commands
 
 
 def _source_names(raw: str) -> list[str] | None:
@@ -2390,6 +2971,52 @@ def _campaign_status_payload(campaign_state: CampaignState) -> dict[str, object]
         "milestone_count": len(campaign_state.milestones),
         "stop_condition_count": len(campaign_state.stop_conditions),
     }
+
+
+def _project_actual_run_status(config: GapForgeConfig, project_id: str) -> dict[str, object]:
+    program = ProjectMemoryManager(config).load_project(project_id)
+    campaign_manager = CampaignManager(config)
+    campaign_statuses: list[dict[str, object]] = []
+    for campaign in program.campaigns:
+        try:
+            campaign_state = campaign_manager.load_campaign_state(campaign.id)
+        except FileNotFoundError:
+            continue
+        campaign_statuses.append(campaign_actual_run_status(campaign_state))
+    accepted = [status for status in campaign_statuses if bool(status.get("accepted_real_campaign")) or bool(status.get("passed"))]
+    blockers: list[str] = []
+    commands: list[str] = []
+    for status in campaign_statuses:
+        status_blockers = status.get("blockers", [])
+        if isinstance(status_blockers, list):
+            blockers.extend(str(blocker) for blocker in status_blockers)
+        status_commands = status.get("next_commands", [])
+        if isinstance(status_commands, list):
+            commands.extend(str(command) for command in status_commands)
+    blockers = sorted(set(blockers))
+    next_commands = _dedupe_commands(commands)
+    if not campaign_statuses:
+        blockers.append("No campaigns are recorded for this project.")
+        next_commands.append("gapforge campaign-canary-run --profile single_task_codex_handoff --real")
+    return {
+        "project_id": project_id,
+        "passed": bool(accepted),
+        "accepted_real_campaign_count": len(accepted),
+        "campaign_statuses": campaign_statuses,
+        "blockers": blockers,
+        "next_commands": next_commands,
+        "fake_vs_real_explanation": ("Fake-agent output validates plumbing only and never counts as actual Codex/GPT-5.4 acceptance."),
+    }
+
+
+def _dedupe_commands(commands: list[str]) -> list[str]:
+    seen: set[str] = set()
+    result: list[str] = []
+    for command in commands:
+        if command and command not in seen:
+            result.append(command)
+            seen.add(command)
+    return result
 
 
 def _format_campaign_steps(campaign_state: CampaignState) -> str:

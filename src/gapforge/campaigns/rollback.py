@@ -65,6 +65,7 @@ def _find_import_record(config: GapForgeConfig, import_id: str) -> tuple[Campaig
 
 def _campaign_state_from_dict(raw: dict[str, Any]) -> CampaignState:
     from gapforge.models import (
+        AgentActualRunAttestation,
         CampaignBudget,
         CampaignDecision,
         CampaignImportRecord,
@@ -82,6 +83,7 @@ def _campaign_state_from_dict(raw: dict[str, Any]) -> CampaignState:
         budget=from_dict(CampaignBudget, raw["budget"]) if raw.get("budget") else None,
         stop_conditions=[from_dict(CampaignStopCondition, item) for item in raw.get("stop_conditions", [])],
         imports=[from_dict(CampaignImportRecord, item) for item in raw.get("imports", [])],
+        agent_actual_run_attestations=[from_dict(AgentActualRunAttestation, item) for item in raw.get("agent_actual_run_attestations", [])],
     )
 
 

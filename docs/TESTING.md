@@ -98,6 +98,29 @@ v0.4 tests should cover campaign and agent behavior without live Codex:
 
 Fake-agent tests validate plumbing only. They must never assert that actual Codex/GPT-5.4 research behavior passed.
 
+## v0.4.1 Codex Workflow Checks
+
+Codex/GPT-5.4 real-run workflows are not required in CI, but the CLI must make them diagnosable offline. Tests should cover:
+
+- `gapforge setup-codex`
+- `gapforge codex-doctor --task-id <task-id>`
+- `gapforge codex-handoff --task-id <task-id> --print-prompt`
+- `gapforge validate-import-all --task-id <task-id>`
+- `gapforge repair-agent-output --task-id <task-id> --latest-invalid --handoff`
+- `gapforge validate-repair-output --repair-id <repair-id>`
+- `gapforge import-repair-output --repair-id <repair-id>`
+- `gapforge v4-release-gate --explain`
+- `gapforge v4-release-gate --next-commands`
+
+These tests should use fake or fixture outputs. They must verify that:
+
+- fake-agent output never counts as actual acceptance
+- task-pack output needs validation, import, attestation, and human review
+- direct mode fails gracefully when `GAPFORGE_CODEX_COMMAND` is missing or malformed
+- validation errors include repair commands
+- hidden chain-of-thought is not requested or stored
+- fake citations and unsupported claims remain rejected
+
 ## Verification Before Completion
 
 Before claiming a v0.3 change is complete, run at least:
@@ -120,3 +143,5 @@ gapforge eval --v4 --write-report
 ```
 
 Real Codex/GPT-5.4 campaign validation is a release-gate activity, not a CI requirement.
+
+Manual real-run validation should follow `docs/CODEX_QUICKSTART.md` and `docs/REAL_RUN_REVIEW_CHECKLIST.md`.

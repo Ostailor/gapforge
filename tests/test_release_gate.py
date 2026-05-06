@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import os
+import subprocess
+import sys
 from pathlib import Path
 
 import gapforge.models as gf_models
@@ -52,6 +55,8 @@ def test_v04_release_gate_no_campaigns_fails(tmp_path: Path) -> None:
 
     assert result.passed is False
     assert "No campaigns were found" in " ".join(result.blockers)
+    assert "missing_real_campaigns" in result.blocker_categories
+    assert any("single_task_codex_handoff" in command for command in result.next_commands)
 
 
 def test_v04_release_gate_fake_campaigns_only_fail_actual_run_gate(tmp_path: Path) -> None:
@@ -63,6 +68,8 @@ def test_v04_release_gate_fake_campaigns_only_fail_actual_run_gate(tmp_path: Pat
 
     assert result.passed is False
     assert any("Fake-agent campaigns cannot count" in blocker for campaign in result.campaigns for blocker in campaign.blockers)
+    assert any("fake-agent" in command.lower() or "single_task_codex_handoff" in command for command in result.next_commands)
+    assert "Fake-agent canaries validate" in result.fake_vs_real_explanation
 
 
 def test_v04_release_gate_below_real_campaign_threshold_fails(tmp_path: Path) -> None:
@@ -90,6 +97,38 @@ def test_v04_release_gate_accepted_campaign_with_blockers_fails(tmp_path: Path) 
     assert any("Retrieval index is missing" in blocker for blocker in result.blockers)
 
 
+def test_v04_release_gate_missing_attestation_shows_command(tmp_path: Path) -> None:
+    config = GapForgeConfig.from_cwd(tmp_path)
+    _write_ci_and_fake_canary(config)
+    campaign_id = _accepted_campaign(config, "missing attestation", ready=True, full_text=True)
+    campaign_manager = CampaignManager(config)
+    campaign = campaign_manager.load_campaign_state(campaign_id)
+    for record in campaign.imports:
+        record.accepted_objects = [item for item in record.accepted_objects if item.get("type") != "agent_actual_run_attestation"]
+    campaign_manager.save_campaign_state(campaign)
+
+    result = V04ReleaseGateEnforcer(config).evaluate()
+
+    assert result.passed is False
+    assert any("Actual-run attestation is missing" in blocker for blocker in result.blockers)
+    assert "missing_attestation" in result.blocker_categories
+    assert any("attest-agent-run" in command for command in result.next_commands)
+
+
+def test_v04_release_gate_missing_manual_pdf_campaign_shows_command(tmp_path: Path) -> None:
+    config = GapForgeConfig.from_cwd(tmp_path)
+    _write_ci_and_fake_canary(config)
+    _accepted_campaign(config, "experiment ready", ready=True)
+    _accepted_campaign(config, "coverage refusal", refusal=True, stop_reason="not_ready_poor_coverage")
+    _accepted_campaign(config, "another ready", ready=True)
+
+    result = V04ReleaseGateEnforcer(config).evaluate()
+
+    assert result.passed is False
+    assert "manual PDF/full-text campaign" in result.missing_campaign_types
+    assert any("manual_pdf_codex_reading_handoff" in command for command in result.next_commands)
+
+
 def test_v04_release_gate_required_campaign_mix_passes_and_report_renders(tmp_path: Path) -> None:
     config = GapForgeConfig.from_cwd(tmp_path)
     _write_ci_and_fake_canary(config)
@@ -109,6 +148,49 @@ def test_v04_release_gate_required_campaign_mix_passes_and_report_renders(tmp_pa
     assert json_path.exists()
     assert md_path.exists()
     assert "Passed: true" in md_path.read_text(encoding="utf-8")
+
+
+def test_v04_release_gate_explain_and_next_commands_cli(tmp_path: Path) -> None:
+    result = subprocess.run(
+        [sys.executable, "-m", "gapforge.cli", "v4-release-gate", "--explain", "--next-commands"],
+        cwd=tmp_path,
+        env={**os.environ, "PYTHONPATH": str(Path(__file__).resolve().parents[1] / "src")},
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 1
+    assert "single_task_codex_handoff" in result.stdout
+
+
+def test_actual_run_status_campaign_and_project_cli(tmp_path: Path) -> None:
+    config = GapForgeConfig.from_cwd(tmp_path)
+    campaign_id = _accepted_campaign(config, "actual status", ready=True, full_text=True)
+    project_id = CampaignManager(config).load_campaign_state(campaign_id).campaign.project_id
+    env = {**os.environ, "PYTHONPATH": str(Path(__file__).resolve().parents[1] / "src")}
+
+    campaign_status = subprocess.run(
+        [sys.executable, "-m", "gapforge.cli", "actual-run-status", "--campaign-id", campaign_id],
+        cwd=tmp_path,
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    project_status = subprocess.run(
+        [sys.executable, "-m", "gapforge.cli", "actual-run-status", "--project-id", project_id],
+        cwd=tmp_path,
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert campaign_status.returncode == 0, campaign_status.stderr
+    assert project_status.returncode == 0, project_status.stderr
+    assert "accepted_real_output_count" in campaign_status.stdout
+    assert "accepted_real_campaign_count" in project_status.stdout
 
 
 def _write_ci_and_fake_canary(config: GapForgeConfig) -> None:

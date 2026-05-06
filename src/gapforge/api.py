@@ -12,6 +12,7 @@ from pathlib import Path
 
 from gapforge.agents.validation import create_actual_run_attestation as create_run_actual_run_attestation
 from gapforge.campaigns import CampaignManager, CampaignState
+from gapforge.campaigns.acceptance import create_campaign_actual_run_attestation
 from gapforge.campaigns.controller import CampaignController
 from gapforge.campaigns.decision_policy import CampaignAction
 from gapforge.campaigns.import_workflow import find_campaign_task
@@ -36,7 +37,6 @@ from gapforge.models import (
     PaperArtifact,
     PaperPackage,
     PaperSection,
-    Provenance,
     ResearchDirection,
     ResearchProgramState,
     ResearchRunState,
@@ -46,7 +46,7 @@ from gapforge.project_memory import ProjectMemoryManager
 from gapforge.release_gate import V04ReleaseGateEnforcer, V04ReleaseGateResult
 from gapforge.reporting import write_final_report
 from gapforge.retrieval import build_project_index, build_run_index
-from gapforge.state import ResearchStateManager, utc_now_compact, utc_now_iso
+from gapforge.state import ResearchStateManager
 
 
 @dataclass(slots=True)
@@ -599,42 +599,16 @@ def _attest_campaign_task(
     attester: str,
     statement: str,
 ) -> AgentActualRunAttestation:
-    method = execution_method.replace("-", "_")
-    latest_import = next((record for record in reversed(state.imports) if record.task_id == task_id), None)
-    validation_passed = latest_import is not None and latest_import.status in {"valid", "applied", "partial"}
-    accepted = method != "fake" and agent_name.strip().lower() == "codex" and model.strip().lower() == "gpt-5.4" and validation_passed
-    if not statement:
-        statement = (
-            f"{attester} attests that {agent_name}/{model} produced campaign task {task_id} "
-            f"using {method}; validated import present={validation_passed}."
-        )
-    attestation = AgentActualRunAttestation(
-        id=f"agent-attestation-{utc_now_compact()}-{task_id}",
-        task_spec_id=task_id,
-        agent_run_record_id=latest_import.id if latest_import else "",
-        attester=attester,
+    attestation = create_campaign_actual_run_attestation(
+        state,
+        task_id,
         agent_name=agent_name,
         model=model,
-        execution_method=method,
+        execution_method=execution_method,
+        attester=attester,
         statement=statement,
-        created_at=utc_now_iso(),
-        accepted_as_actual_run=accepted,
-        provenance=Provenance(
-            created_by_skill="api-agent-attestation",
-            source_ids=[task_id],
-            timestamp=utc_now_iso(),
-            reasoning_summary="Recorded API attestation for a validation-gated campaign agent task.",
-        ),
     )
-    if latest_import is not None and accepted:
-        latest_import.accepted_objects.append(
-            {
-                "type": "agent_actual_run_attestation",
-                "id": attestation.id,
-                "accepted": True,
-            }
-        )
-        CampaignManager(config).save_campaign_state(state)
+    CampaignManager(config).save_campaign_state(state)
     return attestation
 
 

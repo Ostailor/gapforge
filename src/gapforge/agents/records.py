@@ -21,6 +21,41 @@ def output_dir_for_task(state: ResearchRunState, task_spec: AgentTaskSpec) -> Pa
     return task_pack_dir(state, task_spec) / "outputs"
 
 
+def repair_output_dir_for_task(state: ResearchRunState, task_spec: AgentTaskSpec) -> Path:
+    return task_pack_dir(state, task_spec) / "repair_outputs"
+
+
+def discover_task_output_paths(
+    state: ResearchRunState,
+    task_spec: AgentTaskSpec,
+    *,
+    user_paths: list[Path] | None = None,
+) -> list[Path]:
+    """Discover concrete output files for a run-level task pack."""
+
+    from gapforge.agents.schema_validator import expected_output_files
+
+    discovered: list[Path] = []
+    expected_names = set(expected_output_files(task_spec))
+    for raw_path in user_paths or []:
+        path = raw_path.expanduser().resolve()
+        if path.is_dir():
+            discovered.extend(_files_in_dir(path, expected_names))
+        elif path.exists():
+            discovered.append(path)
+    for directory in (output_dir_for_task(state, task_spec), repair_output_dir_for_task(state, task_spec)):
+        discovered.extend(_files_in_dir(directory, expected_names))
+    return list(dict.fromkeys(path.resolve() for path in discovered if path.exists() and path.is_file()))
+
+
+def _files_in_dir(directory: Path, expected_names: set[str]) -> list[Path]:
+    if not directory.exists():
+        return []
+    files = [path for path in sorted(directory.iterdir()) if path.is_file()]
+    matching = [path for path in files if path.name in expected_names]
+    return matching or files
+
+
 def write_task_pack(state: ResearchRunState, task_spec: AgentTaskSpec) -> Path:
     from gapforge.agents.task_packs import write_codex_task_pack
 

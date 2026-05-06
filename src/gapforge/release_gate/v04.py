@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from gapforge.campaigns import CampaignManager, CampaignState
+from gapforge.campaigns.acceptance import accepted_real_agent_output_ids
 from gapforge.config import GapForgeConfig
 from gapforge.models import CampaignCanaryRecord, ResearchProgramState, ResearchRunState, from_dict
 from gapforge.project_memory import ProjectMemoryManager
@@ -32,6 +33,10 @@ class V04CampaignGateAssessment:
     refusal: bool = False
     full_text_or_manual_pdf: bool = False
     blockers: list[str] = field(default_factory=list)
+    blocker_categories: dict[str, list[str]] = field(default_factory=dict)
+    next_commands: list[str] = field(default_factory=list)
+    fake_vs_real_explanation: str = ""
+    task_pack_actual_run_explanation: str = ""
 
 
 @dataclass(slots=True)
@@ -45,6 +50,12 @@ class V04ReleaseGateResult:
     full_text_campaign_present: bool
     blockers: list[str]
     campaigns: list[V04CampaignGateAssessment]
+    accepted_real_campaign_count: int = 0
+    missing_campaign_types: list[str] = field(default_factory=list)
+    blocker_categories: dict[str, list[str]] = field(default_factory=dict)
+    next_commands: list[str] = field(default_factory=list)
+    fake_vs_real_explanation: str = ""
+    task_pack_actual_run_explanation: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -84,9 +95,21 @@ class V04ReleaseGateEnforcer:
         if not assessments:
             blockers.append("No campaigns were found for release-gate evaluation.")
         for assessment in assessments:
-            if assessment.blockers and _campaign_should_report_blockers(assessment):
+            if assessment.blockers and _campaign_has_release_blocking_failures(assessment):
                 blockers.extend(f"{assessment.campaign_id}: {item}" for item in assessment.blockers)
         blockers = _dedupe(blockers)
+        missing_campaign_types = _missing_campaign_types(
+            experiment_ready=experiment_ready,
+            refusal=refusal,
+            full_text=full_text,
+        )
+        blocker_categories = _categorize_blockers(blockers)
+        next_commands = _next_commands_for_gate(
+            blockers=blockers,
+            assessments=assessments,
+            accepted_count=len(accepted),
+            missing_campaign_types=missing_campaign_types,
+        )
         return V04ReleaseGateResult(
             passed=not blockers,
             deterministic_ci_passed=deterministic_ci_passed,
@@ -97,6 +120,12 @@ class V04ReleaseGateEnforcer:
             full_text_campaign_present=full_text,
             blockers=blockers,
             campaigns=assessments,
+            accepted_real_campaign_count=len(accepted),
+            missing_campaign_types=missing_campaign_types,
+            blocker_categories=blocker_categories,
+            next_commands=next_commands,
+            fake_vs_real_explanation=FAKE_VS_REAL_EXPLANATION,
+            task_pack_actual_run_explanation=TASK_PACK_ACTUAL_RUN_EXPLANATION,
         )
 
     def write_outputs(self, result: V04ReleaseGateResult) -> tuple[Path, Path]:
@@ -146,8 +175,12 @@ class V04ReleaseGateEnforcer:
             experiment_ready=ready,
             refusal=refusal,
             full_text_or_manual_pdf=_has_full_text_or_pdf(runs),
+            fake_vs_real_explanation=FAKE_VS_REAL_EXPLANATION,
+            task_pack_actual_run_explanation=TASK_PACK_ACTUAL_RUN_EXPLANATION,
         )
         assessment.blockers = _campaign_blockers(state, runs, assessment)
+        assessment.blocker_categories = _categorize_blockers(assessment.blockers)
+        assessment.next_commands = _next_commands_for_campaign(state, assessment)
         assessment.accepted_real_campaign = not assessment.blockers
         return assessment
 
@@ -189,6 +222,17 @@ class V04ReleaseGateEnforcer:
         return False
 
 
+FAKE_VS_REAL_EXPLANATION = (
+    "Fake-agent canaries validate schemas and orchestration only. They never count as actual Codex/GPT-5.4 acceptance. "
+    "A real campaign requires validated imported Codex output, actual-run attestation, and human campaign review."
+)
+
+TASK_PACK_ACTUAL_RUN_EXPLANATION = (
+    "Task-pack or manual-handoff output can count as an actual run only after Codex/GPT-5.4 produced the output, "
+    "GapForge validated and imported it, a human attested the agent/model/method, and campaign review accepted it."
+)
+
+
 def _campaign_blockers(
     state: CampaignState,
     runs: list[ResearchRunState],
@@ -224,12 +268,139 @@ def _campaign_blockers(
     return _dedupe(blockers)
 
 
+def _categorize_blockers(blockers: list[str]) -> dict[str, list[str]]:
+    categories: dict[str, list[str]] = {}
+    for blocker in blockers:
+        category = _blocker_category(blocker)
+        categories.setdefault(category, []).append(blocker)
+    return categories
+
+
+def _blocker_category(blocker: str) -> str:
+    text = blocker.lower()
+    if "fake-agent" in text or "fake agent" in text or "fake-only" in text:
+        return "fake_vs_real"
+    if "attestation" in text:
+        return "missing_attestation"
+    if "human review" in text or "human accepted" in text:
+        return "missing_human_review"
+    if "validated" in text or "imported" in text or "agent output" in text:
+        return "missing_validated_import"
+    if "source coverage" in text:
+        return "missing_source_coverage"
+    if "retrieval index" in text:
+        return "missing_retrieval_index"
+    if "campaign report" in text:
+        return "missing_campaign_report"
+    if "stop reason" in text:
+        return "missing_stop_reason"
+    if "experiment_ready" in text or "experiment-ready" in text or "experiment_ready or manuscript_ready" in text:
+        return "missing_experiment_ready_campaign"
+    if "refused" in text or "refusal" in text or "poor coverage" in text or "novelty uncertainty" in text:
+        return "missing_refusal_campaign"
+    if "manual-pdf" in text or "full-text" in text:
+        return "missing_manual_pdf_full_text_campaign"
+    if "3 accepted real" in text or "no campaigns" in text or "zero real" in text:
+        return "missing_real_campaigns"
+    if "deterministic ci" in text:
+        return "missing_deterministic_ci"
+    if "fake-agent campaign canary" in text:
+        return "missing_fake_canary"
+    return "other"
+
+
+def _missing_campaign_types(*, experiment_ready: bool, refusal: bool, full_text: bool) -> list[str]:
+    missing: list[str] = []
+    if not experiment_ready:
+        missing.append("experiment-ready campaign")
+    if not refusal:
+        missing.append("refusal campaign")
+    if not full_text:
+        missing.append("manual PDF/full-text campaign")
+    return missing
+
+
+def _next_commands_for_gate(
+    *,
+    blockers: list[str],
+    assessments: list[V04CampaignGateAssessment],
+    accepted_count: int,
+    missing_campaign_types: list[str],
+) -> list[str]:
+    commands: list[str] = []
+    categories = set(_categorize_blockers(blockers))
+    if not assessments or accepted_count == 0:
+        commands.extend(
+            [
+                "gapforge campaign-canary-run --profile single_task_codex_handoff --real",
+                "gapforge codex-handoff --campaign-id <campaign-id> --latest-task --print-prompt",
+                "gapforge validate-import-all --campaign-id <campaign-id>",
+                'gapforge attest-agent-run --task-id <task-id> --agent codex --model gpt-5.4 --method task_pack --attester "<name>"',
+                'gapforge campaign-review --campaign-id <campaign-id> --accept --reviewer "<name>"',
+                "gapforge campaign-canary-complete --canary-id <canary-id>",
+            ]
+        )
+    if "missing_attestation" in categories:
+        commands.append(
+            'gapforge attest-agent-run --task-id <task-id> --agent codex --model gpt-5.4 --method task_pack --attester "<name>"'
+        )
+    if "missing_human_review" in categories:
+        commands.append('gapforge campaign-review --campaign-id <campaign-id> --accept --reviewer "<name>"')
+    if "missing_validated_import" in categories:
+        commands.extend(
+            [
+                "gapforge codex-handoff --campaign-id <campaign-id> --latest-task --print-prompt",
+                "gapforge validate-import-all --campaign-id <campaign-id>",
+            ]
+        )
+    if "missing_retrieval_index" in categories:
+        commands.append("gapforge build-index --project-id <project-id>")
+    if "missing_campaign_report" in categories:
+        commands.append("gapforge campaign-report --campaign-id <campaign-id>")
+    if "missing_stop_reason" in categories:
+        commands.append('gapforge campaign-stop --campaign-id <campaign-id> --reason "<explicit stop reason>"')
+    if "experiment-ready campaign" in missing_campaign_types:
+        commands.append("gapforge campaign-canary-run --profile agentic_low_fpr_collusion --real")
+    if "refusal campaign" in missing_campaign_types:
+        commands.append("gapforge campaign-canary-run --profile agentic_undercovered_refusal --real")
+    if "manual PDF/full-text campaign" in missing_campaign_types:
+        commands.append("gapforge campaign-canary-run --profile manual_pdf_codex_reading_handoff --real")
+    return _dedupe(commands)
+
+
+def _next_commands_for_campaign(state: CampaignState, assessment: V04CampaignGateAssessment) -> list[str]:
+    commands: list[str] = []
+    if state.campaign.mode == "fake_agent":
+        commands.append("gapforge campaign-canary-run --profile single_task_codex_handoff --real")
+    if not state.campaign.task_ids:
+        commands.append(f"gapforge campaign-task --campaign-id {state.campaign.id} --type novelty_reviewer")
+    if not assessment.validated_imported_outputs:
+        commands.extend(
+            [
+                f"gapforge codex-handoff --campaign-id {state.campaign.id} --latest-task --print-prompt",
+                f"gapforge validate-import-all --campaign-id {state.campaign.id}",
+            ]
+        )
+    task_id = state.campaign.task_ids[-1] if state.campaign.task_ids else "<task-id>"
+    if not assessment.actual_run_attestation:
+        commands.append(
+            f'gapforge attest-agent-run --task-id {task_id} --agent codex --model gpt-5.4 --method task_pack --attester "<name>"'
+        )
+    if not assessment.human_review_accepted:
+        commands.append(f'gapforge campaign-review --campaign-id {state.campaign.id} --accept --reviewer "<name>"')
+    if not assessment.source_coverage and state.campaign.run_ids:
+        commands.append(f"gapforge coverage --run-id {state.campaign.run_ids[-1]}")
+    if not assessment.retrieval_index:
+        commands.append(f"gapforge build-index --project-id {state.campaign.project_id}")
+    if not assessment.campaign_report:
+        commands.append(f"gapforge campaign-report --campaign-id {state.campaign.id}")
+    if not assessment.explicit_stop_reason:
+        commands.append(f'gapforge campaign-stop --campaign-id {state.campaign.id} --reason "<explicit stop reason>"')
+    return _dedupe(commands)
+
+
 def _has_actual_attestation(state: CampaignState) -> bool:
-    return any(
-        item.get("type") == "agent_actual_run_attestation" and item.get("accepted") is True
-        for record in state.imports
-        for item in record.accepted_objects
-    )
+    return bool(accepted_real_agent_output_ids(state))
 
 
 def _has_validated_import(state: CampaignState) -> bool:
@@ -272,8 +443,16 @@ def _strong_novelty_without_prior_work(runs: list[ResearchRunState]) -> bool:
     return False
 
 
-def _campaign_should_report_blockers(assessment: V04CampaignGateAssessment) -> bool:
-    return assessment.mode in {"codex_task_pack", "codex_direct", "manual_handoff", "fake_agent"}
+def _campaign_has_release_blocking_failures(assessment: V04CampaignGateAssessment) -> bool:
+    """Return whether a campaign's own blockers should fail the global release gate.
+
+    Fake and deterministic campaigns are useful diagnostic context, but they are
+    not candidate actual-run campaigns. The top-level gate already fails closed
+    when too few accepted real campaigns exist, so old fake regression campaigns
+    should not keep the gate failing after the required real Codex campaigns pass.
+    """
+
+    return assessment.mode in {"codex_task_pack", "codex_direct", "manual_handoff"}
 
 
 def _dedupe(values: list[str]) -> list[str]:

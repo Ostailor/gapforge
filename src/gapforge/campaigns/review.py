@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 
 from gapforge.campaigns import CampaignManager, CampaignState
+from gapforge.campaigns.acceptance import accepted_real_agent_output_ids
 from gapforge.config import GapForgeConfig
 from gapforge.models import CampaignAcceptanceSummary, CampaignHumanReview, Provenance, ResearchProgramState, ResearchRunState
 from gapforge.project_memory import ProjectMemoryManager
@@ -354,14 +355,7 @@ def _actual_run_attestation_present(state: CampaignState) -> bool:
 
 
 def _accepted_real_agent_outputs(state: CampaignState) -> list[str]:
-    outputs: list[str] = []
-    for record in state.imports:
-        attested = any(
-            item.get("type") == "agent_actual_run_attestation" and item.get("accepted") is True for item in record.accepted_objects
-        )
-        if attested and record.status in {"applied", "partial", "valid"}:
-            outputs.append(record.id)
-    return outputs
+    return accepted_real_agent_output_ids(state)
 
 
 def _is_refusal_campaign(state: CampaignState, program: ResearchProgramState) -> bool:

@@ -6,12 +6,12 @@ import json
 from pathlib import Path
 
 from gapforge.agents.handoff import write_handoff
-from gapforge.agents.output_importer import AgentOutputImporter, output_paths_for_task
+from gapforge.agents.output_importer import AgentOutputImporter, discover_output_paths_for_task, output_paths_for_task
 from gapforge.agents.records import task_pack_dir
 from gapforge.agents.schema_validator import expected_output_files, expected_output_schema
 from gapforge.agents.task_spec import create_agent_task_spec
 from gapforge.config import GapForgeConfig
-from gapforge.models import AgentRepairRecord, AgentTaskSpec, AgentValidationResult, CampaignImportRecord, Provenance, to_plain
+from gapforge.models import AgentRepairRecord, AgentTaskSpec, AgentValidationResult, CampaignImportRecord, Provenance, from_dict, to_plain
 from gapforge.state import ResearchStateManager, slugify, utc_now_compact, utc_now_iso
 
 
@@ -21,11 +21,16 @@ def create_agent_repair_task(
     output_paths: list[Path],
     *,
     handoff: bool = False,
+    latest_invalid: bool = False,
 ) -> tuple[AgentRepairRecord | None, AgentValidationResult, Path | None]:
     """Validate output and create a repair task pack when validation fails."""
     state_manager = ResearchStateManager(config)
     state = state_manager.load_run(task_spec.run_id)
-    validation = AgentOutputImporter(config).validate(task_spec, output_paths)
+    if latest_invalid:
+        validation = latest_invalid_validation(config, task_spec)
+        output_paths = _paths_from_validation(validation) or discover_output_paths_for_task(state, task_spec)
+    else:
+        validation = AgentOutputImporter(config).validate(task_spec, output_paths)
     state = state_manager.load_run(task_spec.run_id)
     if validation.status == "valid":
         return None, validation, None
@@ -53,7 +58,17 @@ def create_agent_repair_task(
     from gapforge.agents.task_packs import write_codex_task_pack
 
     pack_dir = write_codex_task_pack(state, repair_task)
-    repair_context = _repair_context(task_spec, repair_task, validation, output_paths)
+    known_valid_ids = _known_id_context(state)
+    minimal_skeletons = _minimal_json_skeletons(task_spec)
+    repair_context = _repair_context(
+        state,
+        task_spec,
+        repair_task,
+        validation,
+        output_paths,
+        known_valid_ids=known_valid_ids,
+        minimal_skeletons=minimal_skeletons,
+    )
     (pack_dir / "repair_context.json").write_text(json.dumps(repair_context, indent=2) + "\n", encoding="utf-8")
     (pack_dir / "REPAIR.md").write_text(
         render_agent_repair_instructions(
@@ -62,12 +77,37 @@ def create_agent_repair_task(
             issues=validation.issues,
             expected_files=expected_output_files(task_spec),
             outputs_dir=output_paths_for_task(state, repair_task)[0].parent,
+            known_paper_ids=known_valid_ids["paper_ids"],
+            known_evidence_span_ids=known_valid_ids["evidence_span_ids"],
+            known_evidence_locators=known_valid_ids["evidence_locators"],
+            accepted_partial_fields=validation.accepted_output_paths,
+            minimal_skeletons=minimal_skeletons,
         ),
         encoding="utf-8",
     )
     if handoff:
         write_handoff(repair_task, pack_dir)
     return record, validation, pack_dir
+
+
+def latest_invalid_validation(config: GapForgeConfig, task_spec: AgentTaskSpec) -> AgentValidationResult:
+    """Load the most recent invalid validation for a task from state or validation.json."""
+
+    manager = ResearchStateManager(config)
+    state = manager.load_run(task_spec.run_id)
+    validations = [item for item in state.agent_validation_results if item.task_spec_id == task_spec.id and item.status == "invalid"]
+    if validations:
+        return validations[-1]
+    validation_path = task_pack_dir(state, task_spec) / "validation.json"
+    if validation_path.exists():
+        validation = from_dict(AgentValidationResult, json.loads(validation_path.read_text(encoding="utf-8")))
+        if validation.status == "invalid":
+            return validation
+    discovered = discover_output_paths_for_task(state, task_spec)
+    validation = AgentOutputImporter(config).validate(task_spec, discovered)
+    if validation.status == "invalid":
+        return validation
+    raise ValueError(f"No latest invalid validation found for task {task_spec.id}.")
 
 
 def find_agent_repair_record(config: GapForgeConfig, repair_id: str) -> tuple[AgentRepairRecord, Path]:
@@ -85,6 +125,30 @@ def find_agent_repair_record(config: GapForgeConfig, repair_id: str) -> tuple[Ag
     raise FileNotFoundError(f"No agent repair record found for {repair_id}")
 
 
+def validate_repair_output(config: GapForgeConfig, repair_id: str) -> tuple[AgentRepairRecord, AgentValidationResult]:
+    record, run_dir = find_agent_repair_record(config, repair_id)
+    manager = ResearchStateManager(config)
+    state = manager.load_run(run_dir.name)
+    repair_task = _task_by_id(state, record.repair_task_id)
+    validation = AgentOutputImporter(config).validate(repair_task, discover_output_paths_for_task(state, repair_task))
+    return record, validation
+
+
+def import_repair_output(config: GapForgeConfig, repair_id: str) -> tuple[AgentRepairRecord, AgentValidationResult]:
+    record, run_dir = find_agent_repair_record(config, repair_id)
+    manager = ResearchStateManager(config)
+    state = manager.load_run(run_dir.name)
+    repair_task = _task_by_id(state, record.repair_task_id)
+    validation = AgentOutputImporter(config).import_outputs(repair_task, discover_output_paths_for_task(state, repair_task))
+    state = manager.load_run(run_dir.name)
+    updated = next(item for item in state.agent_repair_records if item.id == repair_id)
+    updated.status = "complete" if validation.status in {"valid", "warning"} else "failed"
+    if validation.status == "invalid":
+        updated.issues_to_fix = list(validation.issues)
+    manager.save_run(state)
+    return updated, validation
+
+
 def render_agent_repair_instructions(
     *,
     task_id: str,
@@ -92,6 +156,11 @@ def render_agent_repair_instructions(
     issues: list[str],
     expected_files: list[str],
     outputs_dir: Path | None = None,
+    known_paper_ids: list[str] | None = None,
+    known_evidence_span_ids: list[str] | None = None,
+    known_evidence_locators: list[str] | None = None,
+    accepted_partial_fields: list[str] | None = None,
+    minimal_skeletons: dict[str, object] | None = None,
 ) -> str:
     """Render actionable repair instructions for a failed output validation."""
     lines = [
@@ -112,6 +181,32 @@ def render_agent_repair_instructions(
     lines.extend(f"- `{name}`" for name in expected_files)
     lines.extend(["", "## Validation Issues", ""])
     lines.extend(f"- {issue}" for issue in issues) if issues else lines.append("- No blocking issues were reported.")
+    lines.extend(["", "## Known Valid Paper IDs", ""])
+    if known_paper_ids:
+        lines.extend(f"- `{paper_id}`" for paper_id in known_paper_ids)
+    else:
+        lines.append("- None available.")
+    lines.extend(["", "## Known EvidenceSpan IDs", ""])
+    if known_evidence_span_ids:
+        lines.extend(f"- `{span_id}`" for span_id in known_evidence_span_ids)
+    else:
+        lines.append("- None available.")
+    lines.extend(["", "## Known Evidence Locators", ""])
+    if known_evidence_locators:
+        lines.extend(f"- `{locator}`" for locator in known_evidence_locators)
+    else:
+        lines.append("- None available.")
+    lines.extend(["", "## Accepted Partial Fields", ""])
+    if accepted_partial_fields:
+        lines.extend(f"- `{path}`" for path in accepted_partial_fields)
+    else:
+        lines.append("- None.")
+    lines.extend(["", "## Minimal Valid JSON Skeletons", ""])
+    if minimal_skeletons:
+        for filename, skeleton in minimal_skeletons.items():
+            lines.extend(["", f"### `{filename}`", "", "```json", json.dumps(skeleton, indent=2), "```"])
+    else:
+        lines.append("- See `expected_output_schema.json`.")
     lines.extend(
         [
             "",
@@ -124,13 +219,13 @@ def render_agent_repair_instructions(
             "- Add EvidenceSpan IDs or locators for supported claims, results, limitations, and novelty comparisons.",
             "- For novelty, list closest prior work or set the verdict to `unknown` with missing searches.",
             "- Harmless extra fields are allowed when they do not introduce unsupported claims or fake citations.",
+            "- Turn unknown citations into search requests or uncertainty; do not fabricate sources.",
             "",
             "## Re-run Validation",
             "",
             "```bash",
-            f"gapforge repair-agent-output --task-id {task_id} --path <fixed-output.json>",
-            f"gapforge validate-agent-output --task-id {task_id}",
-            f"gapforge import-agent-output --task-id {task_id}",
+            "gapforge validate-repair-output --repair-id <repair-id>",
+            "gapforge import-repair-output --repair-id <repair-id>",
             "```",
         ]
     )
@@ -175,9 +270,9 @@ def render_agent_repair_status(record: AgentRepairRecord, run_dir: Path) -> str:
             "## Next Commands",
             "",
             "```bash",
-            f"gapforge task-handoff --task-id {record.repair_task_id}",
-            f"gapforge validate-agent-output --task-id {record.repair_task_id}",
-            f"gapforge import-agent-output --task-id {record.repair_task_id}",
+            f"gapforge codex-handoff --task-id {record.repair_task_id} --print-prompt",
+            f"gapforge validate-repair-output --repair-id {record.id}",
+            f"gapforge import-repair-output --repair-id {record.id}",
             "```",
         ]
     )
@@ -271,10 +366,14 @@ def _repair_input_artifacts(state, original: AgentTaskSpec, validation: AgentVal
 
 
 def _repair_context(
+    state,  # noqa: ANN001
     original: AgentTaskSpec,
     repair_task: AgentTaskSpec,
     validation: AgentValidationResult,
     output_paths: list[Path],
+    *,
+    known_valid_ids: dict[str, list[str]],
+    minimal_skeletons: dict[str, object],
 ) -> dict[str, object]:
     return {
         "original_task": to_plain(original),
@@ -282,6 +381,9 @@ def _repair_context(
         "validation": to_plain(validation),
         "output_paths_checked": [str(path) for path in output_paths],
         "schema": expected_output_schema(original),
+        "known_valid_ids": known_valid_ids,
+        "accepted_partial_fields": validation.accepted_output_paths,
+        "minimal_valid_json_skeletons": minimal_skeletons,
         "repair_rules": [
             "Repair cannot bypass validation.",
             "Do not invent evidence or citations.",
@@ -289,6 +391,36 @@ def _repair_context(
             "Convert unresolved citations into search requests or uncertainty.",
         ],
     }
+
+
+def _known_id_context(state) -> dict[str, list[str]]:  # noqa: ANN001
+    return {
+        "paper_ids": sorted({paper.id for paper in state.papers if paper.id}),
+        "evidence_span_ids": sorted({span.id for span in state.evidence_spans if span.id}),
+        "evidence_locators": sorted({span.locator for span in state.evidence_spans if span.locator}),
+    }
+
+
+def _minimal_json_skeletons(task_spec: AgentTaskSpec) -> dict[str, object]:
+    skeletons: dict[str, object] = {}
+    schema = expected_output_schema(task_spec)
+    for filename in expected_output_files(task_spec):
+        file_schema = schema.get("files", {}).get(filename, {})
+        required = file_schema.get("required", []) if isinstance(file_schema, dict) else []
+        top_key = str(required[0] if required else filename.removesuffix(".json"))
+        skeletons[filename] = {top_key: []}
+    return skeletons
+
+
+def _paths_from_validation(validation: AgentValidationResult) -> list[Path]:
+    return [Path(path) for path in [*validation.accepted_output_paths, *validation.rejected_output_paths] if path]
+
+
+def _task_by_id(state, task_id: str) -> AgentTaskSpec:  # noqa: ANN001
+    for task in state.agent_task_specs:
+        if task.id == task_id:
+            return task
+    raise FileNotFoundError(f"No repair task found for {task_id}")
 
 
 def _target_id(task_spec: AgentTaskSpec) -> str:

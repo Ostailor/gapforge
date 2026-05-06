@@ -25,6 +25,12 @@ def test_secret_redaction_common_patterns() -> None:
     assert "[REDACTED]" in redacted
 
 
+def test_secret_redaction_does_not_break_task_paths() -> None:
+    text = "/tmp/agent_tasks/campaign-task-20260505T235742Z-novelty_reviewer"
+
+    assert redact_text(text) == text
+
+
 def test_transcript_redacts_prompt_response_and_summary(tmp_path: Path) -> None:
     logger = LLMTranscriptLogger(tmp_path)
 

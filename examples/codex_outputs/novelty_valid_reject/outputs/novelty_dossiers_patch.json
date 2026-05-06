@@ -1,0 +1,16 @@
+{
+  "novelty_dossiers": [
+    {
+      "target_id": "gap-1",
+      "idea_summary": "Repeat the fixture low-FPR collusion detection evaluation.",
+      "top_prior_work": ["paper-1"],
+      "comparison_table": [{"paper_id": "paper-1", "overall_similarity": 0.95}],
+      "decisive_difference_needed": "A different dataset, metric, or deployment setting would be needed.",
+      "missing_searches": [],
+      "verdict": "reject",
+      "novelty_strength": "weak",
+      "confidence": "medium"
+    }
+  ],
+  "public_reasoning_summary": "The proposed idea is too close to known fixture paper paper-1."
+}

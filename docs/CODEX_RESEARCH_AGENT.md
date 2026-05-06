@@ -1,149 +1,144 @@
 # Codex/GPT-5.4 Research Agent Contract
 
-For real GapForge runs, Codex using GPT-5.4 is the intended LLM research agent. In v0.3, this was represented through prompt packs, fake-agent canaries, and validated output import, but accepted actual Codex/GPT-5.4 real-run validation was not completed. v0.4 is intended to turn this into campaign-level actual execution or auditable handoff/import workflows without weakening GapForge's evidence discipline.
+Codex using GPT-5.4 is the intended real research agent for GapForge actual-run workflows. GapForge treats Codex as an external agent whose outputs must be validated before import. Codex is not a trusted source of citations, novelty, results, or evidence by itself.
 
-## Role
+For the shortest command sequence, see `docs/CODEX_QUICKSTART.md`.
+
+## What Codex May Do
 
 Codex/GPT-5.4 may assist with:
 
-- full-text-aware paper reading
+- full-text paper reading
 - gap synthesis
 - closest-prior-work comparison
 - reviewer simulation
-- report critique
-- direction maturation review
-- campaign-level research execution when v0.4 actual-run mode is explicitly enabled
+- related-work organization
+- experiment protocol critique
+- campaign task execution through task packs or a configured direct runner
 
-It must not become an unverified source of citations, results, or novelty claims.
+Codex output may become GapForge state only after schema validation and import. For task-pack/manual-handoff actual-run acceptance, human attestation and campaign review are also required.
 
-## Required Inputs
+## Non-Negotiable Rules
 
-Prompts or task context should include:
+Codex/GPT-5.4 must:
 
-- topic
-- relevant paper IDs and metadata
-- parsed sections or excerpted text
-- EvidenceSpan locators
-- current claims/gaps/novelty dossiers
-- source coverage and missing searches
-- output schema
-- citation/evidence rules
-- uncertainty rules
-
-## Output Rules
-
-Codex/GPT-5.4 outputs must:
-
-- use JSON when a schema is required
-- cite known paper IDs for source-backed statements
-- cite EvidenceSpan locators when using full text
-- mark unsupported items as unknown, uncertain, or proposed
-- include concise public reasoning summaries only
-- avoid hidden chain-of-thought
-- preserve missing searches and coverage warnings
-
-## Prohibited Behavior
+- use only known paper IDs, EvidenceSpan IDs, and locators from the task pack
+- write JSON when the output contract requires JSON
+- mark unsupported items as unknown, uncertain, proposed, or search requests
+- list missing searches instead of inventing prior work
+- cite EvidenceSpan locators for full-text-backed claims
+- store concise public reasoning summaries only
 
 Codex/GPT-5.4 must not:
 
-- invent citations, DOIs, arXiv IDs, venues, datasets, metrics, quotes, or results
-- mark novelty strong without closest prior work
-- convert abstract claims into demonstrated results
-- hide poor coverage
-- remove rejected ideas or human decisions
-- store hidden chain-of-thought in GapForge artifacts
+- invent citations, papers, DOIs, arXiv IDs, venues, quotes, datasets, metrics, baselines, or results
+- claim strong novelty without closest prior work
+- convert abstract-only evidence into demonstrated full-text results
+- hide poor source coverage or missing searches
+- remove rejected ideas, human decisions, or blocking issues
+- request or persist hidden chain-of-thought
 
-## Acceptance Implications
-
-Level 4 canary validation requires actual Codex/GPT-5.4 use. Fake LLM and prompt-pack modes are useful but do not count as actual-run validation.
-
-If Codex/GPT-5.4 is unavailable:
-
-- CI may still pass.
-- Level 0 through Level 3 validation may still pass.
-- v0.3 cannot claim actual-run validation passed.
-
-For v0.4, actual-run acceptance requires multiple accepted real Codex/GPT-5.4 campaigns, not just one task or one fake-agent canary. A campaign must have durable state, task lifecycle records, validated imports, source/strict-report artifacts, and human review.
-
-## Campaign Rules for v0.4
-
-Codex/GPT-5.4 campaign execution must:
-
-- run only under explicit real-run opt-in
-- record campaign and task lifecycle state
-- preserve task packs, outputs, validations, imports, failures, retries, and human decisions
-- support resume or retry after failed agent steps
-- fail clearly if Codex/GPT-5.4 is unavailable
-- label prompt-pack handoff separately from direct actual execution
-- keep fake-agent campaigns out of actual-run acceptance counts
-- validate all outputs before import
-- make rejected outputs auditable without mutating state
-
-## v0.4 Execution Workflows
-
-### Task-Pack Handoff
-
-Use task-pack mode when a direct Codex runner is not configured:
-
-```bash
-gapforge campaign-task --campaign-id <campaign-id> --type novelty_reviewer
-gapforge task-handoff --task-id <task-id>
-# Codex/GPT-5.4 reads HANDOFF.md and writes JSON outputs under outputs/.
-gapforge campaign-validate-output --campaign-id <campaign-id> --task-id <task-id>
-gapforge campaign-import-output --campaign-id <campaign-id> --task-id <task-id>
-gapforge attest-agent-run --task-id <task-id> --agent codex --model gpt-5.4 --method task_pack --attester "<name>"
-```
-
-Task-pack mode can count as an actual run only after the outputs are produced by Codex/GPT-5.4, validation passes, import records the accepted objects, attestation names Codex/GPT-5.4, and campaign human review accepts the work.
-
-### Direct Runner
-
-Use direct mode only when a trusted command is configured:
-
-```bash
-export GAPFORGE_ENABLE_REAL_RUNS=1
-export GAPFORGE_CODEX_COMMAND='codex run --model {model} --task-pack {task_pack}'
-gapforge codex-run --task-id <task-id> --direct
-```
-
-If direct execution is unavailable, GapForge should fail clearly or write a handoff. It must not silently use fake-agent output.
+## Execution Modes
 
 ### Fake Agent
 
-Fake-agent mode is for CI and regression tests. It may validate lifecycle, schemas, repair, rollback, and release-gate blockers. It never proves Codex/GPT-5.4 behavior and never counts as actual-run acceptance.
+Fake-agent mode is for CI and regression tests. It validates orchestration, schemas, import, repair, rollback, dashboards, and release-gate blockers. It never counts as real Codex/GPT-5.4 acceptance.
 
-## Campaign Task Output Contract
+```bash
+GAPFORGE_DISABLE_NETWORK=1 gapforge campaign-canary-run --profile fake_agent_campaign_regression
+```
 
-Codex/GPT-5.4 should write only the expected files listed in the task pack, for example:
+### Task-Pack Handoff
+
+Task-pack mode is the recommended v0.4.1 real-run debugging workflow when no direct runner is configured.
+
+```bash
+export GAPFORGE_ENABLE_REAL_RUNS=1
+export GAPFORGE_AGENT_MODE=task-pack
+export GAPFORGE_AGENT_NAME=codex
+export GAPFORGE_CODEX_MODEL=gpt-5.4
+
+gapforge campaign-canary-run --profile single_task_codex_handoff --real
+gapforge codex-handoff --task-id <task-id> --print-prompt
+# Run Codex/GPT-5.4 manually and write outputs into outputs/.
+gapforge validate-import-all --task-id <task-id>
+gapforge attest-agent-run --task-id <task-id> --agent codex --model gpt-5.4 --method task_pack --attester "<name>"
+gapforge campaign-review --campaign-id <campaign-id> --accept --reviewer "<name>"
+```
+
+Task-pack output can count only after Codex/GPT-5.4 produced it, validation/import passed, attestation records Codex/GPT-5.4 as the producer, and campaign review accepted it.
+
+### Manual Handoff
+
+Manual handoff follows the same acceptance rules as task-pack mode. It is useful when Codex is run outside GapForge entirely. Handoff alone does not count.
+
+### Direct Runner
+
+Direct mode requires an explicit local command template. Preview it before execution.
+
+```bash
+export GAPFORGE_ENABLE_REAL_RUNS=1
+export GAPFORGE_AGENT_MODE=direct
+export GAPFORGE_AGENT_NAME=codex
+export GAPFORGE_CODEX_MODEL=gpt-5.4
+export GAPFORGE_CODEX_COMMAND='codex run --model {model} --task-pack {task_pack} --output-dir {outputs_dir}'
+
+gapforge codex-command-preview --task-id <task-id>
+gapforge codex-run --task-id <task-id> --direct --dry-run
+```
+
+Direct runs count only after valid output/import and human review. If the command exits successfully but writes no valid output files, the run fails and should be repaired or rerun through task-pack handoff.
+
+## Output Contract
+
+The task pack tells Codex exactly which files to write. Examples include:
 
 - `paper_notes_patch.json`
+- `claims_patch.json`
+- `evidence_spans_patch.json`
 - `gaps_patch.json`
+- `gap_evidence_matrices_patch.json`
 - `novelty_dossiers_patch.json`
-- `review_panel_patch.json`
-- `stop_condition_patch.json`
+- `rejected_ideas_patch.json`
+- `reviewer_objections_patch.json`
+- `related_work_matrix_patch.json`
 
-Every JSON file must use the top-level key shown in `expected_outputs.json`. Unknown citations should be emitted as search requests or missing searches, not as claimed prior work.
+Codex should write only the expected output files into the task `outputs/` directory. Unknown citations should become `search_requests`, `missing_searches`, or uncertainty.
 
-## Repair and Recovery
+## Validation, Import, Attestation, Review
+
+For task-pack/manual-handoff workflows:
+
+```bash
+gapforge validate-import-all --task-id <task-id>
+gapforge attest-agent-run --task-id <task-id> --agent codex --model gpt-5.4 --method task_pack --attester "<name>"
+gapforge campaign-review --campaign-id <campaign-id> --accept --reviewer "<name>"
+gapforge actual-run-status --campaign-id <campaign-id>
+```
+
+For direct workflows, use the same validation/import and campaign review checks after the runner completes.
+
+## Repair
 
 If validation fails:
 
 ```bash
-gapforge repair-agent-output --task-id <task-id> --path <bad-output.json> --handoff
+gapforge codex-doctor --task-id <task-id>
+gapforge repair-agent-output --task-id <task-id> --latest-invalid --handoff --print-prompt
 ```
 
-The repair prompt should include validation errors, known valid IDs, locator rules, and schema examples. It must not instruct Codex to invent evidence, citations, or hidden reasoning.
+The repair handoff includes exact validation errors, known valid paper IDs, known EvidenceSpan IDs/locators, accepted partial fields, files to rewrite, and minimal JSON skeletons. Repair cannot bypass validation.
 
-## Review Standard
+## Acceptance Standard
 
-Human reviewers should judge Codex/GPT-5.4 outputs by:
+Human reviewers should judge Codex/GPT-5.4 output by:
 
 - evidence grounding
 - citation honesty
 - novelty caution
-- usefulness of gaps/directions
+- source coverage transparency
+- usefulness of gaps and directions
 - clarity of uncertainty
-- quality of reviewer objections
 - absence of fabricated results
 
 The model's confidence is not an acceptance criterion. Evidence is.

@@ -1,0 +1,21 @@
+{
+  "gaps": [
+    {
+      "id": "gap-example-low-fpr-external-validity",
+      "title": "External validity of low-FPR collusion detection",
+      "type": "evaluation gap",
+      "description": "The fixture evidence mentions synthetic low-FPR evaluation but does not establish real deployment behavior.",
+      "supporting_paper_ids": ["paper-1"],
+      "supporting_claim_ids": [],
+      "counterevidence_claim_ids": [],
+      "why_existing_work_does_not_solve_it": "The fixture contains no full-text deployment evidence.",
+      "why_it_matters": "Low false positives are deployment-critical for monitoring systems.",
+      "possible_research_questions": ["Does the detector retain low false positives under realistic deployment distributions?"],
+      "minimum_experiment_needed": "Evaluate the detector on a held-out deployment-like fixture with confidence intervals.",
+      "risk_that_gap_is_fake": "A full paper could include deployment evidence not present in the fixture.",
+      "confidence": "low",
+      "novelty_status": "unchecked"
+    }
+  ],
+  "public_reasoning_summary": "This is a low-confidence gap because the fixture evidence is limited."
+}

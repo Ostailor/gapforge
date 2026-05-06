@@ -189,8 +189,7 @@ projects/<project>/campaigns/<campaign_id>/agent_tasks/<task_id>/
 Codex should write only expected output files into `outputs/`. GapForge then runs:
 
 ```bash
-gapforge campaign-validate-output --campaign-id <campaign-id> --task-id <task-id>
-gapforge campaign-import-output --campaign-id <campaign-id> --task-id <task-id>
+gapforge validate-import-all --task-id <task-id>
 ```
 
 Invalid JSON, fake citations, unknown paper IDs, invalid evidence locators, unsupported high-confidence claims, and strong novelty without prior work are rejected. Partial import is allowed only when accepted and rejected portions are explicitly recorded.

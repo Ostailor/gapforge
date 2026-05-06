@@ -33,7 +33,7 @@ v0.3 adds project memory, hybrid retrieval, active-loop decisions, optional LLM-
 - semantic retrieval ranks candidates but does not prove relevance or novelty
 - deterministic hash embeddings are useful for offline tests but not research-grade semantic models
 - optional provider LLM outputs remain untrusted until schema-valid and evidence-located
-- actual Codex/GPT-5.4 canary validation is opt-in and was not available in the May 5, 2026 local verification environment
+- actual Codex/GPT-5.4 canary validation is opt-in; the May 6, 2026 local release-gate pass validated the direct Codex workflow with small canary campaigns, not broad literature-review quality
 - project memory can carry stale beliefs if not reviewed
 - source policy profiles are transparent heuristics, not field-complete standards
 - manuscript packages are starter kits and must not imply results
@@ -98,4 +98,18 @@ When in doubt, treat GapForge output as a to-do list for search, reading, and re
 
 ## Latest Verification Limitation
 
-The May 5, 2026 deterministic verification pass succeeded, including v2/v3/v4 evals, coverage, and v2/v3/v4 smoke runs. The v0.4 fake-agent campaign canary succeeded. Actual Codex/GPT-5.4 campaign canaries were not accepted because the real-run environment variables were unset. Therefore v0.4 actual-run acceptance is not completed until multiple real Codex/GPT-5.4 campaigns are executed through direct or task-pack/manual-handoff mode, validated, attested, imported, reviewed by a human, and accepted by `gapforge v4-release-gate`.
+The May 6, 2026 local verification pass succeeded for the v0.4 actual-run release gate. Three real Codex/GPT-5.4 workflow canaries were executed through the direct runner, validated/imported, attested, human-reviewed, and accepted by `gapforge v4-release-gate`. This resolves the v0.4 release-gate blocker for the workflow path, but it does not prove exhaustive literature-review quality or broad field coverage.
+
+## v0.4.1 Planned Limitation Fix
+
+v0.4.1 is planned as a usability patch for Codex actual-run workflows. It does not change the research bar. It should make these limits easier to diagnose:
+
+- direct runner command missing or malformed
+- successful command with no output files
+- handoff output written to the wrong directory
+- Codex returning markdown when JSON patches are required
+- validation errors that do not show repair steps
+- task-pack output imported without attestation
+- fake-agent success being confused with real acceptance
+
+The intended v0.4.1 docs are `docs/V0_4_1_CODEX_FIX_PLAN.md`, `docs/V0_4_1_CODEX_ACCEPTANCE.md`, and `docs/V0_4_1_CODEX_TROUBLESHOOTING.md`.

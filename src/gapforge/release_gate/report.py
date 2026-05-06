@@ -12,15 +12,34 @@ def render_v04_release_gate_markdown(result: V04ReleaseGateResult) -> str:
         f"- Passed: {str(result.passed).lower()}",
         f"- Deterministic CI passed: {str(result.deterministic_ci_passed).lower()}",
         f"- Fake-agent campaign canary passed: {str(result.fake_agent_canary_passed).lower()}",
-        f"- Accepted real campaigns: {len(result.accepted_real_campaign_ids)}",
+        f"- Accepted real campaigns: {result.accepted_real_campaign_count}",
         f"- Experiment-ready campaign present: {str(result.experiment_ready_campaign_present).lower()}",
         f"- Refusal campaign present: {str(result.refusal_campaign_present).lower()}",
         f"- Full-text/manual-PDF campaign present: {str(result.full_text_campaign_present).lower()}",
+        f"- Missing campaign types: {', '.join(result.missing_campaign_types) if result.missing_campaign_types else 'none'}",
+        "",
+        "## Fake vs Real",
+        "",
+        result.fake_vs_real_explanation,
+        "",
+        "## Task-Pack Actual-Run Eligibility",
+        "",
+        result.task_pack_actual_run_explanation,
         "",
         "## Blocking Failures",
         "",
     ]
     lines.extend([f"- {item}" for item in result.blockers] or ["- none"])
+    lines.extend(["", "## Blocker Categories", ""])
+    if result.blocker_categories:
+        for category, blockers in result.blocker_categories.items():
+            lines.extend([f"### {category.replace('_', ' ').title()}", ""])
+            lines.extend(f"- {item}" for item in blockers)
+            lines.append("")
+    else:
+        lines.append("- none")
+    lines.extend(["", "## Next Commands", ""])
+    lines.extend([f"- `{item}`" for item in result.next_commands] or ["- none"])
     lines.extend(["", "## Campaign Assessments", ""])
     for campaign in result.campaigns:
         lines.extend(
@@ -47,5 +66,7 @@ def render_v04_release_gate_markdown(result: V04ReleaseGateResult) -> str:
             ]
         )
         lines.extend([f"- {item}" for item in campaign.blockers] or ["- none"])
+        lines.extend(["", "Next commands:", ""])
+        lines.extend([f"- `{item}`" for item in campaign.next_commands] or ["- none"])
         lines.append("")
     return "\n".join(lines).rstrip() + "\n"

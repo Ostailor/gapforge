@@ -1,0 +1,12 @@
+{
+  "rejected_ideas": [
+    {
+      "id": "rejected-example-duplicate",
+      "target_id": "gap-1",
+      "reason": "Duplicate of known fixture paper paper-1.",
+      "closest_prior_work": ["paper-1"],
+      "confidence": "medium"
+    }
+  ],
+  "public_reasoning_summary": "The rejected idea cites known prior work by paper ID."
+}

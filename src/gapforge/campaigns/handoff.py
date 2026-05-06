@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from gapforge.agents.codex_handoff_v2 import write_campaign_codex_handoff_v2
 from gapforge.campaigns import CampaignState
 
 _TASK_TYPES = {
@@ -26,9 +27,13 @@ def write_campaign_handoff(
     model: str = "gpt-5.4",
     expected_outputs: list[str] | None = None,
 ) -> Path:
-    path = pack_dir / "HANDOFF.md"
-    path.write_text(render_campaign_handoff(state, task_id, pack_dir, model=model, expected_outputs=expected_outputs), encoding="utf-8")
-    return path
+    return write_campaign_codex_handoff_v2(
+        campaign_id=state.campaign.id,
+        task_id=task_id,
+        pack_dir=pack_dir,
+        expected_outputs=expected_outputs or [],
+        model=model,
+    )["handoff"]
 
 
 def render_campaign_handoff(
@@ -72,11 +77,9 @@ Recommended model: `{model}`
 Run these after Codex writes the outputs:
 
 ```bash
-gapforge campaign-validate-output --campaign-id {state.campaign.id} --task-id {task_id}
-gapforge campaign-import-output --campaign-id {state.campaign.id} --task-id {task_id}
-gapforge validate-import-all --campaign-id {state.campaign.id}
+gapforge validate-import-all --task-id {task_id}
 gapforge attest-agent-run --task-id {task_id} --agent codex --model {model} --method task_pack --attester "<name>"
-gapforge campaign-review --campaign-id {state.campaign.id}
+gapforge campaign-review --campaign-id {state.campaign.id} --accept --reviewer "<name>"
 gapforge campaign-report --campaign-id {state.campaign.id}
 ```
 

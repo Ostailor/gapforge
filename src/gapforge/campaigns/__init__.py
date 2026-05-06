@@ -9,6 +9,7 @@ from typing import TypeVar
 
 from gapforge.config import GapForgeConfig
 from gapforge.models import (
+    AgentActualRunAttestation,
     AgentSearchBatch,
     AgentSearchRequest,
     CampaignAcceptanceSummary,
@@ -37,6 +38,7 @@ class CampaignState:
     budget: CampaignBudget | None = None
     stop_conditions: list[CampaignStopCondition] = field(default_factory=list)
     imports: list[CampaignImportRecord] = field(default_factory=list)
+    agent_actual_run_attestations: list[AgentActualRunAttestation] = field(default_factory=list)
     human_reviews: list[CampaignHumanReview] = field(default_factory=list)
     acceptance_summary: CampaignAcceptanceSummary | None = None
     search_requests: list[AgentSearchRequest] = field(default_factory=list)
@@ -98,6 +100,7 @@ class CampaignManager:
         budget = from_dict(CampaignBudget, raw_budget) if raw_budget else None
         stop_conditions = _load_list(campaign_dir / "stop_conditions.json", CampaignStopCondition)
         imports = _load_list(campaign_dir / "imports.json", CampaignImportRecord)
+        agent_actual_run_attestations = _load_list(campaign_dir / "agent_actual_run_attestations.json", AgentActualRunAttestation)
         human_reviews = _load_list(campaign_dir / "campaign_reviews.json", CampaignHumanReview)
         search_requests = _load_list(campaign_dir / "agent_search_requests.json", AgentSearchRequest)
         search_batches = _load_list(campaign_dir / "agent_search_batches.json", AgentSearchBatch)
@@ -115,6 +118,7 @@ class CampaignManager:
             budget=budget,
             stop_conditions=stop_conditions,
             imports=imports,
+            agent_actual_run_attestations=agent_actual_run_attestations,
             human_reviews=human_reviews,
             acceptance_summary=acceptance_summary,
             search_requests=search_requests,
@@ -132,6 +136,7 @@ class CampaignManager:
         _write_json(campaign_dir / "budget.json", state.budget)
         _write_json(campaign_dir / "stop_conditions.json", state.stop_conditions)
         _write_json(campaign_dir / "imports.json", state.imports)
+        _write_json(campaign_dir / "agent_actual_run_attestations.json", state.agent_actual_run_attestations)
         _write_json(campaign_dir / "campaign_reviews.json", state.human_reviews)
         _write_json(campaign_dir / "campaign_acceptance_summary.json", state.acceptance_summary)
         _write_json(campaign_dir / "agent_search_requests.json", state.search_requests)

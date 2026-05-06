@@ -8,6 +8,7 @@ manual/actual agent execution, validation, and safe import.
 from __future__ import annotations
 
 import os
+import shutil
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
@@ -29,6 +30,7 @@ class AgentRuntimeConfig:
     runner_command: str = ""
     codex_command: str = ""
     codex_workdir: Path | None = None
+    codex_outputs_dir: Path | None = None
     codex_timeout_seconds: int = 3600
 
     @classmethod
@@ -38,19 +40,24 @@ class AgentRuntimeConfig:
         if mode not in {"off", "task-pack", "manual-handoff", "fake", "codex", "direct"}:
             mode = "off"
         output_dir_raw = os.environ.get("GAPFORGE_AGENT_OUTPUT_DIR", "").strip()
+        codex_outputs_dir_raw = os.environ.get("GAPFORGE_CODEX_OUTPUTS_DIR", "").strip()
         workdir_raw = os.environ.get("GAPFORGE_CODEX_WORKDIR", "").strip()
         timeout_raw = os.environ.get("GAPFORGE_CODEX_TIMEOUT_SECONDS", "").strip()
         legacy_command = os.environ.get("GAPFORGE_CODEX_RUNNER_CMD", "").strip()
         codex_command = os.environ.get("GAPFORGE_CODEX_COMMAND", legacy_command).strip()
+        enable_real_runs = os.environ.get("GAPFORGE_ENABLE_REAL_RUNS", "0").strip() in {"1", "true", "TRUE", "yes"}
+        if not codex_command and enable_real_runs and mode in {"codex", "direct"}:
+            codex_command = _default_codex_command()
         return cls(
             mode=mode,
             agent_name=os.environ.get("GAPFORGE_AGENT_NAME", "codex").strip() or "codex",
             codex_model=os.environ.get("GAPFORGE_CODEX_MODEL", os.environ.get("GAPFORGE_LLM_MODEL", "gpt-5.4")).strip() or "gpt-5.4",
-            enable_real_runs=os.environ.get("GAPFORGE_ENABLE_REAL_RUNS", "0").strip() in {"1", "true", "TRUE", "yes"},
+            enable_real_runs=enable_real_runs,
             output_dir=Path(output_dir_raw).expanduser().resolve() if output_dir_raw else None,
             runner_command=legacy_command,
             codex_command=codex_command,
             codex_workdir=Path(workdir_raw).expanduser().resolve() if workdir_raw else None,
+            codex_outputs_dir=Path(codex_outputs_dir_raw).expanduser().resolve() if codex_outputs_dir_raw else None,
             codex_timeout_seconds=_parse_timeout(timeout_raw),
         )
 
@@ -105,6 +112,7 @@ def agent_status(config: AgentRuntimeConfig | None = None) -> dict[str, object]:
         "runner_command_configured": bool(runtime.command_template),
         "codex_command_configured": bool(runtime.codex_command),
         "codex_workdir": str(runtime.codex_workdir) if runtime.codex_workdir else "",
+        "codex_outputs_dir": str(runtime.codex_outputs_dir) if runtime.codex_outputs_dir else "",
         "codex_timeout_seconds": runtime.codex_timeout_seconds,
         "output_dir": str(runtime.output_dir) if runtime.output_dir else "",
         "ci_safe": runtime.mode in {"off", "task-pack", "manual-handoff", "fake"},
@@ -181,3 +189,13 @@ def _parse_timeout(raw: str) -> int:
     except ValueError:
         return 3600
     return max(1, timeout)
+
+
+def _default_codex_command() -> str:
+    script = Path(__file__).resolve().parents[3] / "scripts" / "gapforge_codex_exec_task.sh"
+    if not script.exists() or shutil.which("codex") is None:
+        return ""
+    return (
+        f'"{script}" --task-pack "{{task_pack}}" --outputs-dir "{{outputs_dir}}" '
+        '--model "{model}" --task-id "{task_id}" --run-id "{run_id}"'
+    )

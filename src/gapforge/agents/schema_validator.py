@@ -42,6 +42,39 @@ TASK_OUTPUTS: dict[str, dict[str, dict[str, Any]]] = {
     },
 }
 
+OUTPUT_CONTRACTS: dict[str, dict[str, Any]] = {
+    "deep_reading": {
+        "one_of": ["paper_notes_patch.json", "claims_patch.json", "evidence_spans_patch.json"],
+        "optional": [],
+        "forbidden": [],
+    },
+    "gap_mining": {
+        "one_of": ["gaps_patch.json", "gap_evidence_matrices_patch.json"],
+        "optional": ["claims_patch.json"],
+        "forbidden": [],
+    },
+    "novelty": {
+        "one_of": ["novelty_dossiers_patch.json", "novelty_assessments_patch.json", "rejected_ideas_patch.json"],
+        "optional": [],
+        "forbidden": [],
+    },
+    "reviewer": {
+        "one_of": ["reviewer_objections_patch.json", "reviewer_summaries_patch.json"],
+        "optional": [],
+        "forbidden": [],
+    },
+    "related_work": {
+        "required": ["related_work_matrix_patch.json"],
+        "optional": [],
+        "forbidden": [],
+    },
+    "manuscript": {
+        "one_of": ["paper_package_patch.json", "manuscript_outline.md"],
+        "optional": [],
+        "forbidden": [],
+    },
+}
+
 _UNKNOWN_VALUES = {"", "unknown", "none", "n/a", "not available", "missing"}
 
 
@@ -73,6 +106,7 @@ def expected_output_schema(task_spec: AgentTaskSpec) -> dict[str, Any]:
     return {
         "schema_name": task_spec.output_schema_name,
         "task_type": task_spec.task_type,
+        "output_contract": OUTPUT_CONTRACTS.get(task_spec.task_type, {"required": expected_output_files(task_spec)}),
         "files": schema_files,
         "global_rules": [
             "JSON must parse.",
@@ -88,11 +122,15 @@ def validate_task_outputs(
     state: ResearchRunState,
     task_spec: AgentTaskSpec,
     output_paths: list[Path] | None = None,
+    *,
+    strict_files: bool = False,
 ) -> AgentValidationResult:
     files_to_validate = _resolve_output_paths(state, task_spec, output_paths)
     issues: list[str] = []
+    warnings: list[str] = []
     accepted: list[str] = []
     rejected: list[str] = []
+    missing_optional_outputs: list[str] = []
     unsupported_claim_count = 0
     invalid_locator_count = 0
     invalid_prior_work_count = 0
@@ -103,13 +141,20 @@ def validate_task_outputs(
     patch_span_ids = _patch_evidence_span_ids(files_to_validate)
     contracts = TASK_OUTPUTS.get(task_spec.task_type, {})
     present_names = {path.name for path in files_to_validate if path.exists()}
-    missing = _missing_required_files(task_spec, present_names)
-    issues.extend(f"missing required output file: {name}" for name in missing)
+    file_contract = output_contract(task_spec)
+    required_issues, contract_warnings, missing_optional_outputs = _file_contract_messages(
+        task_spec,
+        present_names,
+        strict_files=strict_files,
+    )
+    issues.extend(required_issues)
+    warnings.extend(contract_warnings)
 
     for path in files_to_validate:
         resolved = path.expanduser().resolve()
         if not resolved.exists():
-            rejected.append(str(resolved))
+            if resolved.name in _blocking_file_names(file_contract, present_names, strict_files=strict_files):
+                rejected.append(str(resolved))
             continue
         if resolved.suffix.lower() == ".md":
             accepted.append(str(resolved))
@@ -151,11 +196,14 @@ def validate_task_outputs(
             accepted.append(str(resolved))
 
     blocking = bool(issues)
+    status = "invalid" if blocking else ("warning" if warnings else "valid")
     return AgentValidationResult(
         id=f"agent-validation-{utc_now_compact()}-{task_spec.id}",
         task_spec_id=task_spec.id,
-        status="invalid" if blocking else "valid",
+        status=status,
         issues=issues,
+        warning_messages=warnings,
+        missing_optional_outputs=missing_optional_outputs,
         accepted_output_paths=sorted(set(accepted)),
         rejected_output_paths=sorted(set(rejected)),
         unsupported_claim_count=unsupported_claim_count,
@@ -177,11 +225,50 @@ def _resolve_output_paths(state: ResearchRunState, task_spec: AgentTaskSpec, out
     return [output_dir / filename for filename in expected_output_files(task_spec)]
 
 
-def _missing_required_files(task_spec: AgentTaskSpec, present_names: set[str]) -> list[str]:
+def output_contract(task_spec: AgentTaskSpec) -> dict[str, Any]:
+    return OUTPUT_CONTRACTS.get(task_spec.task_type, {"required": expected_output_files(task_spec), "optional": [], "forbidden": []})
+
+
+def _file_contract_messages(
+    task_spec: AgentTaskSpec,
+    present_names: set[str],
+    *,
+    strict_files: bool,
+) -> tuple[list[str], list[str], list[str]]:
     expected = expected_output_files(task_spec)
-    if task_spec.task_type == "manuscript" and ({"paper_package_patch.json", "manuscript_outline.md"} & present_names):
-        return []
-    return [name for name in expected if name not in present_names]
+    contract = output_contract(task_spec)
+    issues: list[str] = []
+    warnings: list[str] = []
+    required = list(contract.get("required", []))
+    one_of = list(contract.get("one_of", []))
+    optional = list(contract.get("optional", []))
+    forbidden = list(contract.get("forbidden", []))
+    if strict_files:
+        missing = [name for name in expected if name not in present_names]
+        return [f"missing required output file: {name}" for name in missing], [], missing
+    for name in required:
+        if name not in present_names:
+            issues.append(f"missing required output file: {name}")
+    if one_of and not any(name in present_names for name in one_of):
+        issues.append("missing required output file: one of " + ", ".join(one_of))
+    for name in forbidden:
+        if name in present_names:
+            issues.append(f"forbidden output file present: {name}")
+    missing_optional = sorted(name for name in expected if name not in present_names and name not in required)
+    missing_optional.extend(name for name in optional if name not in present_names and name not in missing_optional)
+    missing_optional = sorted(set(missing_optional))
+    warnings.extend(f"missing optional output file: {name}" for name in missing_optional)
+    return issues, warnings, missing_optional
+
+
+def _blocking_file_names(contract: dict[str, Any], present_names: set[str], *, strict_files: bool) -> set[str]:
+    if strict_files:
+        return set(contract.get("required", [])) | set(contract.get("one_of", [])) | set(contract.get("optional", []))
+    blocking = set(contract.get("required", []))
+    one_of = set(contract.get("one_of", []))
+    if one_of and not (one_of & present_names):
+        blocking.update(one_of)
+    return blocking
 
 
 def _patch_evidence_span_ids(output_paths: list[Path]) -> set[str]:

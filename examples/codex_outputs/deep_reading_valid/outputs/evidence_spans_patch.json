@@ -1,0 +1,13 @@
+{
+  "evidence_spans": [
+    {
+      "id": "span-example-added",
+      "paper_id": "paper-1",
+      "quote": "We evaluate low-FPR collusion detection.",
+      "locator": "paper-1:Abstract:p1",
+      "evidence_type": "result",
+      "confidence": "medium"
+    }
+  ],
+  "public_reasoning_summary": "The added span mirrors fixture-safe short text and a known locator."
+}

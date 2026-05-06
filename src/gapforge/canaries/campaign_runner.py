@@ -7,7 +7,13 @@ import os
 from pathlib import Path
 
 from gapforge.campaigns import CampaignManager
+from gapforge.campaigns.acceptance import (
+    campaign_task_attestation_status,
+    create_campaign_actual_run_attestation,
+)
 from gapforge.campaigns.controller import CampaignController
+from gapforge.campaigns.importer import CampaignOutputImporter
+from gapforge.campaigns.task_packs import create_campaign_task_pack
 from gapforge.canaries.campaign_profiles import (
     default_campaign_canary_profiles,
     get_campaign_canary_profile,
@@ -17,6 +23,7 @@ from gapforge.config import GapForgeConfig
 from gapforge.models import (
     CampaignCanaryProfile,
     CampaignCanaryRecord,
+    EvidenceSpan,
     Gap,
     GapEvidenceMatrix,
     NoveltyDossier,
@@ -31,6 +38,17 @@ from gapforge.models import (
 from gapforge.project_memory import ProjectMemoryManager
 from gapforge.retrieval import build_project_index
 from gapforge.state import ResearchStateManager, slugify, utc_now_compact, utc_now_iso
+
+_SINGLE_TASK_COMPLETION_PROFILES = {
+    "single_task_codex_handoff",
+    "single_task_fake_handoff_regression",
+    "manual_pdf_codex_reading_handoff",
+    "manual_pdf_fake_reading_regression",
+}
+_REAL_SINGLE_TASK_PROFILES = {
+    "single_task_codex_handoff",
+    "manual_pdf_codex_reading_handoff",
+}
 
 
 class CampaignCanaryRunManager:
@@ -56,6 +74,14 @@ class CampaignCanaryRunManager:
             return self._failed(profile, "GAPFORGE_ENABLE_REAL_RUNS=1 is required for real Codex/GPT-5.4 campaign canaries.")
         if profile.requires_local_pdf and not real:
             return self._failed(profile, "Manual PDF campaign canary requires --real and a local PDF workflow.")
+        if profile.id == "manual_pdf_fake_reading_regression":
+            return self._run_manual_pdf_fake_reading(profile)
+        if profile.id == "manual_pdf_codex_reading_handoff":
+            return self._plan_manual_pdf_codex_reading_handoff(profile)
+        if profile.id == "single_task_fake_handoff_regression":
+            return self._run_single_task_fake_handoff(profile)
+        if profile.id == "single_task_codex_handoff":
+            return self._plan_single_task_codex_handoff(profile)
         if profile.id == "fake_agent_campaign_regression":
             return self._run_fake_campaign(profile)
         if profile.id == "agentic_undercovered_refusal":
@@ -67,6 +93,56 @@ class CampaignCanaryRunManager:
         if not path.exists():
             raise FileNotFoundError(f"No campaign canary record found for {canary_id}")
         return from_dict(CampaignCanaryRecord, json.loads(path.read_text(encoding="utf-8")))
+
+    def complete(self, canary_id: str) -> CampaignCanaryRecord:
+        record = self.load_record(canary_id)
+        profile = get_campaign_canary_profile(record.profile_id)
+        if profile.id not in _SINGLE_TASK_COMPLETION_PROFILES:
+            record.status = "failed"
+            record.accepted = False
+            record.failure_reason = "Completion check is only defined for single-task handoff canaries."
+            self.save_record(record, profile)
+            return record
+        if not record.campaign_id:
+            record.status = "failed"
+            record.failure_reason = "Canary has no campaign ID."
+            self.save_record(record, profile)
+            return record
+        campaign_state = CampaignManager(self.config).load_campaign_state(record.campaign_id)
+        task_id = campaign_state.campaign.task_ids[-1] if campaign_state.campaign.task_ids else ""
+        if not task_id:
+            record.status = "failed"
+            record.failure_reason = "Canary campaign has no task ID."
+            self.save_record(record, profile)
+            return record
+        latest_import = next((item for item in reversed(campaign_state.imports) if item.task_id == task_id), None)
+        attestation_status = campaign_task_attestation_status(campaign_state, task_id)
+        review_accepted = bool(campaign_state.acceptance_summary and campaign_state.acceptance_summary.accepted) or any(
+            review.accepted for review in campaign_state.human_reviews
+        )
+        blockers: list[str] = []
+        if latest_import is None or latest_import.status not in {"applied", "partial", "valid"}:
+            blockers.append("Validated import is missing.")
+        if not attestation_status.has_attestation:
+            blockers.append("Codex/GPT-5.4 attestation is missing.")
+        if profile.id in _REAL_SINGLE_TASK_PROFILES and not attestation_status.accepted_as_actual_run:
+            blockers.extend(attestation_status.blockers)
+        if not review_accepted:
+            blockers.append("Human campaign review acceptance is missing.")
+        blockers = list(dict.fromkeys(blockers))
+        passed = not blockers
+        record.status = "accepted" if passed else "failed"
+        record.accepted = passed
+        record.actual_run_status = "accepted" if passed else "not_completed"
+        if profile.id == "single_task_fake_handoff_regression":
+            record.actual_run_status = "fake_not_actual"
+        if profile.id == "manual_pdf_fake_reading_regression":
+            record.actual_run_status = "fake_not_actual"
+        record.human_review_status = "accepted" if review_accepted else "required"
+        record.failure_reason = "; ".join(blockers)
+        record.artifacts = _artifact_paths(self._campaign_dir(campaign_state.campaign.project_id, campaign_state.campaign.id))
+        self.save_record(record, profile)
+        return record
 
     def save_record(self, record: CampaignCanaryRecord, profile: CampaignCanaryProfile | None = None) -> Path:
         record_dir = self._record_dir(record.id)
@@ -109,6 +185,106 @@ class CampaignCanaryRunManager:
         record.actual_run_status = "not_applicable"
         record.human_review_status = "not_required"
         record.failure_reason = "" if refused else "Undercovered refusal did not stop without a ready direction."
+        self.save_record(record, profile)
+        return record
+
+    def _plan_manual_pdf_codex_reading_handoff(self, profile: CampaignCanaryProfile) -> CampaignCanaryRecord:
+        return self._plan_single_task_handoff(
+            profile,
+            task_type="deep_reader_batch",
+            mode="manual_handoff",
+            failure_reason="Awaiting Codex reading output, validation/import, attestation, and campaign review.",
+        )
+
+    def _run_manual_pdf_fake_reading(self, profile: CampaignCanaryProfile) -> CampaignCanaryRecord:
+        project, campaign_id = self._create_seeded_campaign(profile, mode="fake_agent", novelty_verdict="unknown")
+        campaign_manager = CampaignManager(self.config)
+        pack_dir = create_campaign_task_pack(self.config, campaign_id, "deep_reader_batch")
+        task_id = pack_dir.name
+        _write_manual_pdf_reading_output(pack_dir, include_claim=True)
+        CampaignOutputImporter(self.config).import_outputs(campaign_id, task_id, [])
+        campaign_state = campaign_manager.load_campaign_state(campaign_id)
+        create_campaign_actual_run_attestation(
+            campaign_state,
+            task_id,
+            agent_name="fake",
+            model="gapforge-fake-agent",
+            execution_method="fake",
+            attester="CI",
+        )
+        campaign_manager.save_campaign_state(campaign_state)
+        record = self._record_from_campaign(profile, campaign_id, project.project.id)
+        imported = any(item.task_id == task_id and item.status in {"applied", "partial", "valid"} for item in campaign_state.imports)
+        record.status = "complete" if imported else "failed"
+        record.accepted = imported
+        record.actual_run_status = "fake_not_actual"
+        record.human_review_status = "not_required"
+        record.failure_reason = "" if imported else "Fake manual-PDF reading handoff did not import fixture output."
+        self.save_record(record, profile)
+        return record
+
+    def _plan_single_task_codex_handoff(self, profile: CampaignCanaryProfile) -> CampaignCanaryRecord:
+        return self._plan_single_task_handoff(
+            profile,
+            task_type="novelty_reviewer",
+            mode="manual_handoff",
+            failure_reason="Awaiting Codex output, validation/import, attestation, and campaign review.",
+        )
+
+    def _plan_single_task_handoff(
+        self,
+        profile: CampaignCanaryProfile,
+        *,
+        task_type: str,
+        mode: str,
+        failure_reason: str,
+    ) -> CampaignCanaryRecord:
+        project, campaign_id = self._create_seeded_campaign(profile, mode=mode, novelty_verdict="unknown")
+        campaign_manager = CampaignManager(self.config)
+        pack_dir = create_campaign_task_pack(self.config, campaign_id, task_type)
+        task_id = pack_dir.name
+        campaign_state = campaign_manager.load_campaign_state(campaign_id)
+        campaign_state.campaign.status = "paused"
+        for step in campaign_state.steps:
+            if step.task_spec_id == task_id:
+                step.status = "blocked"
+                step.blocking_issues = [
+                    "Manual Codex handoff pending: awaiting validated import, attestation, and human review.",
+                ]
+        campaign_manager.save_campaign_state(campaign_state)
+        record = self._record_from_campaign(profile, campaign_id, project.project.id)
+        record.status = "planned"
+        record.actual_run_status = "manual_handoff_pending"
+        record.human_review_status = "required"
+        record.accepted = False
+        record.failure_reason = failure_reason
+        self.save_record(record, profile)
+        return record
+
+    def _run_single_task_fake_handoff(self, profile: CampaignCanaryProfile) -> CampaignCanaryRecord:
+        project, campaign_id = self._create_seeded_campaign(profile, mode="fake_agent", novelty_verdict="unknown")
+        campaign_manager = CampaignManager(self.config)
+        pack_dir = create_campaign_task_pack(self.config, campaign_id, "novelty_reviewer")
+        task_id = pack_dir.name
+        _write_single_task_novelty_output(pack_dir, verdict="unknown")
+        CampaignOutputImporter(self.config).import_outputs(campaign_id, task_id, [])
+        campaign_state = campaign_manager.load_campaign_state(campaign_id)
+        create_campaign_actual_run_attestation(
+            campaign_state,
+            task_id,
+            agent_name="fake",
+            model="gapforge-fake-agent",
+            execution_method="fake",
+            attester="CI",
+        )
+        campaign_manager.save_campaign_state(campaign_state)
+        record = self._record_from_campaign(profile, campaign_id, project.project.id)
+        imported = any(item.task_id == task_id and item.status in {"applied", "partial", "valid"} for item in campaign_state.imports)
+        record.status = "complete" if imported else "failed"
+        record.accepted = imported
+        record.actual_run_status = "fake_not_actual"
+        record.human_review_status = "not_required"
+        record.failure_reason = "" if imported else "Fake single-task handoff did not import fixture output."
         self.save_record(record, profile)
         return record
 
@@ -155,6 +331,17 @@ class CampaignCanaryRunManager:
                 title="Abstract",
                 section_type="abstract",
                 text="Synthetic full-text section for campaign canary evidence.",
+            )
+        )
+        run.evidence_spans.append(
+            EvidenceSpan(
+                id="span-1",
+                paper_id="paper-1",
+                section_id="section-1",
+                quote="Synthetic full-text section for campaign canary evidence.",
+                locator="paper-1:Abstract:p1",
+                evidence_type="claim",
+                confidence="medium",
             )
         )
         run.paper_notes.append(PaperNote(paper_id="paper-1", one_sentence_summary="Synthetic campaign note.", confidence="medium"))
@@ -247,6 +434,9 @@ class CampaignCanaryRunManager:
     def _record_path(self, canary_id: str) -> Path:
         return self._record_dir(canary_id) / "record.json"
 
+    def _campaign_dir(self, project_id: str, campaign_id: str) -> Path:
+        return self.config.project_root / project_id / "campaigns" / campaign_id
+
 
 def _artifact_paths(campaign_dir: Path) -> list[str]:
     if not campaign_dir.exists():
@@ -260,8 +450,81 @@ def _artifact_paths(campaign_dir: Path) -> list[str]:
         "campaign_report.md",
     ]
     paths = [str(campaign_dir / name) for name in names if (campaign_dir / name).exists()]
-    paths.extend(str(path) for path in (campaign_dir / "agent_tasks").glob("*/CAMPAIGN_TASK.md") if path.exists())
+    for filename in ("CAMPAIGN_TASK.md", "CODEX_PROMPT.md", "HANDOFF.md", "README_FIRST.md", "VALIDATE_AND_IMPORT.sh"):
+        paths.extend(str(path) for path in (campaign_dir / "agent_tasks").glob(f"*/{filename}") if path.exists())
     return sorted(set(paths))
+
+
+def _write_single_task_novelty_output(pack_dir: Path, *, verdict: str) -> None:
+    outputs_dir = pack_dir / "outputs"
+    outputs_dir.mkdir(parents=True, exist_ok=True)
+    (outputs_dir / "novelty_dossiers_patch.json").write_text(
+        json.dumps(
+            {
+                "novelty_dossiers_patch": [
+                    {
+                        "target_id": "gap-1",
+                        "idea_summary": "Fixture novelty handoff output for single-task canary.",
+                        "top_prior_work": ["paper-1"] if verdict == "reject" else [],
+                        "comparison_table": [],
+                        "verdict": verdict,
+                        "novelty_strength": "unknown",
+                        "confidence": "low",
+                        "missing_searches": ["fixture-only canary does not establish real novelty"],
+                    }
+                ]
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+
+def _write_manual_pdf_reading_output(pack_dir: Path, *, include_claim: bool = False, locator: str = "paper-1:Abstract:p1") -> None:
+    outputs_dir = pack_dir / "outputs"
+    outputs_dir.mkdir(parents=True, exist_ok=True)
+    (outputs_dir / "paper_notes_patch.json").write_text(
+        json.dumps(
+            {
+                "paper_notes_patch": [
+                    {
+                        "paper_id": "paper-1",
+                        "source_basis": "fixture full text",
+                        "one_sentence_summary": "Fixture section states synthetic full-text evidence for canary validation.",
+                        "main_claims": ["Fixture paper provides a synthetic full-text section for workflow validation."],
+                        "main_results": [],
+                        "limitations": ["Fixture-only section does not establish real literature quality."],
+                        "evidence_locators": [locator],
+                        "confidence": "medium",
+                    }
+                ]
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    if include_claim:
+        (outputs_dir / "claims_patch.json").write_text(
+            json.dumps(
+                {
+                    "claims_patch": [
+                        {
+                            "id": "claim-fixture-reading",
+                            "paper_id": "paper-1",
+                            "text": "Fixture paper contains a synthetic full-text section for workflow validation.",
+                            "status": "supported",
+                            "confidence": "medium",
+                            "evidence_locators": [locator],
+                        }
+                    ]
+                },
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
 
 
 def _has_ready_direction(program) -> bool:  # noqa: ANN001

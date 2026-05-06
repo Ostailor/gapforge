@@ -301,17 +301,15 @@ def render_campaign_report_markdown(payload: dict[str, Any]) -> str:
 
 
 def _actual_run_status(state: CampaignState) -> dict[str, Any]:
-    accepted = [
-        str(obj.get("id", ""))
-        for record in state.imports
-        if record.status in {"applied", "partial"}
-        for obj in record.accepted_objects
-        if obj.get("type") == "agent_actual_run_attestation" and obj.get("accepted") is True
-    ]
+    from gapforge.campaigns.acceptance import accepted_real_agent_output_ids, campaign_attestation_statuses
+
+    accepted = accepted_real_agent_output_ids(state)
+    statuses = campaign_attestation_statuses(state)
     attested = bool(accepted)
     return {
         "attestation_present": attested,
         "accepted_real_agent_outputs": accepted,
+        "task_statuses": [to_plain(status) for status in statuses],
         "release_gate_eligible": bool(state.acceptance_summary and state.acceptance_summary.release_gate_eligible),
         "campaign_acceptance": to_plain(state.acceptance_summary) if state.acceptance_summary else None,
     }

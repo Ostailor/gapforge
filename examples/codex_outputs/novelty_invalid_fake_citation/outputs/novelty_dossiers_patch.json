@@ -1,0 +1,13 @@
+{
+  "novelty_dossiers": [
+    {
+      "target_id": "gap-1",
+      "idea_summary": "Claim novelty against a fabricated paper.",
+      "top_prior_work": ["Imaginary Monitoring Paper 2099"],
+      "verdict": "pursue",
+      "novelty_strength": "strong",
+      "confidence": "high"
+    }
+  ],
+  "public_reasoning_summary": "This file is intentionally invalid."
+}

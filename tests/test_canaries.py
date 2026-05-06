@@ -6,6 +6,10 @@ import subprocess
 import sys
 from pathlib import Path
 
+from gapforge.campaigns import CampaignManager
+from gapforge.campaigns.acceptance import create_campaign_actual_run_attestation
+from gapforge.campaigns.importer import CampaignOutputImporter
+from gapforge.campaigns.review import CampaignReviewManager
 from gapforge.canaries import CampaignCanaryRunManager, CanaryReviewManager, CanaryRunManager, default_canary_profiles
 from gapforge.config import GapForgeConfig
 
@@ -29,6 +33,10 @@ def test_campaign_canary_profiles_include_required_v4_profiles(tmp_path: Path) -
     assert "agentic_undercovered_refusal" in profile_ids
     assert "manual_pdf_agentic" in profile_ids
     assert "fake_agent_campaign_regression" in profile_ids
+    assert "single_task_codex_handoff" in profile_ids
+    assert "single_task_fake_handoff_regression" in profile_ids
+    assert "manual_pdf_codex_reading_handoff" in profile_ids
+    assert "manual_pdf_fake_reading_regression" in profile_ids
 
 
 def test_campaign_canary_plan_includes_commands_and_acceptance_criteria(tmp_path: Path) -> None:
@@ -56,6 +64,262 @@ def test_fake_campaign_canary_runs_offline_and_persists_record(tmp_path: Path, m
     assert record.artifacts
     loaded = manager.load_record(record.id)
     assert loaded.id == record.id
+
+
+def test_single_task_fake_handoff_regression_passes_ci(tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    monkeypatch.setenv("GAPFORGE_DISABLE_NETWORK", "1")
+    manager = CampaignCanaryRunManager(GapForgeConfig.from_cwd(tmp_path))
+
+    record = manager.run("single_task_fake_handoff_regression")
+
+    assert record.status == "complete"
+    assert record.accepted is True
+    assert record.actual_run_status == "fake_not_actual"
+    campaign_state = CampaignManager(manager.config).load_campaign_state(record.campaign_id)
+    assert campaign_state.imports
+    assert campaign_state.agent_actual_run_attestations
+    assert campaign_state.agent_actual_run_attestations[-1].agent_name == "fake"
+
+
+def test_manual_pdf_fake_reading_regression_passes_ci(tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    monkeypatch.setenv("GAPFORGE_DISABLE_NETWORK", "1")
+    manager = CampaignCanaryRunManager(GapForgeConfig.from_cwd(tmp_path))
+
+    record = manager.run("manual_pdf_fake_reading_regression")
+
+    assert record.status == "complete"
+    assert record.accepted is True
+    assert record.actual_run_status == "fake_not_actual"
+    campaign_state = CampaignManager(manager.config).load_campaign_state(record.campaign_id)
+    assert any(
+        item.task_id.endswith("deep_reader_batch") and item.status in {"applied", "partial", "valid"} for item in campaign_state.imports
+    )
+
+
+def test_single_task_real_handoff_refuses_without_env(tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    monkeypatch.delenv("GAPFORGE_ENABLE_REAL_RUNS", raising=False)
+    manager = CampaignCanaryRunManager(GapForgeConfig.from_cwd(tmp_path))
+
+    record = manager.run("single_task_codex_handoff", real=True)
+
+    assert record.status == "failed"
+    assert "GAPFORGE_ENABLE_REAL_RUNS=1" in record.failure_reason
+
+
+def test_manual_pdf_reading_real_handoff_refuses_without_env(tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    monkeypatch.delenv("GAPFORGE_ENABLE_REAL_RUNS", raising=False)
+    manager = CampaignCanaryRunManager(GapForgeConfig.from_cwd(tmp_path))
+
+    record = manager.run("manual_pdf_codex_reading_handoff", real=True)
+
+    assert record.status == "failed"
+    assert "GAPFORGE_ENABLE_REAL_RUNS=1" in record.failure_reason
+
+
+def test_single_task_real_handoff_creates_copy_paste_bundle(tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    monkeypatch.setenv("GAPFORGE_ENABLE_REAL_RUNS", "1")
+    manager = CampaignCanaryRunManager(GapForgeConfig.from_cwd(tmp_path))
+
+    record = manager.run("single_task_codex_handoff", real=True)
+
+    assert record.status == "planned"
+    assert record.actual_run_status == "manual_handoff_pending"
+    campaign_state = CampaignManager(manager.config).load_campaign_state(record.campaign_id)
+    assert campaign_state.campaign.status == "paused"
+    task_id = campaign_state.campaign.task_ids[-1]
+    task_pack = next(Path(path).parent for path in record.artifacts if path.endswith("CAMPAIGN_TASK.md"))
+    assert task_pack.name == task_id
+    assert (task_pack / "CODEX_PROMPT.md").exists()
+    assert (task_pack / "VALIDATE_AND_IMPORT.sh").exists()
+    assert "outputs" in (task_pack / "CODEX_PROMPT.md").read_text(encoding="utf-8")
+
+
+def test_manual_pdf_reading_handoff_creates_deep_reading_task(tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    monkeypatch.setenv("GAPFORGE_ENABLE_REAL_RUNS", "1")
+    manager = CampaignCanaryRunManager(GapForgeConfig.from_cwd(tmp_path))
+
+    record = manager.run("manual_pdf_codex_reading_handoff", real=True)
+
+    assert record.status == "planned"
+    assert record.actual_run_status == "manual_handoff_pending"
+    campaign_state = CampaignManager(manager.config).load_campaign_state(record.campaign_id)
+    task_id = campaign_state.campaign.task_ids[-1]
+    task_pack = next(Path(path).parent for path in record.artifacts if path.endswith("CAMPAIGN_TASK.md"))
+    assert task_id.endswith("deep_reader_batch")
+    assert "paper_notes_patch.json" in (task_pack / "CODEX_PROMPT.md").read_text(encoding="utf-8")
+
+
+def test_single_task_completion_fails_until_import_attestation_review(tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    monkeypatch.setenv("GAPFORGE_ENABLE_REAL_RUNS", "1")
+    manager = CampaignCanaryRunManager(GapForgeConfig.from_cwd(tmp_path))
+    record = manager.run("single_task_codex_handoff", real=True)
+
+    incomplete = manager.complete(record.id)
+
+    assert incomplete.accepted is False
+    assert "Validated import is missing." in incomplete.failure_reason
+    assert "attestation" in incomplete.failure_reason.lower()
+    assert "Human campaign review acceptance is missing." in incomplete.failure_reason
+
+
+def test_manual_pdf_reading_invalid_locator_fails_validation(tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    monkeypatch.setenv("GAPFORGE_ENABLE_REAL_RUNS", "1")
+    config = GapForgeConfig.from_cwd(tmp_path)
+    manager = CampaignCanaryRunManager(config)
+    record = manager.run("manual_pdf_codex_reading_handoff", real=True)
+    campaign_state = CampaignManager(config).load_campaign_state(record.campaign_id)
+    task_id = campaign_state.campaign.task_ids[-1]
+    task_pack = next(Path(path).parent for path in record.artifacts if path.endswith("CAMPAIGN_TASK.md"))
+    _write_fixture_reading_output(task_pack, locator="missing-span")
+
+    import_record = CampaignOutputImporter(config).import_outputs(record.campaign_id, task_id, [])
+
+    assert import_record.status == "rejected"
+    assert any("unknown evidence_span_id: missing-span" in issue for issue in import_record.issues)
+
+
+def test_manual_pdf_reading_review_blocks_missing_attestation(tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    monkeypatch.setenv("GAPFORGE_ENABLE_REAL_RUNS", "1")
+    config = GapForgeConfig.from_cwd(tmp_path)
+    manager = CampaignCanaryRunManager(config)
+    record = manager.run("manual_pdf_codex_reading_handoff", real=True)
+    campaign_state = CampaignManager(config).load_campaign_state(record.campaign_id)
+    task_id = campaign_state.campaign.task_ids[-1]
+    task_pack = next(Path(path).parent for path in record.artifacts if path.endswith("CAMPAIGN_TASK.md"))
+    _write_fixture_reading_output(task_pack)
+    CampaignOutputImporter(config).import_outputs(record.campaign_id, task_id, [])
+    CampaignReviewManager(config).review(record.campaign_id, accept=True, reviewer="Reviewer")
+
+    completed = manager.complete(record.id)
+
+    assert completed.accepted is False
+    assert "Codex/GPT-5.4 attestation is missing." in completed.failure_reason
+
+
+def test_manual_pdf_reading_valid_fixture_output_passes(tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    monkeypatch.setenv("GAPFORGE_ENABLE_REAL_RUNS", "1")
+    config = GapForgeConfig.from_cwd(tmp_path)
+    manager = CampaignCanaryRunManager(config)
+    record = manager.run("manual_pdf_codex_reading_handoff", real=True)
+    campaign_manager = CampaignManager(config)
+    campaign_state = campaign_manager.load_campaign_state(record.campaign_id)
+    task_id = campaign_state.campaign.task_ids[-1]
+    task_pack = next(Path(path).parent for path in record.artifacts if path.endswith("CAMPAIGN_TASK.md"))
+    _write_fixture_reading_output(task_pack, include_claim=True)
+    import_record = CampaignOutputImporter(config).import_outputs(record.campaign_id, task_id, [])
+    assert import_record.status == "partial"
+    campaign_state = campaign_manager.load_campaign_state(record.campaign_id)
+    create_campaign_actual_run_attestation(
+        campaign_state,
+        task_id,
+        agent_name="codex",
+        model="gpt-5.4",
+        execution_method="task_pack",
+        attester="Reviewer",
+    )
+    campaign_manager.save_campaign_state(campaign_state)
+    CampaignReviewManager(config).review(record.campaign_id, accept=True, reviewer="Reviewer")
+
+    completed = manager.complete(record.id)
+
+    assert completed.status == "accepted"
+    assert completed.accepted is True
+    assert completed.actual_run_status == "accepted"
+
+
+def test_single_task_completion_passes_after_simulated_codex_flow(tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    monkeypatch.setenv("GAPFORGE_ENABLE_REAL_RUNS", "1")
+    config = GapForgeConfig.from_cwd(tmp_path)
+    manager = CampaignCanaryRunManager(config)
+    record = manager.run("single_task_codex_handoff", real=True)
+    campaign_manager = CampaignManager(config)
+    campaign_state = campaign_manager.load_campaign_state(record.campaign_id)
+    task_id = campaign_state.campaign.task_ids[-1]
+    task_pack = next(Path(path).parent for path in record.artifacts if path.endswith("CAMPAIGN_TASK.md"))
+    (task_pack / "outputs" / "novelty_dossiers_patch.json").write_text(
+        json.dumps(
+            {
+                "novelty_dossiers_patch": [
+                    {
+                        "target_id": "gap-1",
+                        "idea_summary": "Fixture Codex output marks novelty unknown.",
+                        "top_prior_work": [],
+                        "comparison_table": [],
+                        "verdict": "unknown",
+                        "novelty_strength": "unknown",
+                        "confidence": "low",
+                        "missing_searches": ["fixture canary does not run external searches"],
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    CampaignOutputImporter(config).import_outputs(record.campaign_id, task_id, [])
+    campaign_state = campaign_manager.load_campaign_state(record.campaign_id)
+    create_campaign_actual_run_attestation(
+        campaign_state,
+        task_id,
+        agent_name="codex",
+        model="gpt-5.4",
+        execution_method="task_pack",
+        attester="Reviewer",
+    )
+    campaign_manager.save_campaign_state(campaign_state)
+    CampaignReviewManager(config).review(record.campaign_id, accept=True, reviewer="Reviewer")
+
+    completed = manager.complete(record.id)
+
+    assert completed.status == "accepted"
+    assert completed.accepted is True
+    assert completed.actual_run_status == "accepted"
+
+
+def _write_fixture_reading_output(
+    task_pack: Path,
+    *,
+    locator: str = "paper-1:Abstract:p1",
+    include_claim: bool = False,
+) -> None:
+    outputs_dir = task_pack / "outputs"
+    outputs_dir.mkdir(parents=True, exist_ok=True)
+    (outputs_dir / "paper_notes_patch.json").write_text(
+        json.dumps(
+            {
+                "paper_notes_patch": [
+                    {
+                        "paper_id": "paper-1",
+                        "source_basis": "fixture full text",
+                        "one_sentence_summary": "Fixture section supports a workflow-only reading note.",
+                        "main_claims": ["Fixture section exists for canary validation."],
+                        "main_results": [],
+                        "limitations": ["Fixture-only content is not real literature evidence."],
+                        "evidence_locators": [locator],
+                        "confidence": "medium",
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    if include_claim:
+        (outputs_dir / "claims_patch.json").write_text(
+            json.dumps(
+                {
+                    "claims_patch": [
+                        {
+                            "id": "claim-fixture-reading",
+                            "paper_id": "paper-1",
+                            "text": "Fixture section exists for canary validation.",
+                            "status": "supported",
+                            "confidence": "medium",
+                            "evidence_locators": [locator],
+                        }
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
 
 
 def test_real_campaign_canary_refuses_without_env(tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]

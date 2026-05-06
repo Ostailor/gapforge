@@ -1,0 +1,12 @@
+{
+  "claims": [
+    {
+      "id": "claim-invalid-unsupported",
+      "text": "The method definitely works in deployment.",
+      "type": "result",
+      "status": "supported",
+      "confidence": "high"
+    }
+  ],
+  "public_reasoning_summary": "This file is intentionally invalid because no evidence locator is provided."
+}

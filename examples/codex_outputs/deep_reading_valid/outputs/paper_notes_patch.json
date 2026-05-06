@@ -1,0 +1,25 @@
+{
+  "paper_notes": [
+    {
+      "paper_id": "paper-1",
+      "citation_key": "researcher2025low",
+      "one_sentence_summary": "The fixture paper evaluates low-FPR collusion detection in a synthetic benchmark.",
+      "core_claims": ["The paper studies low-FPR collusion detection."],
+      "method": "unknown",
+      "datasets": ["synthetic benchmark"],
+      "metrics": ["low false positive rate"],
+      "main_results": [],
+      "assumptions": [],
+      "stated_limitations": [],
+      "unstated_limitations": ["Full text is not available in this fixture."],
+      "what_it_cannot_answer": ["It cannot establish real-world deployment performance from the fixture abstract alone."],
+      "useful_technical_tools": [],
+      "possible_connections": ["Useful as a fixture for low-FPR monitoring workflows."],
+      "relevance_to_topic": "medium",
+      "confidence": "medium",
+      "quotes_or_evidence_snippets": ["paper-1:Abstract:p1"],
+      "created_by_skill": "codex-example"
+    }
+  ],
+  "public_reasoning_summary": "This note only uses fixture metadata and the known EvidenceSpan locator."
+}

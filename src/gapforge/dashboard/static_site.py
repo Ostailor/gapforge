@@ -12,6 +12,7 @@ from typing import Any
 from gapforge.campaigns import CampaignState
 from gapforge.config import GapForgeConfig
 from gapforge.models import (
+    AgentActualRunAttestation,
     CampaignAcceptanceSummary,
     CampaignBudget,
     CampaignCanaryRecord,
@@ -636,10 +637,15 @@ def _render_release_gate(context: _DashboardContext) -> str:
         [
             f'<div class="{css}"><h2>v0.4 Actual-Run Release Gate: {_e(status)}</h2>'
             f"<p>Eligible real campaigns: {_e(str(len(eligible)))}</p></div>",
+            "<h2>Fake vs Real</h2>",
+            "<p>Fake-agent canaries validate schemas and orchestration only. They never count as actual Codex/GPT-5.4 acceptance. "
+            "Task-pack or handoff output counts only after validated import, human attestation, and campaign review.</p>",
             "<h2>Fake Run Warnings</h2>",
             _list(fake_warnings, css_class="warning"),
             "<h2>Acceptance Blockers</h2>",
             _list(blockers, css_class="warning"),
+            "<h2>Suggested Next Commands</h2>",
+            _list(_release_gate_next_commands(context, blockers), css_class="warning"),
             "<h2>Eligible Campaigns</h2>",
             _table(
                 ["Campaign", "Mode", "Agent", "Model", "Accepted Real Imports"],
@@ -723,6 +729,9 @@ def _load_campaign_states(program: ResearchProgramState) -> list[CampaignState]:
                 decisions=[from_dict(CampaignDecision, item) for item in _read_list(campaign_dir / "decisions.json")],
                 milestones=[from_dict(CampaignMilestone, item) for item in _read_list(campaign_dir / "milestones.json")],
                 imports=[from_dict(CampaignImportRecord, item) for item in _read_list(campaign_dir / "imports.json")],
+                agent_actual_run_attestations=[
+                    from_dict(AgentActualRunAttestation, item) for item in _read_list(campaign_dir / "agent_actual_run_attestations.json")
+                ],
                 human_reviews=[from_dict(CampaignHumanReview, item) for item in _read_list(campaign_dir / "campaign_reviews.json")],
                 acceptance_summary=from_dict(CampaignAcceptanceSummary, raw_acceptance) if raw_acceptance else None,
                 budget=from_dict(CampaignBudget, raw_budget) if raw_budget else None,
@@ -821,6 +830,31 @@ def _release_gate_blockers(context: _DashboardContext) -> list[str]:
         if state.acceptance_summary:
             blockers.extend(f"`{state.campaign.id}`: {item}" for item in state.acceptance_summary.blocking_failures)
     return _dedupe(blockers)
+
+
+def _release_gate_next_commands(context: _DashboardContext, blockers: list[str]) -> list[str]:
+    commands: list[str] = []
+    if not context.campaign_states or not any(
+        state.acceptance_summary and state.acceptance_summary.release_gate_eligible for state in context.campaign_states
+    ):
+        commands.append("gapforge campaign-canary-run --profile single_task_codex_handoff --real")
+    text = " ".join(blockers).lower()
+    if "attestation" in text:
+        commands.append(
+            'gapforge attest-agent-run --task-id <task-id> --agent codex --model gpt-5.4 --method task_pack --attester "<name>"'
+        )
+    if "human review" in text:
+        commands.append('gapforge campaign-review --campaign-id <campaign-id> --accept --reviewer "<name>"')
+    if "validated codex" in text or "import" in text:
+        commands.append("gapforge validate-import-all --campaign-id <campaign-id>")
+    commands.extend(
+        [
+            "gapforge campaign-canary-run --profile agentic_low_fpr_collusion --real",
+            "gapforge campaign-canary-run --profile agentic_undercovered_refusal --real",
+            "gapforge campaign-canary-run --profile manual_pdf_codex_reading_handoff --real",
+        ]
+    )
+    return _dedupe(commands)
 
 
 def _dedupe(items: list[str]) -> list[str]:

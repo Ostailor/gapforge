@@ -1,0 +1,13 @@
+{
+  "claims": [
+    {
+      "id": "claim-example-supported",
+      "text": "The fixture paper evaluates low-FPR collusion detection.",
+      "type": "result",
+      "status": "supported",
+      "confidence": "medium",
+      "evidence_span_ids": ["span-1"]
+    }
+  ],
+  "public_reasoning_summary": "The claim cites an existing fixture evidence span."
+}

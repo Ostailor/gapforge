@@ -74,7 +74,7 @@ Expected behavior:
 
 ## v0.4 Campaign Quickstarts
 
-v0.4 introduces project-level campaigns. Campaigns coordinate search, source coverage, retrieval, Codex task packs, validated imports, novelty loops, reviewer loops, experiment protocols, code-task handoff, dashboards, and human acceptance.
+v0.4 introduces project-level campaigns. Campaigns coordinate search, source coverage, retrieval, Codex task packs, validated imports, novelty loops, reviewer loops, experiment protocols, code-task handoff, dashboards, and human acceptance. For the complete Codex command path, see [docs/CODEX_QUICKSTART.md](docs/CODEX_QUICKSTART.md).
 
 ### Deterministic Campaign
 
@@ -101,67 +101,105 @@ gapforge eval --v4 --write-report
 
 ### Codex Task-Pack Actual-Run Workflow
 
-Use this when there is no stable direct Codex runner configured. It can count as real actual-run evidence only after a real Codex/GPT-5.4 user or process writes outputs, GapForge validates/imports them, a human attests the task, and a campaign review accepts the result.
+Use this when no stable direct Codex runner is configured. It can count as real actual-run evidence only after Codex/GPT-5.4 writes outputs, GapForge validates/imports them, a human attests the task, and campaign review accepts the result.
 
 ```bash
 export GAPFORGE_ENABLE_REAL_RUNS=1
-gapforge init-project "v4 codex campaign"
-gapforge campaign-create "low false positive collusion detection in LLM agents" \
-  --project-id v4-codex-campaign \
-  --mode codex_task_pack \
-  --agent-name codex \
-  --model gpt-5.4 \
-  --source-profile ai_safety
+export GAPFORGE_AGENT_MODE=task-pack
+export GAPFORGE_AGENT_NAME=codex
+export GAPFORGE_CODEX_MODEL=gpt-5.4
 
-gapforge campaign-task --campaign-id <campaign-id> --type literature_scout
-gapforge task-handoff --task-id <task-id>
-# Run Codex/GPT-5.4 externally against HANDOFF.md and write outputs into outputs/.
-gapforge campaign-validate-output --campaign-id <campaign-id> --task-id <task-id>
-gapforge campaign-import-output --campaign-id <campaign-id> --task-id <task-id>
+gapforge setup-codex
+gapforge campaign-canary-run --profile single_task_codex_handoff --real
+gapforge latest-codex-task --campaign-id <campaign-id>
+gapforge codex-handoff --task-id <task-id> --print-prompt
+# Run Codex/GPT-5.4 manually and write JSON outputs into outputs/.
+gapforge validate-import-all --task-id <task-id>
 gapforge attest-agent-run --task-id <task-id> --agent codex --model gpt-5.4 --method task_pack --attester "<name>"
 gapforge campaign-review --campaign-id <campaign-id> --accept --reviewer "<name>"
-gapforge campaign-acceptance --campaign-id <campaign-id>
+gapforge actual-run-status --campaign-id <campaign-id>
 ```
 
 If validation fails, repair without weakening validation:
 
 ```bash
-gapforge repair-agent-output --task-id <task-id> --path <bad-output.json> --handoff
+gapforge codex-doctor --task-id <task-id>
+gapforge repair-agent-output --task-id <task-id> --latest-invalid --handoff --print-prompt
+gapforge validate-repair-output --repair-id <repair-id>
+gapforge import-repair-output --repair-id <repair-id>
 ```
 
 ### Direct Runner Workflow
 
-Use direct mode only when a trusted local Codex command runner is configured. If it is missing, GapForge must fail clearly or produce handoff instructions; it must not fake success.
+Use direct mode only when a trusted local Codex command runner is configured. Preview it before execution.
 
 ```bash
 export GAPFORGE_ENABLE_REAL_RUNS=1
+export GAPFORGE_AGENT_MODE=direct
+export GAPFORGE_AGENT_NAME=codex
 export GAPFORGE_CODEX_MODEL=gpt-5.4
-export GAPFORGE_CODEX_COMMAND='codex run --model {model} --task-pack {task_pack}'
-gapforge agent-capabilities
+export GAPFORGE_CODEX_COMMAND='codex run --model {model} --task-pack {task_pack} --output-dir {outputs_dir}'
+gapforge setup-codex
+gapforge codex-command-preview --task-id <task-id>
+gapforge codex-run --task-id <task-id> --direct --dry-run
 gapforge codex-run --task-id <task-id> --direct
-gapforge codex-run-status --agent-run-id <agent-run-id>
-gapforge campaign-import-output --campaign-id <campaign-id> --task-id <task-id>
+gapforge validate-import-all --task-id <task-id>
+gapforge campaign-review --campaign-id <campaign-id> --accept --reviewer "<name>"
 ```
 
 ### Campaign Acceptance and Release Gate
 
-Campaign completion is not acceptance. Acceptance requires validated imports, actual-run attestation when required, source coverage, explicit stop reason, campaign report, and human review. Fake-agent campaigns are excluded.
+Campaign completion is not acceptance. Acceptance requires validated imports, actual-run attestation when task-pack/manual-handoff is used, source coverage, explicit stop reason, campaign report, and human review. Fake-agent campaigns are excluded.
 
 ```bash
-gapforge campaign-review --campaign-id <campaign-id>
 gapforge campaign-review --campaign-id <campaign-id> --accept --reviewer "<name>"
 gapforge campaign-acceptance --campaign-id <campaign-id>
 gapforge v4-release-gate --project-id <project-id> --write-report
+gapforge v4-release-gate --explain
+gapforge v4-release-gate --next-commands
 ```
 
 `gapforge v4-release-gate` requires deterministic CI evidence, a passed fake-agent campaign canary, at least three accepted real Codex/GPT-5.4 campaigns, one experiment-ready campaign, one strict-refusal campaign, and one manual-PDF/full-text campaign. If those artifacts are missing, the gate fails closed.
 
-Current verification status from the May 5, 2026 local pass:
+Current verification status from the May 6, 2026 local pass:
 
 - Deterministic checks passed: `make format`, `make format-check`, `make lint`, `make typecheck`, `make test`, `make eval`, `gapforge eval --v2 --write-report`, `gapforge eval --v3 --write-report`, `gapforge eval --v4 --write-report`, `make coverage`, `make v2-smoke`, `make v3-smoke`, and `make v4-smoke`.
 - Fake-agent campaign canary passed with valid schema validation.
-- Actual Codex/GPT-5.4 campaign canaries that require real runs were refused because `GAPFORGE_ENABLE_REAL_RUNS` and agent settings were not configured in the environment.
-- Real-run acceptance is therefore **not complete** and must not be claimed until multiple human-reviewed actual Codex/GPT-5.4 campaigns are accepted and `gapforge v4-release-gate` passes.
+- Direct Codex/GPT-5.4 execution was available through the local `codex` CLI.
+- Three real Codex/GPT-5.4 workflow canaries were validated/imported, attested, and human-reviewed: one refusal canary, one manual-PDF/full-text reading canary, and one fixture-backed experiment-ready canary.
+- `gapforge v4-release-gate --write-report --json` passed with 3 accepted real campaigns and no blockers. These are release-gate workflow canaries, not evidence of exhaustive literature-review quality.
+
+### v0.4.1 Codex Workflow Commands
+
+v0.4.1 is scoped to Codex workflow reliability. The main commands are:
+
+```bash
+gapforge setup-codex
+gapforge codex-handoff --task-id <task-id> --print-prompt
+gapforge codex-doctor --task-id <task-id>
+gapforge validate-import-all --task-id <task-id>
+gapforge repair-agent-output --task-id <task-id> --latest-invalid --handoff --print-prompt
+```
+
+The v0.4.1 golden path is the single-task handoff canary:
+
+```bash
+export GAPFORGE_ENABLE_REAL_RUNS=1
+export GAPFORGE_AGENT_MODE=task-pack
+export GAPFORGE_AGENT_NAME=codex
+export GAPFORGE_CODEX_MODEL=gpt-5.4
+
+gapforge setup-codex
+gapforge campaign-canary-run --profile single_task_codex_handoff --real
+gapforge codex-handoff --task-id <task-id> --print-prompt
+# Run Codex/GPT-5.4 and write JSON outputs to outputs/.
+gapforge validate-import-all --task-id <task-id>
+gapforge attest-agent-run --task-id <task-id> --agent codex --model gpt-5.4 --method task_pack --attester "<name>"
+gapforge campaign-review --campaign-id <campaign-id> --accept --reviewer "<name>"
+gapforge campaign-canary-complete --canary-id <canary-id>
+```
+
+See `docs/CODEX_QUICKSTART.md`, `docs/V0_4_1_CODEX_FIX_PLAN.md`, `docs/V0_4_1_CODEX_ACCEPTANCE.md`, and `docs/V0_4_1_CODEX_TROUBLESHOOTING.md`.
 
 ## Project Memory Workflow
 
@@ -219,16 +257,17 @@ Provider mode is optional and must validate JSON before state is updated. Model 
 
 ## Codex/GPT-5.4 Agent Run Modes
 
-`gapforge run --v3` supports explicit execution modes:
+GapForge separates deterministic runs, fake-agent tests, task-pack handoff, and direct Codex execution:
 
 ```bash
 gapforge run "topic" --v3 --mode deterministic
-gapforge run "topic" --v3 --mode prompt-pack --agent codex --llm-novelty
-gapforge run "topic" --v3 --mode fake-agent --agent fake --llm-gaps
-gapforge run "topic" --v3 --mode llm-assisted --agent codex --model gpt-5.4 --require-real-agent
+GAPFORGE_DISABLE_NETWORK=1 gapforge campaign-canary-run --profile fake_agent_campaign_regression
+gapforge campaign-canary-run --profile single_task_codex_handoff --real
+gapforge codex-handoff --task-id <task-id> --print-prompt
+gapforge codex-run --task-id <task-id> --direct --dry-run
 ```
 
-Deterministic mode is the default. Prompt-pack mode writes Codex task packs without live calls. Fake-agent mode is CI-safe and validates task-pack/schema plumbing. `llm-assisted --agent codex --require-real-agent` requires `GAPFORGE_ENABLE_REAL_RUNS=1`; otherwise the run fails rather than pretending actual validation passed.
+Deterministic mode is the default. Fake-agent mode is CI-safe and validates task-pack/schema plumbing. Task-pack handoff can count only after real Codex/GPT-5.4 output, validation, import, attestation, and human review. Direct mode can count only after valid output/import and human review.
 
 ## Deterministic Tests vs Actual Runs
 
@@ -237,29 +276,30 @@ GapForge separates automated validation from actual research-agent validation:
 - **Level 0 deterministic tests**: no LLM, CI-safe, validates code, schemas, persistence, reports, and evals.
 - **Level 1 offline smoke tests**: no LLM and no network, validates orchestration safety.
 - **Level 2 fake LLM tests**: fake model only, validates JSON guards and evidence gates.
-- **Level 3 prompt-pack dry runs**: no live calls, validates Codex/GPT-5.4 prompts and schemas.
+- **Level 3 prompt-pack/task-pack dry runs**: no live calls, validates Codex/GPT-5.4 prompts and schemas.
 - **Level 4 Codex/GPT-5.4 canary runs**: real model/agent, private/manual, validates actual LLM-assisted research skills.
 - **Level 5 human-reviewed acceptance**: human review of canary outputs and recorded decisions.
 
-CI must not require Codex/GPT-5.4. Actual Codex/GPT-5.4 assisted runs are required before a v0.3 release can claim real-run validation, but they are not part of normal automated tests. If Codex/GPT-5.4 is unavailable, actual-run validation has not passed. Never fake a canary pass.
+CI must not require Codex/GPT-5.4. Actual Codex/GPT-5.4 assisted runs are required before a release can claim real-run validation, but they are not part of normal automated tests. If Codex/GPT-5.4 is unavailable, actual-run validation has not passed. Never fake a canary pass.
 
-For v0.4, the bar is higher: fake-agent tests and prompt-pack dry runs remain necessary but are not sufficient. v0.4 actual-run acceptance requires multiple real Codex/GPT-5.4 agentic campaigns with validated imports, campaign artifacts, strict-report checks, and human acceptance reviews. A prompt-pack handoff may support acceptance only after real Codex/GPT-5.4 outputs are imported, validated, and reviewed.
+For v0.4, the bar is higher: fake-agent tests and prompt-pack dry runs remain necessary but are not sufficient. v0.4 actual-run acceptance requires multiple real Codex/GPT-5.4 agentic campaigns with validated imports, campaign artifacts, strict-report checks, and human acceptance reviews. A task-pack handoff may support acceptance only after real Codex/GPT-5.4 outputs are imported, validated, attested, and reviewed.
 
 See:
 
+- `docs/CODEX_QUICKSTART.md`
 - `docs/V0_3_REAL_RUN_ACCEPTANCE.md`
 - `docs/V0_3_CANARY_RUNS.md`
 - `docs/V0_4_ROADMAP.md`
 - `docs/V0_4_ACCEPTANCE_CRITERIA.md`
-- `docs/V0_4_AGENTIC_CAMPAIGNS.md`
 - `docs/V0_4_REAL_RUN_ACCEPTANCE.md`
+- `docs/V0_4_AGENTIC_CAMPAIGNS.md`
 - `docs/CODEX_RESEARCH_AGENT.md`
 - `docs/REAL_RUN_REVIEW_CHECKLIST.md`
 - `docs/releases/v0.3.0-real-run-acceptance.md`
 - `docs/releases/v0.4.0-real-run-acceptance.md`
 - `docs/releases/v0.4.0.md`
 
-Latest v0.4 validation status: deterministic checks and the fake-agent campaign canary passed on May 5, 2026. Actual Codex/GPT-5.4 campaign acceptance is not completed because the real-run environment was not configured and no real Codex/GPT-5.4 campaign outputs were validated, attested, imported, and human-accepted.
+Latest v0.4 validation status: deterministic checks, the fake-agent campaign canary, and the v0.4 actual-run release gate passed locally on May 6, 2026. The accepted real Codex/GPT-5.4 campaigns were workflow canaries with conservative/fixture-backed outputs; they validate the actual-run path, not exhaustive autonomous research quality.
 
 ## Manuscript Package Workflow
 

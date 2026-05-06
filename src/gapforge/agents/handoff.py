@@ -4,15 +4,24 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from gapforge.agents.codex_handoff_v2 import write_run_codex_handoff_v2
 from gapforge.models import AgentTaskSpec
 
 
 def write_handoff(task_spec: AgentTaskSpec, pack_dir: Path, *, model: str = "gpt-5.4") -> Path:
-    """Write a concrete handoff file for external Codex execution."""
+    """Write the v2 concrete handoff bundle for external Codex execution."""
 
-    handoff_path = pack_dir / "HANDOFF.md"
-    handoff_path.write_text(render_handoff(task_spec, pack_dir, model=model), encoding="utf-8")
-    return handoff_path
+    paths = write_run_codex_handoff_v2(task_spec, pack_dir, model=model)
+    if task_spec.id.startswith("repair-") and (pack_dir / "REPAIR.md").exists():
+        repair_note = (
+            "\n\n## Repair-Specific Instructions\n\n"
+            "This is a repair task. Read `REPAIR.md` before editing outputs. Fix only the validation failures listed there; "
+            "do not invent citations, paper IDs, EvidenceSpan IDs, or missing evidence.\n"
+        )
+        for key in ("handoff", "prompt"):
+            path = paths[key]
+            path.write_text(path.read_text(encoding="utf-8").rstrip() + repair_note, encoding="utf-8")
+    return paths["handoff"]
 
 
 def render_handoff(task_spec: AgentTaskSpec, pack_dir: Path, *, model: str = "gpt-5.4") -> str:

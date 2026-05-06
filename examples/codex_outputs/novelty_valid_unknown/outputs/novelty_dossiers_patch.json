@@ -1,0 +1,16 @@
+{
+  "novelty_dossiers": [
+    {
+      "target_id": "gap-1",
+      "idea_summary": "Evaluate low-FPR collusion detection.",
+      "top_prior_work": [],
+      "comparison_table": [],
+      "decisive_difference_needed": "Run closest-prior-work search before claiming novelty.",
+      "missing_searches": ["low false positive collusion detection benchmark", "LLM agent collusion detection survey"],
+      "verdict": "unknown",
+      "novelty_strength": "unknown",
+      "confidence": "low"
+    }
+  ],
+  "public_reasoning_summary": "Novelty is unknown because closest prior work has not been established."
+}

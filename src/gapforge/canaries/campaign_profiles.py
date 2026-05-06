@@ -10,6 +10,102 @@ def default_campaign_canary_profiles() -> list[CampaignCanaryProfile]:
     now = utc_now_iso()
     return [
         CampaignCanaryProfile(
+            id="manual_pdf_codex_reading_handoff",
+            title="Manual-PDF fixture Codex reading handoff",
+            topic="manual PDF or fixture section Codex reading validation",
+            source_profile="generic",
+            campaign_mode="manual_handoff",
+            budget="small",
+            requires_codex=True,
+            requires_network=False,
+            required_milestones=["reading_ready"],
+            expected_stop_reason="manual_handoff_pending",
+            expected_artifacts=[
+                "campaign_report.md",
+                "agent_tasks/*/CAMPAIGN_TASK.md",
+                "agent_tasks/*/CODEX_PROMPT.md",
+                "agent_tasks/*/VALIDATE_AND_IMPORT.sh",
+            ],
+            acceptance_criteria=[
+                "Canary uses fixture full-text sections and evidence spans when no real local PDF is provided.",
+                "Codex writes `paper_notes_patch.json`; `claims_patch.json` and `evidence_spans_patch.json` are optional.",
+                "Every paper ID and evidence locator in the reading output resolves to fixture state.",
+                "Validated import, Codex/GPT-5.4 attestation, and human review are required before completion.",
+            ],
+            known_risks=[
+                "Fixture sections validate workflow only; they do not prove real literature quality.",
+                "A real local PDF workflow still requires separate user-provided PDFs for actual research validation.",
+            ],
+            provenance=_provenance(now),
+        ),
+        CampaignCanaryProfile(
+            id="manual_pdf_fake_reading_regression",
+            title="Manual-PDF fixture fake reading regression",
+            topic="manual PDF fixture fake reading validation",
+            source_profile="generic",
+            campaign_mode="fake_agent",
+            budget="small",
+            requires_codex=False,
+            requires_network=False,
+            required_milestones=["reading_ready"],
+            expected_stop_reason="fake_not_actual",
+            expected_artifacts=["campaign_report.md", "agent_tasks/*/CAMPAIGN_TASK.md", "imports.json"],
+            acceptance_criteria=[
+                "Fixture reading output validates and imports offline.",
+                "Evidence locator validation is exercised without counting fake output as actual Codex/GPT-5.4 work.",
+            ],
+            known_risks=["This is a CI regression and cannot satisfy actual-run acceptance."],
+            provenance=_provenance(now),
+        ),
+        CampaignCanaryProfile(
+            id="single_task_codex_handoff",
+            title="Single-task Codex handoff validation",
+            topic="single task Codex handoff validation",
+            source_profile="generic",
+            campaign_mode="manual_handoff",
+            budget="small",
+            requires_codex=True,
+            requires_network=False,
+            required_milestones=["novelty_checked"],
+            expected_stop_reason="manual_handoff_pending",
+            expected_artifacts=[
+                "campaign_report.md",
+                "agent_tasks/*/CAMPAIGN_TASK.md",
+                "agent_tasks/*/CODEX_PROMPT.md",
+                "agent_tasks/*/VALIDATE_AND_IMPORT.sh",
+            ],
+            acceptance_criteria=[
+                "A novelty task pack is created from a fixture run with a known paper, gap, and evidence span.",
+                "Codex writes `novelty_dossiers_patch.json` with verdict `unknown` or `reject` into the task outputs directory.",
+                "The output validates and imports before attestation can count.",
+                "Human attestation and campaign review are both recorded before completion.",
+            ],
+            known_risks=[
+                "This canary validates Codex handoff mechanics, not real literature quality.",
+                "Task-pack output cannot count as actual-run evidence without user attestation and human review.",
+            ],
+            provenance=_provenance(now),
+        ),
+        CampaignCanaryProfile(
+            id="single_task_fake_handoff_regression",
+            title="Single-task fake handoff regression",
+            topic="single task fake handoff validation",
+            source_profile="generic",
+            campaign_mode="fake_agent",
+            budget="small",
+            requires_codex=False,
+            requires_network=False,
+            required_milestones=["novelty_checked"],
+            expected_stop_reason="fake_not_actual",
+            expected_artifacts=["campaign_report.md", "agent_tasks/*/CAMPAIGN_TASK.md", "imports.json"],
+            acceptance_criteria=[
+                "A single novelty task validates and imports offline.",
+                "Fake attestation is visible but never counted as actual Codex/GPT-5.4 acceptance.",
+            ],
+            known_risks=["This is a CI regression and cannot satisfy actual-run acceptance."],
+            provenance=_provenance(now),
+        ),
+        CampaignCanaryProfile(
             id="agentic_low_fpr_collusion",
             title="Agentic low-FPR collusion Codex campaign",
             topic="low false positive collusion detection in LLM agents",
@@ -176,13 +272,24 @@ def render_campaign_canary_plan(profile: CampaignCanaryProfile) -> str:
 
 def _recommended_commands(profile: CampaignCanaryProfile) -> list[str]:
     real_flag = " --real" if profile.requires_codex else ""
-    return [
+    commands = [
         f"gapforge campaign-canary-plan --profile {profile.id}",
         f"gapforge campaign-canary-run --profile {profile.id}{real_flag}",
         "gapforge campaign-status --campaign-id {campaign_id}",
         "gapforge campaign-report --campaign-id {campaign_id}",
         "gapforge campaign-canary-status --canary-id {canary_id}",
     ]
+    if profile.id in {"single_task_codex_handoff", "manual_pdf_codex_reading_handoff"}:
+        commands.extend(
+            [
+                "gapforge codex-handoff --campaign-id {campaign_id} --latest-task --print-prompt",
+                "gapforge validate-import-all --campaign-id {campaign_id}",
+                'gapforge attest-agent-run --task-id {task_id} --agent codex --model gpt-5.4 --method task_pack --attester "<name>"',
+                'gapforge campaign-review --campaign-id {campaign_id} --accept --reviewer "<name>"',
+                "gapforge campaign-canary-complete --canary-id {canary_id}",
+            ]
+        )
+    return commands
 
 
 def _provenance(timestamp: str) -> Provenance:

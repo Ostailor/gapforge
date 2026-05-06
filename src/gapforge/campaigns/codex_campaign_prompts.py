@@ -64,9 +64,8 @@ def render_campaign_task_markdown(campaign_state: CampaignState, task_id: str, t
             "After writing outputs, run:",
             "",
             "```bash",
-            f"gapforge campaign-validate-output --campaign-id {campaign.id} --task-id {task_id}",
-            f"gapforge campaign-import-output --campaign-id {campaign.id} --task-id {task_id}",
-            f"gapforge repair-agent-output --task-id {task_id} --path outputs/<file>.json",
+            f"gapforge validate-import-all --task-id {task_id}",
+            f"gapforge repair-agent-output --task-id {task_id} --latest-invalid --handoff",
             "```",
         ]
     )
