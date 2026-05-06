@@ -19,6 +19,7 @@ Smoke workflows:
 ```bash
 make v2-smoke
 make v3-smoke
+make v4-smoke
 GAPFORGE_DISABLE_NETWORK=1 gapforge run "low false positive collusion detection" --v3 --active --budget small
 GAPFORGE_DISABLE_NETWORK=1 gapforge campaign-canary-run --profile fake_agent_campaign_regression
 ```
@@ -168,3 +169,36 @@ PYTHONPATH=src pytest tests/test_release_gate.py tests/test_dashboard.py
 ```
 
 Live source and real Codex/GPT-5.4 campaigns are release-validation tasks. Do not add tests that require live network, API keys, or a Codex runner.
+
+## v0.6 Experiment Execution Tests
+
+v0.6 tests must remain offline and cheap. Fixture experiments may run local Python commands, but they must not require large datasets, GPUs, live sources, or provider LLM calls.
+
+Tests should cover:
+
+- experiment workspace creation and persistence
+- dataset card registration, validation, and fixture/synthetic labeling
+- baseline registry and missing required baseline blockers
+- metric registry and low-FPR statistical planning warnings
+- runnable scaffold generation and smoke validation
+- experiment manifests, execution records, stdout/stderr logs, and expected-output detection
+- failed execution records and missing-output failure reasons
+- metrics JSON parsing into `MetricResult`
+- empirical claims only from result artifacts
+- statistical analysis and low-FPR confidence/sample-size warnings
+- reproducibility pass/warning/fail states
+- empirical reviewer fatal flaws for missing baselines, no artifacts, failed runs, and missing CIs
+- paper package v2 result labels
+- `gapforge eval --v6`
+- `gapforge v6-release-gate` failure modes and fixture pass cases
+
+Useful commands:
+
+```bash
+gapforge eval --v6 --write-report
+PYTHONPATH=src pytest tests/test_experiment_workspaces.py tests/test_experiment_runner.py tests/test_results_parser.py
+PYTHONPATH=src pytest tests/test_results_statistics.py tests/test_reproducibility_checker.py tests/test_empirical_review.py
+PYTHONPATH=src pytest tests/test_paper_package_export_v2.py tests/test_release_gate_v06.py tests/test_api.py
+```
+
+Smoke, fixture, and generated placeholder outputs must be labeled. Tests must reject fake result artifacts and must not assert empirical success from scaffolds or smoke commands alone.

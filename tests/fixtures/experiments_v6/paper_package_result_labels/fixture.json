@@ -1,0 +1,93 @@
+{
+  "topic": "v0.6 paper package labels planned smoke failed and hypothetical results",
+  "execution": {
+    "executions": [
+      {
+        "id": "exec-package-smoke",
+        "status": "complete",
+        "run_type": "smoke",
+        "dataset_scope": "fixture",
+        "result_artifact_ids": ["artifact-package-smoke"]
+      },
+      {
+        "id": "exec-package-failed",
+        "status": "failed",
+        "run_type": "ablation",
+        "dataset_scope": "fixture",
+        "failure_reason": "Ablation command failed and remains in the package.",
+        "result_artifact_ids": ["artifact-package-failed"]
+      }
+    ],
+    "failed_run_preserved": true
+  },
+  "result_artifacts": [
+    {
+      "id": "artifact-package-smoke",
+      "execution_id": "exec-package-smoke",
+      "artifact_type": "metrics_json",
+      "sha256": "fixture-sha256-package-smoke"
+    },
+    {
+      "id": "artifact-package-failed",
+      "execution_id": "exec-package-failed",
+      "artifact_type": "log",
+      "sha256": "fixture-sha256-package-failed"
+    }
+  ],
+  "result_summary": {
+    "metric_results": [
+      {
+        "id": "metric-result-package",
+        "metric_id": "precision",
+        "value": 0.61,
+        "sample_size": 300,
+        "confidence_interval": [0.55, 0.67],
+        "raw_artifact_id": "artifact-package-smoke"
+      }
+    ],
+    "empirical_claims": [
+      {
+        "id": "claim-package-smoke",
+        "status": "supported",
+        "metric_result_ids": ["metric-result-package"]
+      }
+    ]
+  },
+  "statistics": {
+    "analysis_report": true,
+    "low_fpr": false,
+    "underpowered": false,
+    "overstates_significance": false
+  },
+  "reproducibility": {
+    "status": "pass",
+    "checks": {
+      "dataset_cards": "pass",
+      "baseline_cards": "pass",
+      "metric_definitions": "pass",
+      "run_manifest": "pass",
+      "logs_captured": "pass",
+      "result_artifacts_hashed": "pass"
+    },
+    "blockers": []
+  },
+  "empirical_review": {
+    "reviewer_reviews": ["empirical", "area_chair"],
+    "area_chair_summary": "Package labels smoke and failed results without upgrading them to main findings.",
+    "uses_artifacts": true,
+    "reframes_failed_run_as_success": false
+  },
+  "paper_package": {
+    "exported": true,
+    "readiness": "smoke_result",
+    "labels": ["planned_experiment", "smoke_result", "failed_result", "hypothetical_expected_result"],
+    "expected_results_hypothetical": true,
+    "claims_results_without_artifacts": false,
+    "fake_results_accepted": false,
+    "failed_results_visible": true
+  },
+  "v6_release_gate": {
+    "expected_pass": true,
+    "expected_blockers": []
+  }
+}

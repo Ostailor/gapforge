@@ -2,6 +2,45 @@
 
 All notable project changes should be recorded here.
 
+## 0.6.0
+
+GapForge v0.6 is the experiment execution and empirical validation release. It keeps the v4 Codex workflow and v5 real-literature quality gates intact while adding durable experiment workspaces, artifact-backed result parsing, statistical analysis, reproducibility checks, empirical reviewer simulation, and honest paper-package exports.
+
+### Experiment Workspaces and Registries
+
+- Added first-class experiment workspaces with workspace state, run manifests, execution records, result artifacts, logs, reports, code, data, and config directories.
+- Added dataset registry, dataset cards, loaders, and validation so fixture, synthetic, benchmark, generated, and real datasets are labeled with license, leakage, privacy, bias, and intended-use warnings.
+- Added baseline registry, baseline cards, and related-work-driven baseline selection so required baselines become explicit experiment blockers instead of prose-only assumptions.
+- Added metric registry and statistical test planning with built-in false positive rate, true positive rate, precision, recall, AUROC, AUPRC, calibration error, abstention, cost-weighted error, and runtime templates.
+- Added low-FPR statistical planning warnings for rare false-positive claims, including sample-size and exact/binomial confidence-interval guidance.
+
+### Code, Execution, and Results
+
+- Added experiment code scaffold v2 with runnable workspace code, smoke configs, tests, and scripts while keeping generated outputs separate from result artifacts.
+- Added constrained Codex/GPT-5.4 experiment code tasks for dataset loaders, baselines, metrics, runners, ablations, tests, smoke debugging, and result analysis.
+- Added the experiment runner to execute manifests, capture redacted stdout/stderr logs, record return codes, detect expected outputs, hash result artifacts, and preserve failed runs.
+- Added result parsing for metrics JSON artifacts, metric results, result summaries, and empirical claims.
+- Added empirical claim ledger integration so no empirical claim is supported unless a run record and result artifact exist.
+- Added statistical analysis helpers for binomial confidence intervals, paired summaries, bootstrap placeholders, multiple-testing warnings, low-FPR sample warnings, and exact count summaries.
+
+### Reproducibility, Review, and Export
+
+- Added reproducibility checks for dataset cards, baseline cards, metric definitions, random seeds, environments, manifests, commands, logs, hashes, confidence intervals, code scaffold version, and fake/fixture data labels.
+- Added empirical reviewer simulation for empirical rigor, statistics, reproducibility, novelty with result context, and area-chair-style review.
+- Upgraded paper package export to v2 so planned experiments, smoke runs, pilot/main results, failed results, negative results, and hypothetical expected results are labeled separately.
+- Added v6 release gate requirements for executed fixture experiments, failed experiment paths, parsed result artifacts, artifact-backed empirical claims, reproducibility checks, empirical review, and paper package v2 export.
+- Added v6 eval fixtures and metrics for experiment execution integrity, result-artifact grounding, empirical-claim validity, statistical caution, reproducibility, empirical review, fake-result rejection, paper-package honesty, and v6 release-gate correctness.
+- Added experiment dashboard pages for workspaces, runs, datasets, baselines, metrics, results, reproducibility, empirical reviews, and paper-package status.
+- Added v6 Python API helpers for experiment workspaces, registries, scaffolding, execution, result parsing, analysis, reproducibility, empirical review, paper-package v2 export, and release-gate checks.
+- Added v6 documentation and Codex-readable skills for experiment workspaces, dataset cards, baseline selection, metric planning, experiment-code implementation, result analysis, reproducibility checks, empirical review, and paper-package v2.
+
+### Validation
+
+- Fixture experiment execution passed locally on May 6, 2026 with a successful smoke execution, a recorded failed execution path, a parsed metrics artifact, an artifact-backed empirical claim, reproducibility checks, empirical review, and paper package v2 export.
+- A real Codex/GPT-5.4 experiment-code task ran locally through the configured direct Codex wrapper, produced a valid implementation patch, imported under the workspace code boundary, and passed workspace smoke validation. This validates the Codex experiment-code workflow, not a real empirical study.
+- No real-world main experiment was run for this release; real empirical results remain not tested.
+- `make ci`, `make eval`, v2/v3/v4/v5/v6 eval reports, v2/v3/v4/v6 smoke targets, and `gapforge v6-release-gate --write-report --json` pass for the release candidate.
+
 ## 0.5.0
 
 GapForge v0.5 is the real literature campaign quality release. It keeps the deterministic/offline and v4 Codex workflow paths intact while adding live-source diagnostics, planned search rounds, closest-prior-work recall, and human research-quality acceptance gates.

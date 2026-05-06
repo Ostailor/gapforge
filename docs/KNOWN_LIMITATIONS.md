@@ -111,6 +111,33 @@ v0.5 added diagnostics and gates, not omniscience. The live source health check 
 
 Workflow canaries, fake-agent campaigns, dry runs, and fixture evals remain separate from live-literature quality. They should be described as implementation validation, not research validation.
 
+## v0.6 Target and Limits
+
+v0.6 is the experiment execution and empirical validation release. It moves GapForge from experiment-ready directions to executed, logged, statistically analyzed, reproducible experiment packages.
+
+v0.6 must still preserve these limits:
+
+- an experiment protocol is not an executed experiment
+- a generated scaffold is not an executed experiment
+- a smoke run validates wiring only and does not prove empirical success
+- pilot runs are exploratory and must be labeled as such
+- main-run claims still require result artifacts, parsed metrics, uncertainty analysis, and reproducibility status
+- an empirical claim cannot be marked supported without a run record and result artifact
+- failed and negative experiments must remain visible in reports
+- dataset cards, baseline registries, metric registries, run manifests, logs, statistics, and reproducibility checks are required before empirical claims are trusted
+- paper packages must separate real observed results from placeholders, expected results, and hypotheses
+- v0.5 literature, novelty, and prior-work recall gates must not be weakened to reach experiment execution faster
+
+v0.6 non-goals:
+
+- fabricating experimental results
+- marking experiments executed from protocols, scaffolds, task plans, or smoke tests alone
+- requiring expensive experiments in normal CI
+- claiming empirical success from fixture smoke outputs
+- hiding failed runs, negative results, missing baselines, weak metrics, or irreproducible artifacts
+
+v0.6 requires at least one executed fixture experiment and one failed or negative experiment path for release acceptance. That bar validates experiment execution mechanics and reporting honesty; it does not prove publishable empirical findings.
+
 ## Operational Guidance
 
 Use strict mode and coverage assessment before interpreting outputs:

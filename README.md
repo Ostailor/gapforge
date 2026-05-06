@@ -2,7 +2,7 @@
 
 GapForge is a Codex-powered Research Ideation OS. It turns a broad topic into auditable research state: papers, notes, claims, evidence, gaps, novelty dossiers, experiment plans, reviewer objections, and reports.
 
-GapForge v0.4 adds campaign-level Codex/GPT-5.4 actual-run workflows on top of the v0.3 semantic, project-memory-aware, optionally LLM-assisted research system. The v0.5 docs and gates extend that path toward live-literature campaign quality: source health, planned search rounds, canonicalization, closest-prior-work recall, human research-quality review, and a v5 release gate. GapForge is still not an exhaustive autonomous literature reviewer. Deterministic and offline-safe paths remain the default.
+GapForge v0.4 adds campaign-level Codex/GPT-5.4 actual-run workflows on top of the v0.3 semantic, project-memory-aware, optionally LLM-assisted research system. v0.5 extends that path toward live-literature campaign quality: source health, planned search rounds, canonicalization, closest-prior-work recall, human research-quality review, and a v5 release gate. v0.6 adds experiment execution and empirical validation: moving from experiment-ready directions to executed, logged, statistically analyzed, reproducible experiment packages. GapForge is still not an exhaustive autonomous literature reviewer, and it must not fabricate experimental results. Deterministic and offline-safe paths remain the default.
 
 ## Version Lineage
 
@@ -11,6 +11,7 @@ GapForge v0.4 adds campaign-level Codex/GPT-5.4 actual-run workflows on top of t
 - **v0.3**: semantic plus LLM-assisted plus multi-run project-memory upgrade with hybrid retrieval, source policy profiles, active loop decisions, related-work matrices, direction maturation, protocols, review queues, dashboard, and paper packages.
 - **v0.4**: actual Codex/GPT-5.4 agentic campaign release path with campaign-level state, task packs, direct/handoff runner support, strict validated import, repair/rollback, campaign dashboards/reports, v4 evals, and release gates. Fake-agent success still does not count as real-run acceptance.
 - **v0.5**: real literature campaign quality layer. v0.5 validates multi-step live-literature campaigns, source coverage quality, closest-prior-work recall, real-paper citation grounding, expert review, experiment protocol quality, and correct rejection behavior when novelty is weak.
+- **v0.6**: experiment execution and empirical validation layer. v0.6 distinguishes protocols, scaffolds, smoke runs, pilot/main runs, failed/negative experiments, statistical analyses, reproducibility checks, and artifact-backed empirical claims.
 
 ## Why Not Just Summarization?
 
@@ -227,6 +228,62 @@ The v0.5 docs are:
 Normal CI remains deterministic and offline. Fixture-only canaries and fake-agent campaigns do not count as v0.5 live-literature quality.
 
 Latest v0.5 validation status: `gapforge v5-release-gate --write-report --json` passed locally on May 6, 2026. The accepted quality campaigns were one experiment-ready low-FPR collusion campaign and one conservative refusal campaign. This is live-literature release-gate acceptance, not a claim of exhaustive literature review.
+
+## v0.6 Experiment Execution and Empirical Validation
+
+v0.5 can say a direction is experiment-ready. v0.6 says whether an experiment actually ran, what artifacts it produced, how results were analyzed, whether the run is reproducible, and whether empirical claims are supported by result artifacts.
+
+The v0.6 docs are:
+
+- `docs/V0_6_ROADMAP.md`
+- `docs/V0_6_ACCEPTANCE_CRITERIA.md`
+- `docs/V0_6_EXPERIMENT_EXECUTION.md`
+- `docs/V0_6_EMPIRICAL_VALIDATION.md`
+- `docs/V0_6_REPRODUCIBILITY_POLICY.md`
+- `docs/releases/v0.6.0.md`
+- `docs/releases/v0.6.0-empirical-validation.md`
+
+Core boundary:
+
+- an experiment protocol is not an executed experiment
+- a scaffold is not an executed experiment
+- a smoke run validates wiring only; it is not empirical success
+- pilot/main results require execution records and result artifacts
+- failed or negative experiments are first-class results
+- no empirical claim is supported unless a run record and result artifact exist
+- generated paper packages must separate real results from placeholders and hypothetical expected results
+
+Minimal local workflow:
+
+```bash
+gapforge experiment-workspace-create --project-id <project-id> --direction-id <direction-id>
+gapforge dataset-register --workspace-id <workspace-id> --name "fixture examples" --path data/fixture.csv --dataset-type fixture --license MIT
+gapforge baseline-register --workspace-id <workspace-id> --name "heuristic baseline" --baseline-type heuristic --implementation-path code/src/baselines.py
+gapforge metric-register --workspace-id <workspace-id> --name "false positive rate"
+gapforge scaffold-experiment-code --workspace-id <workspace-id>
+gapforge experiment-manifest-create --workspace-id <workspace-id> --run-type smoke --command "python code/src/run_experiment.py" --expected-output results/smoke_metrics.json --random-seed 123
+gapforge experiment-run --workspace-id <workspace-id> --manifest-id <manifest-id>
+gapforge parse-results --execution-id <execution-id>
+gapforge analyze-results --execution-id <execution-id>
+gapforge reproducibility-check --execution-id <execution-id>
+gapforge empirical-review --execution-id <execution-id>
+gapforge export-paper-package-v2 --workspace-id <workspace-id>
+gapforge v6-release-gate --write-report --json
+```
+
+Codex/GPT-5.4 can implement experiment code through constrained workspace code tasks:
+
+```bash
+gapforge experiment-code-task --workspace-id <workspace-id> --type implement_metric
+gapforge experiment-code-handoff --task-id <task-id>
+gapforge experiment-code-import --task-id <task-id>
+```
+
+Codex code tasks are bounded to `experiment_workspaces/<workspace-id>/code/`. They may create code, tests, configs, and analysis scripts; they must not create fake result metrics, claim an experiment ran, or edit evidence/claim state outside the validated import path.
+
+The v0.6 release gate requires at least one executed fixture experiment and one failed or negative experiment path, while keeping CI free of expensive experiment execution.
+
+Latest v0.6 validation status: fixture experiment execution passed locally on May 6, 2026, and `gapforge v6-release-gate --write-report --json` passed. One real Codex/GPT-5.4 experiment-code task was executed and imported as a validated workspace-bounded implementation patch. No real-world main experiment was run, and no real empirical result is claimed.
 
 ### v0.5 Live Literature Campaign Workflow
 
@@ -450,6 +507,8 @@ make eval
 gapforge eval --v2
 gapforge eval --v3
 gapforge eval --v4
+gapforge eval --v5
+gapforge eval --v6
 ```
 
 ## Limitations and Safety Notes
@@ -460,6 +519,7 @@ gapforge eval --v4
 - LLM outputs are untrusted until schema-valid and evidence-located.
 - Fake-agent outputs validate plumbing only and never count as real Codex/GPT-5.4 research.
 - Prompt-pack handoff counts as real only after Codex/GPT-5.4 outputs are validated, attested, and human-reviewed.
+- Empirical claims are artifact-gated: no run record and result artifact means no supported result claim.
 - PDFs, transcripts, and generated dashboards may be unsafe to commit.
 - Human review is required before treating any direction as research-ready.
 
@@ -476,4 +536,6 @@ gapforge export-safe-bundle --project-id <project-id>
 - v0.2: full-text evidence and novelty dossier upgrade
 - v0.3: semantic, optional LLM-assisted, multi-run project-memory upgrade
 - v0.4: actual Codex/GPT-5.4 agentic campaign execution path, campaign recovery, multi-step canaries, v4 evals, and strict human-reviewed real-run acceptance gates
-- Future: stronger real-world evaluations, richer layout/OCR extraction, external reference-manager integration, experiment execution adapters, and collaborative review workflows
+- v0.5: real-literature campaign quality with source diagnostics, search strategy, prior-work recall, quality review, v5 evals, and v5 release gate
+- v0.6: experiment execution and empirical validation with run manifests, result artifacts, statistics, reproducibility checks, failed/negative result handling, and result claim ledger
+- Future: richer layout/OCR extraction, external reference-manager integration, larger experiment runners, and collaborative review workflows

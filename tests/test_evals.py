@@ -12,11 +12,13 @@ from gapforge.evals.fixtures import (
     V3_FIXTURE_NAMES,
     V4_FIXTURE_NAMES,
     V5_FIXTURE_NAMES,
+    V6_FIXTURE_NAMES,
     list_fixtures,
     load_fixture,
     load_v3_fixture,
     load_v4_fixture,
     load_v5_fixture,
+    load_v6_fixture,
 )
 from gapforge.evals.metrics import (
     actual_run_gate_correctness,
@@ -24,10 +26,14 @@ from gapforge.evals.metrics import (
     canonicalization_quality,
     direction_maturity_accuracy,
     direction_maturity_gate_accuracy_from_fixture,
+    empirical_claim_validity,
+    empirical_review_quality,
+    fake_result_rejection,
     gap_evidence_matrix_score,
     live_source_coverage_score,
     manuscript_package_honesty,
     novelty_research_loop_quality,
+    paper_package_honesty,
     prior_work_recall_gate_score,
     quality_review_gate_correctness,
     real_literature_refusal_quality,
@@ -35,9 +41,11 @@ from gapforge.evals.metrics import (
     rollback_safety,
     search_strategy_completeness,
     source_policy_compliance,
+    statistical_caution_score,
     stop_reason_correctness,
     unsupported_claim_rate,
     v5_release_gate_correctness,
+    v6_release_gate_correctness,
 )
 from gapforge.models import Claim, ResearchRunState, ResearchTopic, SourceCoverageReport
 
@@ -114,6 +122,22 @@ def test_v5_eval_fixtures_are_complete_and_offline() -> None:
         assert payload["related_work_matrix"]
         assert payload["human_quality_review"]
         assert payload["expected_release_gate_result"]
+
+
+def test_v6_eval_fixtures_are_complete_and_offline() -> None:
+    for name in V6_FIXTURE_NAMES:
+        fixture = load_v6_fixture(name)
+        payload = fixture.experiment_fixture
+        assert fixture.is_v6
+        assert fixture.topic
+        assert fixture.papers
+        assert payload["execution"]
+        assert "executions" in payload["execution"]
+        assert payload["result_artifacts"]
+        assert payload["result_summary"]
+        assert payload["statistics"]
+        assert payload["paper_package"]
+        assert payload["v6_release_gate"]
 
 
 def test_run_evals_single_fixture_writes_report(tmp_path: Path) -> None:
@@ -209,6 +233,28 @@ def test_eval_cli_v4_writes_report(tmp_path: Path) -> None:
     report_path.unlink()
 
 
+def test_eval_cli_v6_writes_report(tmp_path: Path) -> None:
+    env = {**os.environ, "GAPFORGE_DISABLE_NETWORK": "1"}
+    env["PYTHONPATH"] = str(Path.cwd() / "src")
+    result = subprocess.run(
+        [sys.executable, "-m", "gapforge.cli", "eval", "--fixture", "smoke_success", "--v6", "--write-report"],
+        cwd=Path.cwd(),
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "eval_report.md" in result.stdout
+    report_path = Path.cwd() / "eval_report.md"
+    assert report_path.exists()
+    text = report_path.read_text(encoding="utf-8")
+    assert "### v0.6 Scores" in text
+    assert "experiment_execution_integrity" in text
+    report_path.unlink()
+
+
 def test_fixture_duplicate_ideas_are_intentionally_rejected() -> None:
     report = run_evals(fixture="quantum_portfolio_optimization", write_report=False)
     result = report.results[0]
@@ -272,6 +318,20 @@ def test_run_v5_evals_includes_real_literature_metrics_offline(tmp_path: Path, m
     assert "### v0.5 Scores" in text
     assert "v0.5 overall score" in text
     assert "quality_review_gate_correctness" in text
+
+
+def test_run_v6_evals_includes_experiment_metrics_offline(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("GAPFORGE_DISABLE_NETWORK", "1")
+
+    report = run_evals(v6=True, output_dir=tmp_path, write_report=True)
+
+    assert len(report.results) == len(V6_FIXTURE_NAMES)
+    assert all(result.scores.experiment_execution_integrity is not None for result in report.results)
+    assert all(result.scores.v6_release_gate_correctness is not None for result in report.results)
+    text = (tmp_path / "eval_report.md").read_text(encoding="utf-8")
+    assert "### v0.6 Scores" in text
+    assert "v0.6 overall score" in text
+    assert "paper_package_honesty" in text
 
 
 def test_v2_duplicate_ideas_are_rejected_by_dossier_aware_novelty_gate() -> None:
@@ -440,3 +500,31 @@ def test_v5_quality_review_metrics_work() -> None:
     assert search_strategy_completeness(good) == 1.0
     assert canonicalization_quality(good) == 1.0
     assert quality_review_gate_correctness(good) == 1.0
+
+
+def test_v6_fake_result_rejected() -> None:
+    fixture = load_v6_fixture("fake_result_rejected").experiment_fixture
+
+    assert fake_result_rejection(fixture) == 1.0
+    assert v6_release_gate_correctness(fixture) == 1.0
+
+
+def test_v6_failed_run_preserved() -> None:
+    fixture = load_v6_fixture("failed_run").experiment_fixture
+
+    assert paper_package_honesty(fixture) == 1.0
+    assert v6_release_gate_correctness(fixture) == 1.0
+
+
+def test_v6_low_fpr_warning_works() -> None:
+    fixture = load_v6_fixture("low_fpr_underpowered").experiment_fixture
+
+    assert statistical_caution_score(fixture) == 1.0
+
+
+def test_v6_paper_package_labels_results_correctly() -> None:
+    fixture = load_v6_fixture("paper_package_result_labels").experiment_fixture
+
+    assert empirical_claim_validity(fixture) == 1.0
+    assert empirical_review_quality(fixture) == 1.0
+    assert paper_package_honesty(fixture) == 1.0

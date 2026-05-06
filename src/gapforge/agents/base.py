@@ -35,6 +35,7 @@ class AgentRuntimeConfig:
 
     @classmethod
     def from_env(cls) -> AgentRuntimeConfig:
+        mode_configured = bool(os.environ.get("GAPFORGE_AGENT_MODE", "").strip())
         mode = os.environ.get("GAPFORGE_AGENT_MODE", "off").strip().lower() or "off"
         mode = _normalize_agent_mode(mode)
         if mode not in {"off", "task-pack", "manual-handoff", "fake", "codex", "direct"}:
@@ -46,8 +47,12 @@ class AgentRuntimeConfig:
         legacy_command = os.environ.get("GAPFORGE_CODEX_RUNNER_CMD", "").strip()
         codex_command = os.environ.get("GAPFORGE_CODEX_COMMAND", legacy_command).strip()
         enable_real_runs = os.environ.get("GAPFORGE_ENABLE_REAL_RUNS", "0").strip() in {"1", "true", "TRUE", "yes"}
-        if not codex_command and enable_real_runs and mode in {"codex", "direct"}:
+        if not codex_command:
             codex_command = _default_codex_command()
+        if codex_command and not mode_configured:
+            mode = "direct"
+        if codex_command and "GAPFORGE_ENABLE_REAL_RUNS" not in os.environ:
+            enable_real_runs = True
         return cls(
             mode=mode,
             agent_name=os.environ.get("GAPFORGE_AGENT_NAME", "codex").strip() or "codex",
@@ -192,6 +197,8 @@ def _parse_timeout(raw: str) -> int:
 
 
 def _default_codex_command() -> str:
+    if os.environ.get("GAPFORGE_DISABLE_CODEX_AUTODETECT", "").strip() in {"1", "true", "TRUE", "yes"}:
+        return ""
     script = Path(__file__).resolve().parents[3] / "scripts" / "gapforge_codex_exec_task.sh"
     if not script.exists() or shutil.which("codex") is None:
         return ""

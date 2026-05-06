@@ -80,6 +80,15 @@ class EvalScores:
     research_direction_quality_proxy: float | None = None
     quality_review_gate_correctness: float | None = None
     v5_release_gate_correctness: float | None = None
+    experiment_execution_integrity: float | None = None
+    result_artifact_grounding: float | None = None
+    empirical_claim_validity: float | None = None
+    statistical_caution_score: float | None = None
+    reproducibility_score: float | None = None
+    empirical_review_quality: float | None = None
+    fake_result_rejection: float | None = None
+    paper_package_honesty: float | None = None
+    v6_release_gate_correctness: float | None = None
 
     def overall(self) -> float:
         positive = [
@@ -153,6 +162,23 @@ class EvalScores:
             self.research_direction_quality_proxy,
             self.quality_review_gate_correctness,
             self.v5_release_gate_correctness,
+        ]
+        present = [value for value in values if value is not None]
+        if not present:
+            return None
+        return round(sum(present) / len(present), 3)
+
+    def v6_overall(self) -> float | None:
+        values = [
+            self.experiment_execution_integrity,
+            self.result_artifact_grounding,
+            self.empirical_claim_validity,
+            self.statistical_caution_score,
+            self.reproducibility_score,
+            self.empirical_review_quality,
+            self.fake_result_rejection,
+            self.paper_package_honesty,
+            self.v6_release_gate_correctness,
         ]
         present = [value for value in values if value is not None]
         if not present:
@@ -828,6 +854,158 @@ def v5_release_gate_correctness(fixture: dict[str, object]) -> float:
     return round((0.7 * int(computed_pass is False)) + (0.3 * int(bool(expected_blockers))), 3)
 
 
+def experiment_execution_integrity(fixture: dict[str, object]) -> float:
+    execution = _dict(fixture.get("execution"))
+    executions = _dicts(execution.get("executions"))
+    if not executions:
+        return 0.0
+    checks: list[bool] = []
+    for record in executions:
+        status = str(record.get("status", ""))
+        artifact_ids = _list(record.get("result_artifact_ids"))
+        checks.append(status in {"complete", "failed", "skipped"})
+        if status == "complete":
+            checks.append(bool(artifact_ids))
+        if status == "failed":
+            checks.append(bool(str(record.get("failure_reason", "")).strip()))
+            checks.append(bool(execution.get("failed_run_preserved", True)))
+    return round(sum(1 for item in checks if item) / len(checks), 3)
+
+
+def result_artifact_grounding(fixture: dict[str, object]) -> float:
+    artifacts = _dicts(fixture.get("result_artifacts"))
+    result_summary = _dict(fixture.get("result_summary"))
+    metric_results = _dicts(result_summary.get("metric_results"))
+    if not artifacts:
+        return 0.0
+    artifact_ids = {str(item.get("id")) for item in artifacts if item.get("id")}
+    grounded = [
+        bool(result.get("raw_artifact_id")) and str(result.get("raw_artifact_id")) in artifact_ids and result.get("value") is not None
+        for result in metric_results
+    ]
+    if not metric_results:
+        return 0.0
+    return round(sum(1 for item in grounded if item) / len(metric_results), 3)
+
+
+def empirical_claim_validity(fixture: dict[str, object]) -> float:
+    result_summary = _dict(fixture.get("result_summary"))
+    claims = _dicts(result_summary.get("empirical_claims"))
+    metric_results = _dicts(result_summary.get("metric_results"))
+    metric_ids = {str(item.get("id")) for item in metric_results if item.get("id")}
+    if not claims:
+        return 0.0 if bool(metric_results) else 1.0
+    valid = []
+    for claim in claims:
+        linked = {str(item) for item in _list(claim.get("metric_result_ids"))}
+        status = str(claim.get("status", ""))
+        valid.append(status in {"supported", "contested", "failed", "uncertain"} and bool(linked) and linked <= metric_ids)
+        if status == "supported":
+            valid.append(bool(linked))
+    return round(sum(1 for item in valid if item) / len(valid), 3)
+
+
+def statistical_caution_score(fixture: dict[str, object]) -> float:
+    stats = _dict(fixture.get("statistics"))
+    if not stats:
+        return 0.0
+    low_fpr = bool(stats.get("low_fpr"))
+    underpowered = bool(stats.get("underpowered"))
+    checks = [
+        bool(stats.get("analysis_report")),
+        not bool(stats.get("overstates_significance")),
+    ]
+    if low_fpr:
+        checks.append(bool(stats.get("confidence_intervals")) or bool(stats.get("low_fpr_warning")))
+    if underpowered:
+        checks.append(bool(stats.get("underpowered_warning")))
+    return round(sum(1 for item in checks if item) / len(checks), 3)
+
+
+def reproducibility_score(fixture: dict[str, object]) -> float:
+    repro = _dict(fixture.get("reproducibility"))
+    if not repro:
+        return 0.0
+    checks = _dict(repro.get("checks"))
+    required = [
+        "dataset_cards",
+        "baseline_cards",
+        "metric_definitions",
+        "run_manifest",
+        "logs_captured",
+        "result_artifacts_hashed",
+    ]
+    field_score = sum(1 for key in required if str(checks.get(key, "")).startswith("pass")) / len(required)
+    status_score = 1.0 if repro.get("status") == "pass" else 0.5 if repro.get("status") == "warning" else 0.0
+    blocker_score = 1.0 if not _list(repro.get("blockers")) else 0.0
+    return round((0.55 * field_score) + (0.3 * status_score) + (0.15 * blocker_score), 3)
+
+
+def empirical_review_quality(fixture: dict[str, object]) -> float:
+    review = _dict(fixture.get("empirical_review"))
+    if not review:
+        return 0.0
+    fatal_flaws = _list(review.get("fatal_flaws"))
+    required_fixes = _list(review.get("required_fixes"))
+    checks = [
+        bool(review.get("reviewer_reviews")),
+        bool(review.get("area_chair_summary")),
+        bool(review.get("uses_artifacts", True)),
+        not bool(review.get("reframes_failed_run_as_success")),
+    ]
+    if bool(review.get("missing_baseline_expected")):
+        checks.append(any("baseline" in str(item).lower() for item in [*fatal_flaws, *required_fixes]))
+    if bool(review.get("no_artifact_expected")):
+        checks.append(any("artifact" in str(item).lower() for item in fatal_flaws))
+    if bool(review.get("fake_result_expected")):
+        checks.append(bool(review.get("blocks_fake_result")))
+    return round(sum(1 for item in checks if item) / len(checks), 3)
+
+
+def fake_result_rejection(fixture: dict[str, object]) -> float:
+    fake = _dict(fixture.get("fake_result"))
+    if not fake or not bool(fake.get("present")):
+        return 1.0
+    checks = [
+        bool(fake.get("rejected")),
+        not bool(fake.get("accepted_as_real")),
+        bool(_dict(fixture.get("empirical_review")).get("blocks_fake_result")),
+        not bool(_dict(fixture.get("paper_package")).get("fake_results_accepted")),
+    ]
+    return round(sum(1 for item in checks if item) / len(checks), 3)
+
+
+def paper_package_honesty(fixture: dict[str, object]) -> float:
+    package = _dict(fixture.get("paper_package"))
+    if not package:
+        return 0.0
+    labels = {str(item) for item in _list(package.get("labels"))}
+    executions = _dicts(_dict(fixture.get("execution")).get("executions"))
+    has_failed = any(item.get("status") == "failed" for item in executions)
+    has_results = bool(_dicts(_dict(fixture.get("result_summary")).get("empirical_claims")))
+    checks = [
+        bool(package.get("exported")),
+        not bool(package.get("fake_results_accepted")),
+        bool(package.get("expected_results_hypothetical")),
+        not bool(package.get("claims_results_without_artifacts")),
+    ]
+    if has_results:
+        checks.append(bool(labels & {"smoke_result", "pilot_result", "main_result", "failed_result"}))
+    if has_failed:
+        checks.append(bool(package.get("failed_results_visible")))
+    return round(sum(1 for item in checks if item) / len(checks), 3)
+
+
+def v6_release_gate_correctness(fixture: dict[str, object]) -> float:
+    expected = _dict(fixture.get("v6_release_gate"))
+    expected_pass = bool(expected.get("expected_pass"))
+    computed_pass = _computed_v6_release_gate(fixture)
+    if expected_pass:
+        return 1.0 if computed_pass else 0.0
+    expected_blockers = _list(expected.get("expected_blockers"))
+    return round((0.7 * int(computed_pass is False)) + (0.3 * int(bool(expected_blockers))), 3)
+
+
 def _tokens(text: str) -> list[str]:
     return re.findall(r"[a-z0-9-]+", text.lower())
 
@@ -877,4 +1055,33 @@ def _computed_actual_run_gate(campaigns: list[dict[str, object]]) -> bool:
         any(item.get("experiment_ready") for item in accepted_real)
         and any(item.get("refusal") for item in accepted_real)
         and any(item.get("full_text") for item in accepted_real)
+    )
+
+
+def _computed_v6_release_gate(fixture: dict[str, object]) -> bool:
+    executions = _dicts(_dict(fixture.get("execution")).get("executions"))
+    successful_fixture = any(
+        item.get("status") == "complete" and (item.get("run_type") == "smoke" or item.get("dataset_scope") == "fixture")
+        for item in executions
+    )
+    failed = any(item.get("status") == "failed" for item in executions)
+    parsed = bool(_dicts(_dict(fixture.get("result_summary")).get("metric_results")))
+    claims = bool(_dicts(_dict(fixture.get("result_summary")).get("empirical_claims")))
+    repro = bool(fixture.get("reproducibility"))
+    review = bool(fixture.get("empirical_review"))
+    package = _dict(fixture.get("paper_package"))
+    fake_ok = fake_result_rejection(fixture) == 1.0
+    failed_visible = (not failed) or bool(package.get("failed_results_visible"))
+    return all(
+        [
+            successful_fixture,
+            failed,
+            parsed,
+            claims,
+            repro,
+            review,
+            bool(package.get("exported")),
+            fake_ok,
+            failed_visible,
+        ]
     )

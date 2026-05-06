@@ -1,0 +1,81 @@
+{
+  "topic": "v0.6 empirical review flags missing baseline",
+  "execution": {
+    "executions": [
+      {
+        "id": "exec-missing-baseline",
+        "status": "complete",
+        "run_type": "smoke",
+        "dataset_scope": "fixture",
+        "result_artifact_ids": ["artifact-missing-baseline-metrics"]
+      }
+    ],
+    "failed_run_preserved": true
+  },
+  "result_artifacts": [
+    {
+      "id": "artifact-missing-baseline-metrics",
+      "execution_id": "exec-missing-baseline",
+      "artifact_type": "metrics_json",
+      "sha256": "fixture-sha256-missing-baseline"
+    }
+  ],
+  "result_summary": {
+    "metric_results": [
+      {
+        "id": "metric-result-missing-baseline",
+        "metric_id": "precision",
+        "value": 0.7,
+        "sample_size": 200,
+        "raw_artifact_id": "artifact-missing-baseline-metrics"
+      }
+    ],
+    "empirical_claims": [
+      {
+        "id": "claim-missing-baseline-limited",
+        "status": "uncertain",
+        "metric_result_ids": ["metric-result-missing-baseline"]
+      }
+    ]
+  },
+  "statistics": {
+    "analysis_report": true,
+    "low_fpr": false,
+    "underpowered": false,
+    "overstates_significance": false
+  },
+  "reproducibility": {
+    "status": "fail",
+    "checks": {
+      "dataset_cards": "pass",
+      "baseline_cards": "fail: no baselines registered",
+      "metric_definitions": "pass",
+      "run_manifest": "pass",
+      "logs_captured": "pass",
+      "result_artifacts_hashed": "pass"
+    },
+    "blockers": ["No baselines are registered for the experiment workspace."]
+  },
+  "empirical_review": {
+    "reviewer_reviews": ["empirical"],
+    "area_chair_summary": "Missing baseline blocks any submission-quality claim.",
+    "uses_artifacts": true,
+    "reframes_failed_run_as_success": false,
+    "missing_baseline_expected": true,
+    "fatal_flaws": ["No baseline is registered for this executed experiment."],
+    "required_fixes": ["Register and run at least one credible baseline."]
+  },
+  "paper_package": {
+    "exported": true,
+    "readiness": "smoke_result",
+    "labels": ["smoke_result"],
+    "expected_results_hypothetical": true,
+    "claims_results_without_artifacts": false,
+    "fake_results_accepted": false,
+    "failed_results_visible": false
+  },
+  "v6_release_gate": {
+    "expected_pass": false,
+    "expected_blockers": ["missing failed experiment path", "reproducibility failed"]
+  }
+}

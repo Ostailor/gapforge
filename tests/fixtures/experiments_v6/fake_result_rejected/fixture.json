@@ -1,0 +1,85 @@
+{
+  "topic": "v0.6 fixture result is rejected as real empirical acceptance",
+  "execution": {
+    "executions": [
+      {
+        "id": "exec-fake-result",
+        "status": "complete",
+        "run_type": "smoke",
+        "dataset_scope": "fixture",
+        "result_artifact_ids": ["artifact-fake-result"]
+      }
+    ],
+    "failed_run_preserved": true
+  },
+  "result_artifacts": [
+    {
+      "id": "artifact-fake-result",
+      "execution_id": "exec-fake-result",
+      "artifact_type": "metrics_json",
+      "sha256": "fixture-sha256-fake"
+    }
+  ],
+  "result_summary": {
+    "metric_results": [
+      {
+        "id": "metric-result-fake",
+        "metric_id": "accuracy",
+        "value": 0.99,
+        "sample_size": 10,
+        "raw_artifact_id": "artifact-fake-result"
+      }
+    ],
+    "empirical_claims": [
+      {
+        "id": "claim-fake-rejected",
+        "status": "uncertain",
+        "metric_result_ids": ["metric-result-fake"]
+      }
+    ]
+  },
+  "statistics": {
+    "analysis_report": true,
+    "low_fpr": false,
+    "underpowered": false,
+    "overstates_significance": false
+  },
+  "fake_result": {
+    "present": true,
+    "rejected": true,
+    "accepted_as_real": false
+  },
+  "reproducibility": {
+    "status": "pass",
+    "checks": {
+      "dataset_cards": "pass",
+      "baseline_cards": "pass",
+      "metric_definitions": "pass",
+      "run_manifest": "pass",
+      "logs_captured": "pass",
+      "result_artifacts_hashed": "pass"
+    },
+    "blockers": []
+  },
+  "empirical_review": {
+    "reviewer_reviews": ["empirical"],
+    "area_chair_summary": "Fixture output validates workflow but cannot count as real empirical evidence.",
+    "uses_artifacts": true,
+    "reframes_failed_run_as_success": false,
+    "fake_result_expected": true,
+    "blocks_fake_result": true
+  },
+  "paper_package": {
+    "exported": true,
+    "readiness": "smoke_result",
+    "labels": ["smoke_result"],
+    "expected_results_hypothetical": true,
+    "claims_results_without_artifacts": false,
+    "fake_results_accepted": false,
+    "failed_results_visible": false
+  },
+  "v6_release_gate": {
+    "expected_pass": false,
+    "expected_blockers": ["fake result cannot count as real empirical acceptance", "missing failed experiment path"]
+  }
+}

@@ -19,6 +19,7 @@ from gapforge.diagnostics import (
 def test_no_env_vars_reports_real_runs_unavailable(tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
     monkeypatch.delenv("GAPFORGE_ENABLE_REAL_RUNS", raising=False)
     monkeypatch.delenv("GAPFORGE_AGENT_MODE", raising=False)
+    monkeypatch.setenv("GAPFORGE_DISABLE_CODEX_AUTODETECT", "1")
 
     diagnostic = build_real_run_diagnostic(GapForgeConfig.from_cwd(tmp_path))
 

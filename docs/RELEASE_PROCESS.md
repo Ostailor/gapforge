@@ -151,6 +151,54 @@ Release notes must distinguish:
 
 If live sources are unavailable, record the campaigns as not-run or refused. Do not fake a live-literature pass.
 
+## v0.6 Experiment Execution Gate
+
+v0.6 must not claim empirical validation based on protocols, scaffolds, task packs, smoke tests, or model-generated text. It must require executed experiment artifacts.
+
+Before tagging v0.6, the release process should require:
+
+```bash
+make ci
+gapforge eval --v5 --write-report
+gapforge eval --v6 --write-report
+gapforge v5-release-gate --write-report --json
+gapforge experiment-workspace-create --project-id <project-id> --direction-id <direction-id>
+gapforge dataset-register --workspace-id <workspace-id> --name "fixture examples" --path <path> --dataset-type fixture
+gapforge baseline-register --workspace-id <workspace-id> --name "heuristic baseline" --baseline-type heuristic
+gapforge metric-register --workspace-id <workspace-id> --name "false positive rate"
+gapforge scaffold-experiment-code --workspace-id <workspace-id>
+gapforge experiment-manifest-create --workspace-id <workspace-id> --run-type smoke --command "..." --expected-output results/metrics.json
+gapforge experiment-run --workspace-id <workspace-id> --manifest-id <manifest-id>
+gapforge parse-results --execution-id <execution-id>
+gapforge analyze-results --execution-id <execution-id>
+gapforge reproducibility-check --execution-id <execution-id>
+gapforge empirical-review --execution-id <execution-id>
+gapforge export-paper-package-v2 --workspace-id <workspace-id>
+gapforge v6-release-gate --write-report --json
+```
+
+The v0.6 release gate should require:
+
+- deterministic CI remains passing
+- v0.5 literature-quality gate remains passing or any limitation is explicitly documented
+- at least one executed fixture experiment with run manifest, logs, result artifact, statistical analysis, reproducibility check, and result claim ledger
+- at least one failed or negative experiment path with durable logs and visible report language
+- paper package export separates real observed results, placeholders, expected/hypothetical results, smoke outputs, and missing results
+- no result claim is marked supported without a linked result artifact
+- no failed run or negative result is hidden from reports
+
+Release notes must distinguish:
+
+- protocol-ready directions
+- generated scaffolds
+- smoke runs
+- executed experiments
+- failed or negative experiments
+- empirically supported claims
+- unsupported or inconclusive result claims
+
+If no executed experiment artifacts exist, record v0.6 empirical validation as not completed. Never fabricate a pass.
+
 ## Tagging
 
 Use semantic version tags:
@@ -181,4 +229,5 @@ Release notes should include:
 - Do not claim actual-run acceptance unless the release-gate front matter says `actual_run_acceptance_passed: true` and at least one real canary is accepted.
 - For v0.4, do not claim actual-run acceptance unless multiple real Codex/GPT-5.4 campaigns are accepted and the campaign release gate passes.
 - For v0.5, do not claim live-literature quality unless accepted live-source campaigns and expert reviews prove it.
+- For v0.6, do not claim empirical validation unless executed experiment artifacts, failed/negative path artifacts, statistical analysis, reproducibility checks, and result-claim links prove it.
 - Do not publish generated `runs/`, caches, or local environment artifacts as source.

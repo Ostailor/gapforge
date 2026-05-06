@@ -1,0 +1,94 @@
+{
+  "topic": "v0.6 reproducible fixture result satisfies empirical release gate",
+  "execution": {
+    "executions": [
+      {
+        "id": "exec-repro-success",
+        "status": "complete",
+        "run_type": "smoke",
+        "dataset_scope": "fixture",
+        "result_artifact_ids": ["artifact-repro-success"]
+      },
+      {
+        "id": "exec-repro-failed",
+        "status": "failed",
+        "run_type": "negative_control",
+        "dataset_scope": "fixture",
+        "failure_reason": "Negative control failed as expected and was preserved.",
+        "result_artifact_ids": ["artifact-repro-failed"]
+      }
+    ],
+    "failed_run_preserved": true
+  },
+  "result_artifacts": [
+    {
+      "id": "artifact-repro-success",
+      "execution_id": "exec-repro-success",
+      "artifact_type": "metrics_json",
+      "sha256": "fixture-sha256-repro-success"
+    },
+    {
+      "id": "artifact-repro-failed",
+      "execution_id": "exec-repro-failed",
+      "artifact_type": "metrics_json",
+      "sha256": "fixture-sha256-repro-failed"
+    }
+  ],
+  "result_summary": {
+    "metric_results": [
+      {
+        "id": "metric-result-repro-fpr",
+        "metric_id": "false-positive-rate",
+        "value": 0.015,
+        "sample_size": 2000,
+        "confidence_interval": [0.006, 0.024],
+        "raw_artifact_id": "artifact-repro-success"
+      }
+    ],
+    "empirical_claims": [
+      {
+        "id": "claim-repro-supported",
+        "status": "supported",
+        "metric_result_ids": ["metric-result-repro-fpr"]
+      }
+    ]
+  },
+  "statistics": {
+    "analysis_report": true,
+    "low_fpr": true,
+    "confidence_intervals": true,
+    "underpowered": false,
+    "overstates_significance": false
+  },
+  "reproducibility": {
+    "status": "pass",
+    "checks": {
+      "dataset_cards": "pass",
+      "baseline_cards": "pass",
+      "metric_definitions": "pass",
+      "run_manifest": "pass",
+      "logs_captured": "pass",
+      "result_artifacts_hashed": "pass"
+    },
+    "blockers": []
+  },
+  "empirical_review": {
+    "reviewer_reviews": ["empirical", "statistics", "reproducibility"],
+    "area_chair_summary": "Fixture result is reproducible and honestly scoped as smoke validation.",
+    "uses_artifacts": true,
+    "reframes_failed_run_as_success": false
+  },
+  "paper_package": {
+    "exported": true,
+    "readiness": "smoke_result",
+    "labels": ["smoke_result", "failed_result"],
+    "expected_results_hypothetical": true,
+    "claims_results_without_artifacts": false,
+    "fake_results_accepted": false,
+    "failed_results_visible": true
+  },
+  "v6_release_gate": {
+    "expected_pass": true,
+    "expected_blockers": []
+  }
+}

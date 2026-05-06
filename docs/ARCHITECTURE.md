@@ -9,6 +9,7 @@ GapForge is a skills-based research ideation OS. It is not a rigid one-pass summ
 - **v0.3 project and retrieval layer**: project memory across runs, hybrid retrieval, source policy profiles, active loop decisions, optional LLM-backed skills, related-work matrices, direction maturation, experiment protocols, review queues, dashboards, and manuscript packages.
 - **v0.4 campaign and actual-run layer**: campaign state, campaign controller decisions, Codex/GPT-5.4 task packs, direct/handoff runner paths, strict output import validation, repair/rollback, novelty re-search loops, campaign reviewer loops, experiment code tasks, campaign canaries, human acceptance gates, and release-gate enforcement.
 - **v0.5 real-literature quality layer**: live source health diagnostics, planned multi-round search strategies, paper canonicalization, prior-work recall gates, real-literature campaign records, human research-quality review, dashboards/reports for quality acceptance, and v5 release-gate enforcement.
+- **v0.6 empirical execution layer**: experiment workspaces, dataset/baseline/metric registries, run manifests, execution records, result artifacts, statistical analysis, reproducibility checks, empirical reviewer panels, paper package v2 exports, experiment dashboards, and v6 release-gate enforcement.
 
 ## Core Layers
 
@@ -81,6 +82,15 @@ GapForge is a skills-based research ideation OS. It is not a rigid one-pass summ
    - `src/gapforge/novelty/recall_gate.py` blocks strong novelty until required prior-work searches are complete.
    - `src/gapforge/real_literature/` defines profiles, dry-run planning, campaign records, and human quality review.
    - `src/gapforge/release_gate/v05.py` separates workflow acceptance from research-quality acceptance.
+
+13. **Experiment execution and empirical validation**
+   - `src/gapforge/experiments/` manages experiment workspaces, manifests, execution records, logs, result artifacts, and reproducibility checks.
+   - `src/gapforge/datasets/`, `src/gapforge/baselines/`, and `src/gapforge/metrics/` make data, comparators, and measurements first-class.
+   - `src/gapforge/experiment_code/` scaffolds runnable workspace code and creates bounded Codex implementation tasks under the workspace code root.
+   - `src/gapforge/results/` parses metrics artifacts into `MetricResult` and `EmpiricalClaim` records, then analyzes uncertainty.
+   - `src/gapforge/reviewers/empirical.py` reviews executed artifacts, statistics, reproducibility, missing baselines, and result overclaim.
+   - `src/gapforge/export/paper_package.py` v2 exports separate planned protocols, smoke/pilot/main results, failed runs, hypothetical expected results, and limitations.
+   - `src/gapforge/release_gate/v06.py` fails closed unless execution, failure/negative path, result parsing, reproducibility, empirical review, and package artifacts exist.
 
 ## v0.3 Staged Loop
 
@@ -157,6 +167,29 @@ dry-run broad campaign
 
 The controller should refuse recommendations when live coverage is disabled, fallback records dominate, required prior-work rounds are missing, or closest prior work likely solves the gap.
 
+## v0.6 Experiment Execution Flow
+
+The v0.6 flow starts only after an experiment-ready direction exists:
+
+```text
+experiment-ready direction
+-> create experiment workspace
+-> register datasets, baselines, and metrics
+-> scaffold runnable code and Codex implementation tasks
+-> create run manifest
+-> execute smoke, pilot, main, ablation, negative-control, or reproduction run
+-> capture stdout/stderr, return code, expected outputs, and result artifact hashes
+-> parse metrics_json artifacts into MetricResult records
+-> create empirical claims only from parsed result artifacts
+-> analyze uncertainty and low-FPR sample-size risk
+-> run reproducibility checker
+-> run empirical reviewer panel
+-> export paper package v2 with result labels and failed/negative paths
+-> v6 release gate
+```
+
+Run type matters. `smoke` proves wiring and artifact production only. `pilot` can inform design but should be labeled exploratory. `main`, `ablation`, `negative_control`, and `reproduction` runs may support empirical claims only when execution records and result artifacts exist.
+
 ## v0.3 Active Loop
 
 `gapforge run "topic" --v3 --active --budget small` creates an active-loop run. The active loop evaluates current state, source policy, evidence coverage, novelty dossiers, review queue, and budget before selecting the next action. It can stop because coverage is sufficient, budget is exhausted, no new papers are found, or human review is needed.
@@ -173,3 +206,6 @@ The controller should refuse recommendations when live coverage is disabled, fal
 - Fake-agent and prompt-pack-only outputs must not be represented as real Codex/GPT-5.4 research.
 - Campaign acceptance requires explicit stop reason, validated imports when agent-backed, and human review.
 - v0.5 research-quality acceptance additionally requires live source diagnostics, search strategy/rounds, canonicalized papers, prior-work recall, closest-prior-work evidence, and human quality review.
+- v0.6 empirical claims additionally require run manifests, execution records, result artifacts, parsed metrics, uncertainty analysis, and reproducibility status.
+- Smoke results, placeholder data, and fixture outputs must be labeled and must not be presented as real empirical success.
+- Failed and negative runs must remain visible in reports, dashboards, reviewer panels, and paper packages.

@@ -468,7 +468,7 @@ def _copy_relevant_examples(examples_dir: Path, required_files: list[str]) -> No
         destination = examples_dir / example_dir.name
         if destination.exists():
             shutil.rmtree(destination)
-        shutil.copytree(example_dir, destination)
+        shutil.copytree(example_dir, destination, dirs_exist_ok=True)
 
 
 def open_handoff_readme(path: Path) -> None:

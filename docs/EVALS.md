@@ -52,6 +52,20 @@ Located in `tests/fixtures/campaign_v4/`:
 
 These fixtures test campaign behavior, actual-run gate logic, invalid output rejection, novelty re-search, stop reasons, direction maturity gates, review queues, code task quality, and rollback safety. They are synthetic offline fixtures and do not prove Codex/GPT-5.4 actual-run quality.
 
+### v0.6 Experiment Execution Fixtures
+
+Located in `tests/fixtures/experiments_v6/`:
+
+- `smoke_success`
+- `failed_run`
+- `missing_baseline`
+- `low_fpr_underpowered`
+- `fake_result_rejected`
+- `reproducible_result`
+- `paper_package_result_labels`
+
+These fixtures test empirical execution integrity offline. They distinguish planned protocols, scaffolds, smoke runs, failed runs, parsed result artifacts, reproducibility, empirical review, and paper package labels. They do not prove real-world empirical success.
+
 ## Metrics
 
 Core metrics:
@@ -123,6 +137,18 @@ v0.5 metrics:
 - `quality_review_gate_correctness`
 - `v5_release_gate_correctness`
 
+v0.6 metrics:
+
+- `experiment_execution_integrity`
+- `result_artifact_grounding`
+- `empirical_claim_validity`
+- `statistical_caution_score`
+- `reproducibility_score`
+- `empirical_review_quality`
+- `fake_result_rejection`
+- `paper_package_honesty`
+- `v6_release_gate_correctness`
+
 ## Commands
 
 ```bash
@@ -131,9 +157,11 @@ gapforge eval --v2
 gapforge eval --v3
 gapforge eval --v4
 gapforge eval --v5
+gapforge eval --v6
 gapforge eval --fixture low_fpr_collusion --v3
 gapforge eval --fixture fake_agent_campaign --v4
 gapforge eval --fixture live_like_low_fpr_collusion --v5
+gapforge eval --fixture smoke_success --v6
 gapforge eval --write-report
 make eval
 ```
@@ -159,6 +187,12 @@ make eval
 - live-literature quality accepted without source health, search strategy, canonicalization, prior-work recall, or human quality review
 - workflow-accepted campaigns counted as research-quality accepted
 - undercovered campaigns recommending directions instead of refusing
+- empirical claims generated without result artifacts
+- smoke outputs presented as main results
+- fake result files accepted as observed results
+- failed experiment paths hidden from reports
+- low-FPR metrics missing confidence/sample-size caution
+- paper packages blending planned, smoke, pilot, main, failed, and hypothetical result categories
 
 ## Fixture Policy
 
@@ -175,3 +209,5 @@ Eval scores are regression signals. A passing eval means GapForge preserved safe
 For v0.4, passing `gapforge eval --v4` means the offline campaign behavior fixtures passed. It does not mean actual Codex/GPT-5.4 campaign acceptance passed. Actual-run acceptance requires recorded real campaigns, validated imports, attestation, and human review.
 
 For v0.5, passing `gapforge eval --v5` means offline real-literature quality gate fixtures passed. It does not mean live-literature campaign quality passed. That requires live source diagnostics, real campaign records, human quality review, and `gapforge v5-release-gate`.
+
+For v0.6, passing `gapforge eval --v6` means offline experiment execution safety fixtures passed. It does not mean a real empirical result was established. Empirical claims require execution records, result artifacts, parsed metrics, statistical analysis, reproducibility checks, and reviewer scrutiny.

@@ -1,0 +1,81 @@
+{
+  "topic": "v0.6 smoke execution succeeds with artifact-backed metrics",
+  "execution": {
+    "executions": [
+      {
+        "id": "exec-smoke-success",
+        "status": "complete",
+        "run_type": "smoke",
+        "dataset_scope": "fixture",
+        "command": "python code/src/run_experiment.py --config configs/smoke.json",
+        "result_artifact_ids": ["artifact-smoke-metrics"]
+      }
+    ],
+    "failed_run_preserved": true
+  },
+  "result_artifacts": [
+    {
+      "id": "artifact-smoke-metrics",
+      "execution_id": "exec-smoke-success",
+      "artifact_type": "metrics_json",
+      "sha256": "fixture-sha256-smoke"
+    }
+  ],
+  "result_summary": {
+    "metric_results": [
+      {
+        "id": "metric-result-smoke-fpr",
+        "metric_id": "false-positive-rate",
+        "value": 0.01,
+        "sample_size": 1000,
+        "confidence_interval": [0.0, 0.02],
+        "raw_artifact_id": "artifact-smoke-metrics"
+      }
+    ],
+    "empirical_claims": [
+      {
+        "id": "claim-smoke-artifact-backed",
+        "status": "supported",
+        "metric_result_ids": ["metric-result-smoke-fpr"]
+      }
+    ]
+  },
+  "statistics": {
+    "analysis_report": true,
+    "low_fpr": true,
+    "confidence_intervals": true,
+    "underpowered": false,
+    "overstates_significance": false
+  },
+  "reproducibility": {
+    "status": "pass",
+    "checks": {
+      "dataset_cards": "pass",
+      "baseline_cards": "pass",
+      "metric_definitions": "pass",
+      "run_manifest": "pass",
+      "logs_captured": "pass",
+      "result_artifacts_hashed": "pass"
+    },
+    "blockers": []
+  },
+  "empirical_review": {
+    "reviewer_reviews": ["empirical", "statistics", "reproducibility"],
+    "area_chair_summary": "Smoke result is useful for workflow validation only.",
+    "uses_artifacts": true,
+    "reframes_failed_run_as_success": false
+  },
+  "paper_package": {
+    "exported": true,
+    "readiness": "smoke_result",
+    "labels": ["smoke_result"],
+    "expected_results_hypothetical": true,
+    "claims_results_without_artifacts": false,
+    "fake_results_accepted": false,
+    "failed_results_visible": false
+  },
+  "v6_release_gate": {
+    "expected_pass": false,
+    "expected_blockers": ["missing failed experiment path"]
+  }
+}

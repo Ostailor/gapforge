@@ -190,3 +190,39 @@ Codex outputs must:
 - store public reasoning summaries only
 
 Fake-agent, fixture-only, or dry-run outputs are useful for CI and usability checks. They do not count as v0.5 real-literature quality.
+
+## v0.6 Experiment Execution Role
+
+For v0.6, Codex/GPT-5.4 may help turn an experiment-ready direction into executable code tasks and analysis scripts. Codex remains an implementation assistant, not a source of empirical results.
+
+Codex may help:
+
+- scaffold experiment workspaces
+- implement dataset adapters when dataset cards identify the source and access rules
+- implement baselines from the baseline registry
+- implement metric functions from the metric registry
+- write smoke tests and validation commands
+- write analysis scripts for recorded result artifacts
+- summarize failed or negative runs from logs and artifacts
+- critique empirical design as a reviewer
+
+Codex must not:
+
+- invent datasets, baselines, metrics, logs, plots, tables, p-values, confidence intervals, or result artifacts
+- mark an experiment as executed
+- convert a scaffold or smoke test into empirical success
+- hide failed runs or negative results
+- remove reproducibility warnings
+- write paper package language that presents expected results as observed
+
+For v0.6 task packs, prompts should include:
+
+- experiment protocol ID and direction ID
+- dataset cards, baseline registry, and metric registry
+- run manifest schema
+- expected commands and output paths
+- artifact hygiene rules
+- result-claim ledger rules
+- explicit instruction that empirical claims require run records and result artifacts
+
+Any Codex-generated experiment code must be validated by execution records before supporting empirical claims. If no run record and result artifact exist, the output remains scaffold or analysis preparation only.

@@ -91,6 +91,7 @@ def test_agent_capabilities_report_direct_unavailable_and_task_pack_available(mo
     monkeypatch.delenv("GAPFORGE_ENABLE_REAL_RUNS", raising=False)
     monkeypatch.delenv("GAPFORGE_CODEX_COMMAND", raising=False)
     monkeypatch.delenv("GAPFORGE_CODEX_RUNNER_CMD", raising=False)
+    monkeypatch.setenv("GAPFORGE_DISABLE_CODEX_AUTODETECT", "1")
 
     capabilities = {item.mode: item for item in agent_capabilities(AgentRuntimeConfig.from_env())}
 
@@ -129,6 +130,7 @@ def test_setup_codex_no_env_recommends_handoff(monkeypatch) -> None:  # type: ig
     monkeypatch.delenv("GAPFORGE_AGENT_MODE", raising=False)
     monkeypatch.delenv("GAPFORGE_CODEX_COMMAND", raising=False)
     monkeypatch.delenv("GAPFORGE_CODEX_RUNNER_CMD", raising=False)
+    monkeypatch.setenv("GAPFORGE_DISABLE_CODEX_AUTODETECT", "1")
 
     status = build_codex_setup_status(AgentRuntimeConfig.from_env())
 
@@ -138,6 +140,28 @@ def test_setup_codex_no_env_recommends_handoff(monkeypatch) -> None:  # type: ig
     assert status.recommended_mode == "manual-handoff"
     assert "GAPFORGE_ENABLE_REAL_RUNS=1" in status.missing_env
     assert any("No direct Codex command" in warning for warning in status.warnings)
+
+
+def test_setup_codex_autodetects_local_codex_wrapper(monkeypatch, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    codex = fake_bin / "codex"
+    codex.write_text("#!/usr/bin/env sh\nexit 0\n", encoding="utf-8")
+    codex.chmod(0o755)
+    monkeypatch.setenv("PATH", str(fake_bin))
+    monkeypatch.delenv("GAPFORGE_DISABLE_CODEX_AUTODETECT", raising=False)
+    monkeypatch.delenv("GAPFORGE_ENABLE_REAL_RUNS", raising=False)
+    monkeypatch.delenv("GAPFORGE_AGENT_MODE", raising=False)
+    monkeypatch.delenv("GAPFORGE_CODEX_COMMAND", raising=False)
+    monkeypatch.delenv("GAPFORGE_CODEX_RUNNER_CMD", raising=False)
+
+    status = build_codex_setup_status(AgentRuntimeConfig.from_env())
+
+    assert status.direct_available is True
+    assert status.recommended_mode == "direct"
+    assert status.command_template_valid is True
+    assert "gapforge_codex_exec_task.sh" in status.codex_command
+    assert status.missing_env == []
 
 
 def test_setup_codex_direct_env_available(monkeypatch) -> None:  # type: ignore[no-untyped-def]
@@ -173,7 +197,11 @@ def test_setup_codex_missing_outputs_dir_warns(monkeypatch) -> None:  # type: ig
 def test_setup_codex_cli_json(tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
     monkeypatch.delenv("GAPFORGE_ENABLE_REAL_RUNS", raising=False)
     monkeypatch.delenv("GAPFORGE_CODEX_COMMAND", raising=False)
-    env = {**os.environ, "PYTHONPATH": str(Path(__file__).resolve().parents[1] / "src")}
+    env = {
+        **os.environ,
+        "GAPFORGE_DISABLE_CODEX_AUTODETECT": "1",
+        "PYTHONPATH": str(Path(__file__).resolve().parents[1] / "src"),
+    }
 
     result = subprocess.run(
         [sys.executable, "-m", "gapforge.cli", "setup-codex", "--json"],
@@ -1262,7 +1290,12 @@ def test_repair_status_cli_renders_record(tmp_path: Path) -> None:
 
 def test_agent_cli_status_task_fake_and_validate(tmp_path: Path) -> None:
     manager, state = _agent_state(tmp_path)
-    env = {**os.environ, "GAPFORGE_DISABLE_NETWORK": "1", "PYTHONPATH": str(Path(__file__).resolve().parents[1] / "src")}
+    env = {
+        **os.environ,
+        "GAPFORGE_DISABLE_CODEX_AUTODETECT": "1",
+        "GAPFORGE_DISABLE_NETWORK": "1",
+        "PYTHONPATH": str(Path(__file__).resolve().parents[1] / "src"),
+    }
 
     status = subprocess.run(
         [sys.executable, "-m", "gapforge.cli", "agent-status"],
@@ -1663,7 +1696,12 @@ def test_mine_gaps_llm_agent_fake_mode_validates_safely(tmp_path: Path) -> None:
 
 def test_novelty_check_llm_codex_mode_disabled_without_env(tmp_path: Path) -> None:
     _, state = _agent_state(tmp_path)
-    env = {**os.environ, "GAPFORGE_DISABLE_NETWORK": "1", "PYTHONPATH": str(Path(__file__).resolve().parents[1] / "src")}
+    env = {
+        **os.environ,
+        "GAPFORGE_DISABLE_CODEX_AUTODETECT": "1",
+        "GAPFORGE_DISABLE_NETWORK": "1",
+        "PYTHONPATH": str(Path(__file__).resolve().parents[1] / "src"),
+    }
     env.pop("GAPFORGE_ENABLE_REAL_RUNS", None)
 
     result = subprocess.run(

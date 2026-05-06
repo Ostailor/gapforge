@@ -2,7 +2,15 @@
 
 from __future__ import annotations
 
-from gapforge.models import ExperimentPlan, ExperimentProtocol, Gap, NoveltyDossier, ResearchDirection
+from gapforge.models import (
+    EmpiricalClaim,
+    ExperimentExecutionRecord,
+    ExperimentPlan,
+    ExperimentProtocol,
+    Gap,
+    NoveltyDossier,
+    ResearchDirection,
+)
 
 
 def render_abstract(direction: ResearchDirection, gap: Gap | None, protocol: ExperimentProtocol | None) -> str:
@@ -91,6 +99,31 @@ def render_expected_results(protocol: ExperimentProtocol | None, experiment: Exp
     lines.extend([f"- Hypothetical: {item}" for item in patterns] or ["- Hypothetical: define expected result patterns before running."])
     lines.extend(["", "## Falsification", ""])
     lines.append(experiment.what_result_would_falsify_the_idea if experiment is not None else "Not specified.")
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def render_v06_result_boundary(
+    executions: list[ExperimentExecutionRecord],
+    empirical_claims: list[EmpiricalClaim],
+) -> str:
+    lines = ["# Result Boundary", ""]
+    if not executions:
+        lines.extend(
+            [
+                "No experiment execution records are linked yet.",
+                "",
+                "Status: planned experiment only. Do not include a Results section with empirical claims.",
+            ]
+        )
+        return "\n".join(lines).rstrip() + "\n"
+    lines.extend(["## Execution Labels", ""])
+    for execution in executions:
+        lines.append(f"- `{execution.id}` status=`{execution.status}` manifest=`{execution.manifest_id}`")
+    lines.extend(["", "## Artifact-Backed Empirical Claims", ""])
+    if empirical_claims:
+        lines.extend([f"- `{claim.id}` {claim.status}: {claim.text}" for claim in empirical_claims])
+    else:
+        lines.append("No artifact-backed empirical claims are available. Do not write completed result claims.")
     return "\n".join(lines).rstrip() + "\n"
 
 

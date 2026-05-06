@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from gapforge.agents.validation import create_actual_run_attestation as create_run_actual_run_attestation
+from gapforge.baselines.registry import BaselineRegistry
 from gapforge.campaigns import CampaignManager, CampaignState
 from gapforge.campaigns.acceptance import create_campaign_actual_run_attestation
 from gapforge.campaigns.controller import CampaignController
@@ -21,21 +22,33 @@ from gapforge.campaigns.importer import CampaignOutputImporter
 from gapforge.campaigns.review import CampaignReviewManager
 from gapforge.campaigns.task_packs import create_campaign_task_pack
 from gapforge.config import GapForgeConfig
+from gapforge.datasets.registry import DatasetRegistry
 from gapforge.directions.maturation import DirectionMaturationManager
 from gapforge.experiment_code import ExperimentCodeTaskGenerator
+from gapforge.experiment_code.scaffold_v2 import ExperimentCodeScaffolderV2
+from gapforge.experiments.reproducibility_checker import ReproducibilityChecker
+from gapforge.experiments.runner import ExperimentRunner, ExperimentRunResult
+from gapforge.experiments.workspace import ExperimentWorkspaceManager
 from gapforge.export.paper_package import PaperPackageExporter
 from gapforge.fulltext.pdf_parser import FullTextParser
 from gapforge.ingest import ManualIngestor
+from gapforge.metrics.registry import MetricRegistry
 from gapforge.models import (
     AgentActualRunAttestation,
     AgentTaskSpec,
+    BaselineRecord,
     CampaignAcceptanceSummary,
     CampaignHumanReview,
     CampaignImportRecord,
     CanonicalPaperIdentity,
+    DatasetRecord,
+    EmpiricalReviewPanel,
     ExperimentCodeTask,
+    ExperimentRunManifest,
+    ExperimentWorkspace,
     IndexManifest,
     LiveSourceDiagnostic,
+    MetricRecord,
     Paper,
     PaperArtifact,
     PaperMergeDecision,
@@ -44,9 +57,11 @@ from gapforge.models import (
     PriorWorkRecallAssessment,
     RealLiteratureCampaignRecord,
     RealLiteratureHumanReview,
+    ReproducibilityCheckResult,
     ResearchDirection,
     ResearchProgramState,
     ResearchRunState,
+    ResultSummary,
     SearchStrategy,
     SourceHealthCheck,
 )
@@ -54,9 +69,19 @@ from gapforge.novelty.recall_gate import assess_campaign_prior_work_recall, asse
 from gapforge.orchestrator import Orchestrator
 from gapforge.project_memory import ProjectMemoryManager
 from gapforge.real_literature import RealLiteratureCampaignManager, RealLiteratureReviewManager
-from gapforge.release_gate import V04ReleaseGateEnforcer, V04ReleaseGateResult, V05ReleaseGateEnforcer, V05ReleaseGateResult
+from gapforge.release_gate import (
+    V04ReleaseGateEnforcer,
+    V04ReleaseGateResult,
+    V05ReleaseGateEnforcer,
+    V05ReleaseGateResult,
+    V06ReleaseGateEnforcer,
+    V06ReleaseGateResult,
+)
 from gapforge.reporting import write_final_report
+from gapforge.results import ResultParser, ResultStatisticsAnalyzer
+from gapforge.results.statistics import StatisticalAnalysisReport
 from gapforge.retrieval import build_project_index, build_run_index
+from gapforge.reviewers.empirical import EmpiricalReviewBuilder
 from gapforge.search_strategy import plan_search_strategy as plan_search_strategy_skill
 from gapforge.sources.base import ResearchSource
 from gapforge.sources.canonical import canonicalize_project, canonicalize_run
@@ -699,6 +724,261 @@ def generate_code_tasks(
     )
 
 
+def create_experiment_workspace(
+    project_id: str,
+    direction_id: str,
+    *,
+    campaign_id: str = "",
+    experiment_protocol_id: str = "",
+    config: GapForgeConfig | None = None,
+) -> ExperimentWorkspace:
+    """Create a durable v0.6 experiment workspace for a research direction."""
+
+    return ExperimentWorkspaceManager(_config(config)).create_workspace(
+        project_id=project_id,
+        direction_id=direction_id,
+        campaign_id=campaign_id,
+        experiment_protocol_id=experiment_protocol_id,
+    )
+
+
+def register_dataset(
+    workspace_id: str,
+    name: str,
+    path: str | Path,
+    *,
+    dataset_type: str = "unknown",
+    description: str = "",
+    source: str = "",
+    source_url: str = "",
+    version: str = "",
+    license: str = "",
+    intended_use: str = "",
+    limitations: list[str] | None = None,
+    safety_notes: list[str] | None = None,
+    config: GapForgeConfig | None = None,
+) -> DatasetRecord:
+    """Register a workspace dataset and write its dataset card."""
+
+    return DatasetRegistry(_config(config)).register_dataset(
+        workspace_id=workspace_id,
+        name=name,
+        path=path,
+        dataset_type=dataset_type,
+        description=description,
+        source=source,
+        source_url=source_url,
+        version=version,
+        license=license,
+        intended_use=intended_use,
+        limitations=limitations,
+        safety_notes=safety_notes,
+    )
+
+
+def register_baseline(
+    workspace_id: str,
+    name: str,
+    *,
+    description: str = "",
+    baseline_type: str = "unknown",
+    source_paper_ids: list[str] | None = None,
+    related_work_entry_ids: list[str] | None = None,
+    code_available: bool = False,
+    code_url: str = "",
+    implementation_path: str = "",
+    required_for_submission: bool = False,
+    risk_if_missing: str = "",
+    expected_inputs: list[str] | None = None,
+    expected_outputs: list[str] | None = None,
+    config: GapForgeConfig | None = None,
+) -> BaselineRecord:
+    """Register an explicit experiment baseline."""
+
+    return BaselineRegistry(_config(config)).register_baseline(
+        workspace_id=workspace_id,
+        name=name,
+        description=description,
+        baseline_type=baseline_type,
+        source_paper_ids=source_paper_ids,
+        related_work_entry_ids=related_work_entry_ids,
+        code_available=code_available,
+        code_url=code_url,
+        implementation_path=implementation_path,
+        required_for_submission=required_for_submission,
+        risk_if_missing=risk_if_missing,
+        expected_inputs=expected_inputs,
+        expected_outputs=expected_outputs,
+    )
+
+
+def register_metric(
+    workspace_id: str,
+    name: str,
+    *,
+    description: str = "",
+    metric_type: str = "custom",
+    formula: str = "",
+    higher_is_better: bool = True,
+    required_inputs: list[str] | None = None,
+    edge_cases: list[str] | None = None,
+    config: GapForgeConfig | None = None,
+) -> MetricRecord:
+    """Register an experiment metric, using built-in templates when available."""
+
+    return MetricRegistry(_config(config)).register_metric(
+        workspace_id=workspace_id,
+        name=name,
+        description=description,
+        metric_type=metric_type,
+        formula=formula,
+        higher_is_better=higher_is_better,
+        required_inputs=required_inputs,
+        edge_cases=edge_cases,
+    )
+
+
+def scaffold_experiment_code(
+    workspace_id: str,
+    *,
+    config: GapForgeConfig | None = None,
+) -> Path:
+    """Generate the v0.6 runnable code scaffold for a workspace."""
+
+    return ExperimentCodeScaffolderV2(_config(config)).scaffold(workspace_id)
+
+
+def create_experiment_manifest(
+    workspace_id: str,
+    *,
+    run_type: str = "smoke",
+    run_name: str = "",
+    dataset_ids: list[str] | None = None,
+    baseline_ids: list[str] | None = None,
+    metric_ids: list[str] | None = None,
+    command: str = "",
+    expected_outputs: list[str] | None = None,
+    random_seed: int = 0,
+    config: GapForgeConfig | None = None,
+) -> ExperimentRunManifest:
+    """Create a run manifest. This records intent, not execution."""
+
+    return ExperimentWorkspaceManager(_config(config)).create_manifest(
+        workspace_id=workspace_id,
+        run_type=run_type,
+        run_name=run_name,
+        dataset_ids=dataset_ids,
+        baseline_ids=baseline_ids,
+        metric_ids=metric_ids,
+        command=command,
+        expected_outputs=expected_outputs,
+        random_seed=random_seed,
+    )
+
+
+def run_experiment(
+    workspace_id: str,
+    *,
+    manifest_id: str = "",
+    run_type: str = "",
+    timeout_seconds: int = 300,
+    dry_run: bool = False,
+    config: GapForgeConfig | None = None,
+) -> ExperimentRunResult:
+    """Execute an experiment manifest and persist logs/result-artifact metadata."""
+
+    return ExperimentRunner(_config(config)).run(
+        workspace_id=workspace_id,
+        manifest_id=manifest_id,
+        run_type=run_type,
+        timeout_seconds=timeout_seconds,
+        dry_run=dry_run,
+    )
+
+
+def parse_results(
+    execution_id: str,
+    *,
+    config: GapForgeConfig | None = None,
+) -> ResultSummary:
+    """Parse artifact-backed metric results for an execution."""
+
+    return ResultParser(_config(config)).parse_execution(execution_id)
+
+
+def analyze_results(
+    *,
+    execution_id: str | None = None,
+    workspace_id: str | None = None,
+    config: GapForgeConfig | None = None,
+) -> StatisticalAnalysisReport:
+    """Analyze parsed result uncertainty for exactly one execution or workspace."""
+
+    cfg = _config(config)
+    _require_one_identifier("execution_id", execution_id, "workspace_id", workspace_id)
+    analyzer = ResultStatisticsAnalyzer(cfg)
+    if execution_id:
+        return analyzer.analyze_execution(execution_id)
+    return analyzer.analyze_workspace(workspace_id or "")
+
+
+def reproducibility_check(
+    *,
+    workspace_id: str | None = None,
+    execution_id: str | None = None,
+    config: GapForgeConfig | None = None,
+) -> ReproducibilityCheckResult:
+    """Run the v0.6 reproducibility audit for exactly one workspace or execution."""
+
+    cfg = _config(config)
+    _require_one_identifier("workspace_id", workspace_id, "execution_id", execution_id)
+    checker = ReproducibilityChecker(cfg)
+    if execution_id:
+        return checker.check_execution(execution_id)
+    return checker.check_workspace(workspace_id or "")
+
+
+def empirical_review(
+    *,
+    workspace_id: str | None = None,
+    execution_id: str | None = None,
+    config: GapForgeConfig | None = None,
+) -> EmpiricalReviewPanel:
+    """Build a deterministic empirical reviewer panel for one workspace or execution."""
+
+    cfg = _config(config)
+    _require_one_identifier("workspace_id", workspace_id, "execution_id", execution_id)
+    builder = EmpiricalReviewBuilder(cfg)
+    if execution_id:
+        return builder.review_execution(execution_id)
+    return builder.review_workspace(workspace_id or "")
+
+
+def export_paper_package_v2(
+    *,
+    workspace_id: str | None = None,
+    direction_id: str | None = None,
+    config: GapForgeConfig | None = None,
+) -> PaperPackage:
+    """Export the v0.6 empirical paper package for a workspace or direction."""
+
+    cfg = _config(config)
+    _require_one_identifier("workspace_id", workspace_id, "direction_id", direction_id)
+    exporter = PaperPackageExporter(cfg)
+    if workspace_id:
+        return exporter.export_workspace_v2(workspace_id)
+    return exporter.export_direction_v2(direction_id or "")
+
+
+def v6_release_gate(
+    *,
+    config: GapForgeConfig | None = None,
+) -> V06ReleaseGateResult:
+    """Evaluate the v0.6 empirical validation release gate."""
+
+    return V06ReleaseGateEnforcer(_config(config)).evaluate()
+
+
 def get_state(run_id: str, *, config: GapForgeConfig | None = None) -> ResearchRunState:
     """Load a persisted run state."""
 
@@ -718,6 +998,11 @@ def _config(config: GapForgeConfig | None) -> GapForgeConfig:
 def _require_one_scope(*, run_id: str | None, project_id: str | None) -> None:
     if bool(run_id) == bool(project_id):
         raise ValueError("Provide exactly one of run_id or project_id.")
+
+
+def _require_one_identifier(first_name: str, first: str | None, second_name: str, second: str | None) -> None:
+    if bool(first) == bool(second):
+        raise ValueError(f"Provide exactly one of {first_name} or {second_name}.")
 
 
 def _paths(paths: list[str | Path] | None) -> list[Path]:
@@ -803,9 +1088,13 @@ __all__ = [
     "create_campaign",
     "create_campaign_task",
     "create_direction",
+    "create_experiment_manifest",
+    "create_experiment_workspace",
     "create_project",
     "create_run",
+    "empirical_review",
     "export_paper_package",
+    "export_paper_package_v2",
     "export_report",
     "generate_code_tasks",
     "get_project",
@@ -814,17 +1103,25 @@ __all__ = [
     "mature_direction",
     "mine_gaps",
     "novelty_check",
+    "parse_results",
     "parse_fulltext",
     "plan_search_strategy",
     "prior_work_recall",
     "real_literature_review",
     "real_literature_status",
+    "register_baseline",
+    "register_dataset",
+    "register_metric",
+    "reproducibility_check",
     "review_campaign",
     "run_real_literature_campaign",
     "run_campaign",
+    "run_experiment",
     "search_papers",
+    "scaffold_experiment_code",
     "source_health",
     "v4_release_gate",
     "v5_release_gate",
+    "v6_release_gate",
     "validate_campaign_output",
 ]

@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import json
+import sys
 from pathlib import Path
 
 from gapforge import api
 from gapforge.config import GapForgeConfig
+from gapforge.experiments.workspace import ExperimentWorkspaceManager
 from gapforge.models import (
     BaselineCandidate,
     ExperimentProtocol,
@@ -347,6 +350,149 @@ def test_api_generate_code_tasks(tmp_path: Path) -> None:
 
     assert tasks
     assert {task.task_type for task in tasks}
+
+
+def test_api_create_experiment_workspace(tmp_path: Path) -> None:
+    config = GapForgeConfig.from_cwd(tmp_path)
+    project = _api_experiment_project(config)
+
+    workspace = api.create_experiment_workspace(project.project.id, "direction-api-experiment", config=config)
+
+    assert workspace.project_id == project.project.id
+    assert workspace.direction_id == "direction-api-experiment"
+    assert Path(workspace.root_dir).exists()
+
+
+def test_api_run_fixture_experiment_and_parse_results(tmp_path: Path) -> None:
+    config, workspace_id, dataset_id, baseline_id, metric_id = _api_experiment_workspace(tmp_path)
+
+    run_result = _run_api_fixture_experiment(config, workspace_id, dataset_id, baseline_id, metric_id)
+    summary = api.parse_results(run_result.execution.id, config=config)
+    analysis = api.analyze_results(execution_id=run_result.execution.id, config=config)
+    reproducibility = api.reproducibility_check(execution_id=run_result.execution.id, config=config)
+    review = api.empirical_review(execution_id=run_result.execution.id, config=config)
+
+    assert run_result.execution.status == "complete"
+    assert summary.metric_results
+    assert summary.empirical_claims
+    assert analysis.metric_analyses
+    assert reproducibility.status in {"pass", "warning", "fail"}
+    assert review.reviewer_reviews
+
+
+def test_api_export_paper_package_v2(tmp_path: Path) -> None:
+    config, workspace_id, dataset_id, baseline_id, metric_id = _api_experiment_workspace(tmp_path)
+    run_result = _run_api_fixture_experiment(config, workspace_id, dataset_id, baseline_id, metric_id)
+    api.parse_results(run_result.execution.id, config=config)
+    api.analyze_results(execution_id=run_result.execution.id, config=config)
+    api.reproducibility_check(execution_id=run_result.execution.id, config=config)
+    api.empirical_review(execution_id=run_result.execution.id, config=config)
+
+    package = api.export_paper_package_v2(workspace_id=workspace_id, config=config)
+    gate = api.v6_release_gate(config=config)
+
+    assert package.id == f"paper-package-v2-{workspace_id}"
+    assert "result_summary.md" in package.files
+    assert gate.passed is False
+    assert gate.blockers
+
+
+def _api_experiment_project(config: GapForgeConfig):
+    project_manager = ProjectMemoryManager(config)
+    program = project_manager.create_project("API Experiment Project")
+    program.research_directions.append(
+        ResearchDirection(
+            id="direction-api-experiment",
+            project_id=program.project.id,
+            title="API experiment direction",
+            summary="Fixture direction for scriptable v0.6 workflow tests.",
+            maturity="experiment_ready",
+        )
+    )
+    program.experiment_protocols.append(
+        ExperimentProtocol(
+            id="protocol-api-experiment",
+            direction_id="direction-api-experiment",
+            linked_experiment_plan_id="experiment-api",
+            objective="Exercise the v0.6 API experiment execution workflow.",
+            hypothesis="A fixture command emits artifact-backed metric results.",
+            datasets=["api fixture dataset"],
+            metrics=["false positive rate"],
+            statistical_tests=["binomial confidence interval"],
+            expected_artifacts=["metrics.json"],
+        )
+    )
+    project_manager.save_project(program)
+    return program
+
+
+def _api_experiment_workspace(tmp_path: Path) -> tuple[GapForgeConfig, str, str, str, str]:
+    config = GapForgeConfig.from_cwd(tmp_path)
+    project = _api_experiment_project(config)
+    workspace = api.create_experiment_workspace(project.project.id, "direction-api-experiment", config=config)
+    dataset_path = Path(workspace.root_dir) / "data" / "api_fixture.csv"
+    dataset_path.write_text("id,split,label\n1,test,0\n2,test,1\n", encoding="utf-8")
+    dataset = api.register_dataset(
+        workspace.id,
+        "api fixture examples",
+        dataset_path,
+        dataset_type="fixture",
+        license="MIT",
+        intended_use="API fixture only.",
+        config=config,
+    )
+    baseline = api.register_baseline(
+        workspace.id,
+        "api heuristic baseline",
+        baseline_type="heuristic",
+        code_available=True,
+        implementation_path="code/src/baselines.py",
+        config=config,
+    )
+    metric = api.register_metric(workspace.id, "false positive rate", config=config)
+    api.scaffold_experiment_code(workspace.id, config=config)
+    return config, workspace.id, dataset.id, baseline.id, metric.id
+
+
+def _run_api_fixture_experiment(
+    config: GapForgeConfig,
+    workspace_id: str,
+    dataset_id: str,
+    baseline_id: str,
+    metric_id: str,
+):
+    workspace = ExperimentWorkspaceManager(config).load_workspace(workspace_id)
+    output = Path(workspace.root_dir) / "results" / "api_metrics.json"
+    script = Path(workspace.root_dir) / "code" / "write_api_metrics.py"
+    payload = {
+        "metric_results": [
+            {
+                "metric_id": metric_id,
+                "dataset_id": dataset_id,
+                "baseline_id": baseline_id,
+                "value": 0.01,
+                "sample_size": 1000,
+                "confidence_interval": [0.0, 0.02],
+            }
+        ]
+    }
+    script.write_text(
+        f"from pathlib import Path\nPath({str(output)!r}).write_text({json.dumps(json.dumps(payload))} + '\\n', encoding='utf-8')\n",
+        encoding="utf-8",
+    )
+    manifest = api.create_experiment_manifest(
+        workspace_id,
+        run_type="smoke",
+        run_name="api-smoke",
+        dataset_ids=[dataset_id],
+        baseline_ids=[baseline_id],
+        metric_ids=[metric_id],
+        command=f"{sys.executable} {script}",
+        expected_outputs=["results/api_metrics.json"],
+        random_seed=123,
+        config=config,
+    )
+    return api.run_experiment(workspace_id, manifest_id=manifest.id, config=config)
 
 
 def _tiny_pdf(text: str) -> bytes:

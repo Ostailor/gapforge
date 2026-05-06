@@ -18,6 +18,7 @@ from gapforge.models import (
     ExperimentPlan,
     ExperimentProtocol,
     ExperimentRepoScaffold,
+    ExperimentWorkspace,
     Gap,
     HumanReviewRecord,
     ProjectMemoryRecord,
@@ -57,6 +58,9 @@ PROJECT_ARTIFACTS = [
     "experiment_code_tasks.md",
     "experiment_repo_scaffolds.json",
     "experiment_repo_scaffolds.md",
+    "experiment_workspaces.json",
+    "experiment_workspaces.md",
+    "experiment_workspaces/",
     "review_panels.json",
     "review_panel.md",
     "rebuttal_plan.md",
@@ -92,6 +96,7 @@ class ProjectMemoryManager:
         (root_dir / "runs").mkdir(parents=True, exist_ok=True)
         (root_dir / "reports").mkdir(parents=True, exist_ok=True)
         (root_dir / "campaigns").mkdir(parents=True, exist_ok=True)
+        (root_dir / "experiment_workspaces").mkdir(parents=True, exist_ok=True)
         now = utc_now_iso()
         project = ResearchProject(
             id=project_id,
@@ -147,6 +152,7 @@ class ProjectMemoryManager:
         baseline_candidates = _load_list(root_dir / "baseline_candidates.json", BaselineCandidate)
         experiment_code_tasks = _load_list(root_dir / "experiment_code_tasks.json", ExperimentCodeTask)
         experiment_repo_scaffolds = _load_list(root_dir / "experiment_repo_scaffolds.json", ExperimentRepoScaffold)
+        experiment_workspaces = _load_list(root_dir / "experiment_workspaces.json", ExperimentWorkspace)
         review_panels = _load_list(root_dir / "review_panels.json", ReviewPanel)
         review_queue = None
         review_queue_path = root_dir / "review_queue.json"
@@ -171,6 +177,7 @@ class ProjectMemoryManager:
             baseline_candidates=baseline_candidates,
             experiment_code_tasks=experiment_code_tasks,
             experiment_repo_scaffolds=experiment_repo_scaffolds,
+            experiment_workspaces=experiment_workspaces,
             review_panels=review_panels,
             review_queue=review_queue,
             claim_graph=claim_graph,
@@ -183,6 +190,7 @@ class ProjectMemoryManager:
         (root_dir / "runs").mkdir(parents=True, exist_ok=True)
         (root_dir / "reports").mkdir(parents=True, exist_ok=True)
         (root_dir / "campaigns").mkdir(parents=True, exist_ok=True)
+        (root_dir / "experiment_workspaces").mkdir(parents=True, exist_ok=True)
         program.project.root_dir = str(root_dir)
         program.project.run_ids = _unique(program.run_ids or program.project.run_ids)
         program.project.active_topic_ids = _unique(program.project.active_topic_ids)
@@ -198,6 +206,7 @@ class ProjectMemoryManager:
         self._write_json(root_dir / "baseline_candidates.json", program.baseline_candidates)
         self._write_json(root_dir / "experiment_code_tasks.json", program.experiment_code_tasks)
         self._write_json(root_dir / "experiment_repo_scaffolds.json", program.experiment_repo_scaffolds)
+        self._write_json(root_dir / "experiment_workspaces.json", program.experiment_workspaces)
         self._write_json(root_dir / "review_panels.json", program.review_panels)
         self._write_json(root_dir / "review_queue.json", program.review_queue)
         self._write_json(root_dir / "claim_graph.json", program.claim_graph)
@@ -212,6 +221,7 @@ class ProjectMemoryManager:
         self._write_baseline_candidates_markdown(program, root_dir)
         self._write_experiment_code_tasks_markdown(program, root_dir)
         self._write_experiment_repo_scaffolds_markdown(program, root_dir)
+        self._write_experiment_workspaces_markdown(program, root_dir)
         self._write_review_panel_markdown(program, root_dir)
         self._write_review_queue_markdown(program, root_dir)
         if program.claim_graph is not None:
@@ -273,6 +283,7 @@ class ProjectMemoryManager:
             f"- Experiment protocols: {len(program.experiment_protocols)}",
             f"- Experiment code tasks: {len(program.experiment_code_tasks)}",
             f"- Experiment repo scaffolds: {len(program.experiment_repo_scaffolds)}",
+            f"- Experiment workspaces: {len(program.experiment_workspaces)}",
             "",
             "## Topics",
             "",
@@ -371,6 +382,15 @@ class ProjectMemoryManager:
             [
                 f"- `{scaffold.id}` direction={scaffold.direction_id}, files={len(scaffold.files)}, path=`{scaffold.path}`"
                 for scaffold in program.experiment_repo_scaffolds[:20]
+            ]
+            or ["- none"]
+        )
+        lines.extend(["", "## Experiment Workspaces", ""])
+        lines.extend(
+            [
+                f"- `{workspace.id}` direction={workspace.direction_id}, protocol={workspace.experiment_protocol_id or 'none'}, "
+                f"status={workspace.status}, path=`{workspace.root_dir}`"
+                for workspace in program.experiment_workspaces[:20]
             ]
             or ["- none"]
         )
@@ -507,6 +527,30 @@ class ProjectMemoryManager:
                     "### Files",
                     "",
                     *[f"- `{item}`" for item in scaffold.files],
+                    "",
+                ]
+            )
+        path.write_text(redact_text("\n".join(lines).rstrip() + "\n"), encoding="utf-8")
+
+    def _write_experiment_workspaces_markdown(self, program: ResearchProgramState, root_dir: Path) -> None:
+        path = root_dir / "experiment_workspaces.md"
+        if not program.experiment_workspaces:
+            path.write_text("# Experiment Workspaces\n\nNo experiment workspaces created yet.\n", encoding="utf-8")
+            return
+        lines = ["# Experiment Workspaces", ""]
+        for workspace in program.experiment_workspaces:
+            lines.extend(
+                [
+                    f"## `{workspace.id}`",
+                    "",
+                    f"- Project ID: `{workspace.project_id}`",
+                    f"- Campaign ID: `{workspace.campaign_id or 'none'}`",
+                    f"- Direction ID: `{workspace.direction_id}`",
+                    f"- Protocol ID: `{workspace.experiment_protocol_id or 'none'}`",
+                    f"- Status: `{workspace.status}`",
+                    f"- Root: `{workspace.root_dir}`",
+                    f"- Created: {workspace.created_at or 'unknown'}",
+                    f"- Updated: {workspace.updated_at or 'unknown'}",
                     "",
                 ]
             )

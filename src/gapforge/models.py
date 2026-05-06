@@ -800,6 +800,64 @@ class BaselineCandidate:
 
 
 @dataclass(slots=True)
+class BaselineRecord:
+    id: str
+    name: str
+    description: str = ""
+    baseline_type: str = "unknown"
+    source_paper_ids: list[str] = field(default_factory=list)
+    related_work_entry_ids: list[str] = field(default_factory=list)
+    code_available: bool = False
+    code_url: str = ""
+    implementation_path: str = ""
+    required_for_submission: bool = False
+    risk_if_missing: str = ""
+    expected_inputs: list[str] = field(default_factory=list)
+    expected_outputs: list[str] = field(default_factory=list)
+    provenance: Provenance = field(default_factory=lambda: Provenance(created_by_skill="baseline-registry"))
+
+
+@dataclass(slots=True)
+class BaselineCard:
+    baseline_id: str
+    why_included: str = ""
+    what_it_tests: str = ""
+    strengths: list[str] = field(default_factory=list)
+    weaknesses: list[str] = field(default_factory=list)
+    implementation_notes: str = ""
+    citation: str = ""
+    provenance: Provenance = field(default_factory=lambda: Provenance(created_by_skill="baseline-card"))
+
+
+@dataclass(slots=True)
+class MetricRecord:
+    id: str
+    name: str
+    description: str = ""
+    metric_type: str = "custom"
+    formula: str = ""
+    higher_is_better: bool = True
+    required_inputs: list[str] = field(default_factory=list)
+    edge_cases: list[str] = field(default_factory=list)
+    provenance: Provenance = field(default_factory=lambda: Provenance(created_by_skill="metric-registry"))
+
+
+@dataclass(slots=True)
+class StatisticalTestPlan:
+    id: str
+    experiment_protocol_id: str
+    metric_ids: list[str] = field(default_factory=list)
+    test_name: str = ""
+    assumptions: list[str] = field(default_factory=list)
+    sample_size_notes: str = ""
+    confidence_interval_method: str = ""
+    multiple_testing_notes: str = ""
+    power_notes: str = ""
+    falsification_threshold: str = ""
+    provenance: Provenance = field(default_factory=lambda: Provenance(created_by_skill="stats-planner"))
+
+
+@dataclass(slots=True)
 class ReproducibilityChecklist:
     random_seeds: list[int] = field(default_factory=lambda: [0, 1, 2, 3, 4])
     dataset_versioning: str = ""
@@ -858,6 +916,167 @@ class ExperimentRepoScaffold:
     files: list[str] = field(default_factory=list)
     created_at: str = ""
     provenance: Provenance = field(default_factory=lambda: Provenance(created_by_skill="experiment-repo-scaffold"))
+
+
+@dataclass(slots=True)
+class ExperimentWorkspace:
+    id: str
+    project_id: str
+    campaign_id: str
+    direction_id: str
+    experiment_protocol_id: str
+    root_dir: str
+    status: str = "planned"
+    created_at: str = ""
+    updated_at: str = ""
+    provenance: Provenance = field(default_factory=lambda: Provenance(created_by_skill="experiment-workspace"))
+
+
+@dataclass(slots=True)
+class ExperimentRunManifest:
+    id: str
+    workspace_id: str
+    experiment_protocol_id: str
+    run_name: str
+    run_type: str = "smoke"
+    dataset_ids: list[str] = field(default_factory=list)
+    baseline_ids: list[str] = field(default_factory=list)
+    metric_ids: list[str] = field(default_factory=list)
+    config_path: str = ""
+    command: str = ""
+    expected_outputs: list[str] = field(default_factory=list)
+    random_seed: int = 0
+    environment: dict[str, str] = field(default_factory=dict)
+    created_at: str = ""
+    provenance: Provenance = field(default_factory=lambda: Provenance(created_by_skill="experiment-manifest"))
+
+
+@dataclass(slots=True)
+class ExperimentExecutionRecord:
+    id: str
+    workspace_id: str
+    manifest_id: str
+    status: str = "planned"
+    started_at: str = ""
+    completed_at: str = ""
+    command: str = ""
+    returncode: int | None = None
+    stdout_path: str = ""
+    stderr_path: str = ""
+    result_artifact_ids: list[str] = field(default_factory=list)
+    failure_reason: str = ""
+    provenance: Provenance = field(default_factory=lambda: Provenance(created_by_skill="experiment-execution"))
+
+
+@dataclass(slots=True)
+class ExperimentResultArtifact:
+    id: str
+    workspace_id: str
+    execution_id: str
+    artifact_type: str = "other"
+    path: str = ""
+    sha256: str = ""
+    summary: str = ""
+    safe_to_commit: bool = False
+    provenance: Provenance = field(default_factory=lambda: Provenance(created_by_skill="experiment-artifact"))
+
+
+@dataclass(slots=True)
+class MetricResult:
+    id: str
+    execution_id: str
+    metric_id: str
+    dataset_id: str = ""
+    baseline_id: str = ""
+    value: float = 0.0
+    confidence_interval: list[float] = field(default_factory=list)
+    sample_size: int = 0
+    split_name: str = ""
+    raw_artifact_id: str = ""
+    provenance: Provenance = field(default_factory=lambda: Provenance(created_by_skill="result-parser"))
+
+
+@dataclass(slots=True)
+class EmpiricalClaim:
+    id: str
+    text: str
+    execution_id: str
+    metric_result_ids: list[str] = field(default_factory=list)
+    status: str = "uncertain"
+    confidence: str = "low"
+    limitations: list[str] = field(default_factory=list)
+    provenance: Provenance = field(default_factory=lambda: Provenance(created_by_skill="empirical-claim-ledger"))
+
+
+@dataclass(slots=True)
+class ResultSummary:
+    execution_id: str
+    metric_results: list[MetricResult] = field(default_factory=list)
+    empirical_claims: list[EmpiricalClaim] = field(default_factory=list)
+    failures: list[str] = field(default_factory=list)
+    limitations: list[str] = field(default_factory=list)
+    provenance: Provenance = field(default_factory=lambda: Provenance(created_by_skill="result-parser"))
+
+
+@dataclass(slots=True)
+class ReproducibilityCheckResult:
+    workspace_id: str
+    execution_id: str = ""
+    status: str = "warning"
+    checks: dict[str, str] = field(default_factory=dict)
+    blockers: list[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
+    provenance: Provenance = field(default_factory=lambda: Provenance(created_by_skill="reproducibility-checker"))
+
+
+@dataclass(slots=True)
+class DatasetRecord:
+    id: str
+    name: str
+    description: str = ""
+    dataset_type: str = "unknown"
+    source: str = ""
+    source_url: str = ""
+    local_path: str = ""
+    version: str = ""
+    license: str = ""
+    size_summary: str = ""
+    split_names: list[str] = field(default_factory=list)
+    schema_summary: str = ""
+    intended_use: str = ""
+    limitations: list[str] = field(default_factory=list)
+    safety_notes: list[str] = field(default_factory=list)
+    provenance: Provenance = field(default_factory=lambda: Provenance(created_by_skill="dataset-registry"))
+
+
+@dataclass(slots=True)
+class DatasetCard:
+    dataset_id: str
+    motivation: str = ""
+    composition: str = ""
+    collection_process: str = ""
+    preprocessing: str = ""
+    labeling: str = ""
+    recommended_splits: list[str] = field(default_factory=list)
+    leakage_risks: list[str] = field(default_factory=list)
+    bias_risks: list[str] = field(default_factory=list)
+    privacy_risks: list[str] = field(default_factory=list)
+    limitations: list[str] = field(default_factory=list)
+    citation: str = ""
+    provenance: Provenance = field(default_factory=lambda: Provenance(created_by_skill="dataset-card"))
+
+
+@dataclass(slots=True)
+class DatasetValidationResult:
+    dataset_id: str
+    status: str = "warning"
+    issues: list[str] = field(default_factory=list)
+    row_count: int = 0
+    column_count: int = 0
+    missing_values_summary: dict[str, int] = field(default_factory=dict)
+    split_integrity: str = ""
+    leakage_warnings: list[str] = field(default_factory=list)
+    provenance: Provenance = field(default_factory=lambda: Provenance(created_by_skill="dataset-validation"))
 
 
 @dataclass(slots=True)
@@ -926,6 +1145,19 @@ class ReviewPanel:
     rebuttal_plan: list[RebuttalPlan] = field(default_factory=list)
     required_changes: list[str] = field(default_factory=list)
     provenance: Provenance = field(default_factory=lambda: Provenance(created_by_skill="review-panel"))
+
+
+@dataclass(slots=True)
+class EmpiricalReviewPanel:
+    workspace_id: str
+    execution_id: str = ""
+    reviewer_reviews: list[ReviewerReview] = field(default_factory=list)
+    area_chair_summary: str = ""
+    required_fixes: list[str] = field(default_factory=list)
+    fatal_flaws: list[str] = field(default_factory=list)
+    rebuttal_plan: list[RebuttalPlan] = field(default_factory=list)
+    result_claim_softening_recommendations: list[str] = field(default_factory=list)
+    provenance: Provenance = field(default_factory=lambda: Provenance(created_by_skill="empirical-review-panel"))
 
 
 @dataclass(slots=True)
@@ -1324,6 +1556,7 @@ class ResearchProgramState:
     baseline_candidates: list[BaselineCandidate] = field(default_factory=list)
     experiment_code_tasks: list[ExperimentCodeTask] = field(default_factory=list)
     experiment_repo_scaffolds: list[ExperimentRepoScaffold] = field(default_factory=list)
+    experiment_workspaces: list[ExperimentWorkspace] = field(default_factory=list)
     review_panels: list[ReviewPanel] = field(default_factory=list)
     review_queue: ReviewQueue | None = None
     claim_graph: ClaimGraph | None = None
@@ -1813,6 +2046,10 @@ class ResearchRunState:
     experiments: list[ExperimentPlan] = field(default_factory=list)
     experiment_protocols: list[ExperimentProtocol] = field(default_factory=list)
     baseline_candidates: list[BaselineCandidate] = field(default_factory=list)
+    experiment_workspaces: list[ExperimentWorkspace] = field(default_factory=list)
+    experiment_run_manifests: list[ExperimentRunManifest] = field(default_factory=list)
+    experiment_execution_records: list[ExperimentExecutionRecord] = field(default_factory=list)
+    experiment_result_artifacts: list[ExperimentResultArtifact] = field(default_factory=list)
     reviewer_objections: list[ReviewerObjection] = field(default_factory=list)
     reviewer_summaries: list[ReviewerSimulationSummary] = field(default_factory=list)
     orchestrator_plan: OrchestratorPlan | None = None

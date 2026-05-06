@@ -8,12 +8,19 @@ import sys
 from pathlib import Path
 
 import gapforge.models as gf_models
+from gapforge.baselines import BaselineRegistry
 from gapforge.campaigns import CampaignManager
 from gapforge.config import GapForgeConfig
 from gapforge.dashboard import StaticDashboardBuilder
+from gapforge.datasets import DatasetRegistry
+from gapforge.experiments.workspace import ExperimentWorkspaceManager
+from gapforge.export.paper_package import PaperPackageExporter
+from gapforge.metrics import MetricRegistry
 from gapforge.project_memory import ProjectMemoryManager
 from gapforge.real_literature.review import RealLiteratureReviewManager
+from gapforge.results import ResultParser
 from gapforge.reporting import write_final_report
+from gapforge.reviewers import EmpiricalReviewBuilder
 from gapforge.state import ResearchStateManager
 
 
@@ -45,6 +52,14 @@ def test_static_run_dashboard_files_generated_and_escaped(tmp_path: Path) -> Non
         "prior_work_recall.html",
         "real_literature_quality.html",
         "v5_release_gate.html",
+        "experiment_workspaces.html",
+        "experiment_runs.html",
+        "datasets.html",
+        "baselines.html",
+        "metrics.html",
+        "results.html",
+        "reproducibility.html",
+        "empirical_reviews.html",
     }
     assert {path.name for path in result.pages} == expected
     for filename in expected:
@@ -211,6 +226,62 @@ def test_real_literature_campaign_and_run_reports_render(tmp_path: Path) -> None
     assert "Real Literature Quality" in project_text
     assert "Real-Literature Quality" in final_text
     assert "Recommendation refused because" in final_text
+
+
+def test_dashboard_renders_experiment_pages_failed_runs_and_warnings(tmp_path: Path) -> None:
+    config = GapForgeConfig.from_cwd(tmp_path)
+    project_id, workspace_id, failed_execution_id = _experiment_dashboard_project(config)
+
+    result = StaticDashboardBuilder(config).build_project(project_id)
+
+    expected_pages = {
+        "experiment_workspaces.html",
+        "experiment_runs.html",
+        "datasets.html",
+        "baselines.html",
+        "metrics.html",
+        "results.html",
+        "reproducibility.html",
+        "empirical_reviews.html",
+    }
+    assert expected_pages.issubset({path.name for path in result.pages})
+    runs = (result.root / "experiment_runs.html").read_text(encoding="utf-8")
+    datasets = (result.root / "datasets.html").read_text(encoding="utf-8")
+    results = (result.root / "results.html").read_text(encoding="utf-8")
+    reproducibility = (result.root / "reproducibility.html").read_text(encoding="utf-8")
+    reviews = (result.root / "empirical_reviews.html").read_text(encoding="utf-8")
+    combined = "\n".join(path.read_text(encoding="utf-8") for path in result.pages)
+
+    assert workspace_id in (result.root / "experiment_workspaces.html").read_text(encoding="utf-8")
+    assert failed_execution_id in runs
+    assert "Command exited with return code 2." in runs
+    assert "&lt;script&gt;dataset&lt;/script&gt;" in datasets
+    assert "fixture/synthetic/generated data" in results.lower()
+    assert "metric-result-dashboard" in results
+    assert "claim-dashboard" in results
+    assert "dataset_cards" in reproducibility
+    assert "deterministic fatal empirical review blockers" in reviews
+    assert "sk-test-dashboard-secret" not in combined
+
+
+def test_dashboard_cli_generates_workspace_dashboard(tmp_path: Path) -> None:
+    config = GapForgeConfig.from_cwd(tmp_path)
+    _project_id, workspace_id, _failed_execution_id = _experiment_dashboard_project(config)
+    env = {**os.environ, "PYTHONPATH": str(Path(__file__).resolve().parents[1] / "src")}
+
+    result = subprocess.run(
+        [sys.executable, "-m", "gapforge.cli", "dashboard", "--workspace-id", workspace_id],
+        cwd=tmp_path,
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "index.html" in result.stdout
+    workspace = ExperimentWorkspaceManager(config).load_workspace(workspace_id)
+    assert (Path(workspace.root_dir) / "dashboard" / "experiment_runs.html").exists()
 
 
 def _dashboard_run(config: GapForgeConfig):
@@ -438,3 +509,125 @@ def _real_literature_quality_project(config: GapForgeConfig) -> tuple[str, str, 
     transcript_dir.mkdir(parents=True, exist_ok=True)
     (transcript_dir / "llm_transcript.md").write_text("sk-test-transcript-secret", encoding="utf-8")
     return program.project.id, campaign.campaign.id, state.run_id
+
+
+def _experiment_dashboard_project(config: GapForgeConfig) -> tuple[str, str, str]:
+    project_manager = ProjectMemoryManager(config)
+    program = project_manager.create_project("Experiment Dashboard Project")
+    direction_id = "direction-dashboard-experiment"
+    program.experiment_protocols.append(
+        gf_models.ExperimentProtocol(
+            id="protocol-dashboard-experiment",
+            direction_id=direction_id,
+            linked_experiment_plan_id="experiment-dashboard",
+            objective="Render experiment execution state in the dashboard.",
+            hypothesis="Dashboard pages show executions, artifacts, claims, and failures without leaking logs.",
+            datasets=["fixture"],
+            metrics=["false positive rate"],
+            statistical_tests=["confidence intervals"],
+            expected_artifacts=["metrics.json"],
+        )
+    )
+    program.research_directions = [
+        gf_models.ResearchDirection(
+            id=direction_id,
+            project_id=program.project.id,
+            title="Experiment Dashboard Direction",
+            maturity="experiment_ready",
+        )
+    ]
+    project_manager.save_project(program)
+    workspace = ExperimentWorkspaceManager(config).create_workspace(project_id=program.project.id, direction_id=direction_id)
+    dataset_path = Path(workspace.root_dir) / "data" / "dashboard_fixture.csv"
+    dataset_path.write_text("id,split,label\n1,test,0\n2,test,1\n", encoding="utf-8")
+    DatasetRegistry(config).register_dataset(
+        workspace_id=workspace.id,
+        name="<script>dataset</script>",
+        path=dataset_path,
+        dataset_type="fixture",
+        license="MIT",
+        intended_use="Dashboard fixture only.",
+    )
+    BaselineRegistry(config).register_baseline(
+        workspace_id=workspace.id,
+        name="dashboard baseline",
+        baseline_type="heuristic",
+        code_available=True,
+        implementation_path="code/src/baselines.py",
+    )
+    MetricRegistry(config).register_metric(workspace_id=workspace.id, name="false positive rate")
+    manager = ExperimentWorkspaceManager(config)
+    success_output = Path(workspace.root_dir) / "results" / "dashboard_metrics.json"
+    success_output.write_text(
+        json_dumps(
+            {
+                "metric_results": [
+                    {
+                        "metric_id": "false positive rate",
+                        "value": 0.01,
+                        "sample_size": 1000,
+                        "confidence_interval": [0.0, 0.02],
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    success_manifest = manager.create_manifest(
+        workspace_id=workspace.id,
+        run_type="smoke",
+        run_name="dashboard-success",
+        command="python code/src/run_experiment.py --config configs/smoke.json",
+        expected_outputs=["results/dashboard_metrics.json"],
+        random_seed=123,
+    )
+    success_execution = manager.record_execution(
+        workspace_id=workspace.id,
+        manifest_id=success_manifest.id,
+        status="complete",
+        returncode=0,
+        stdout_text="sk-test-dashboard-secret",
+        result_paths=[success_output],
+    )
+    failed_output = Path(workspace.root_dir) / "results" / "dashboard_failed_metrics.json"
+    failed_output.write_text(
+        '{"metric_results": [{"metric_id": "false positive rate", "value": 0.2, "sample_size": 10}]}', encoding="utf-8"
+    )
+    failed_manifest = manager.create_manifest(
+        workspace_id=workspace.id,
+        run_type="negative_control",
+        run_name="dashboard-failed",
+        command="python code/src/run_experiment.py --config configs/negative.json",
+        expected_outputs=["results/dashboard_failed_metrics.json"],
+        random_seed=123,
+    )
+    failed_execution = manager.record_execution(
+        workspace_id=workspace.id,
+        manifest_id=failed_manifest.id,
+        status="failed",
+        returncode=2,
+        stdout_text="sk-test-dashboard-secret",
+        stderr_text="failed without leaking secret",
+        result_paths=[failed_output],
+        failure_reason="Command exited with return code 2.",
+    )
+    ResultParser(config).parse_execution(success_execution.id)
+    reports = Path(workspace.root_dir) / "reports"
+    summary_path = reports / f"result_summary_{success_execution.id}.json"
+    summary = gf_models.to_plain(ResultParser(config).load_or_parse_summary(success_execution.id))
+    summary["metric_results"][0]["id"] = "metric-result-dashboard"
+    summary["empirical_claims"][0]["id"] = "claim-dashboard"
+    summary_path.write_text(json_dumps(summary), encoding="utf-8")
+    ResultParser(config)._write_empirical_claim_ledger(  # noqa: SLF001
+        workspace,
+        [gf_models.from_dict(gf_models.EmpiricalClaim, summary["empirical_claims"][0])],
+    )
+    EmpiricalReviewBuilder(config).review_execution(success_execution.id)
+    PaperPackageExporter(config).export_workspace_v2(workspace.id)
+    return program.project.id, workspace.id, failed_execution.id
+
+
+def json_dumps(payload) -> str:
+    import json
+
+    return json.dumps(payload, indent=2) + "\n"

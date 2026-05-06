@@ -1,0 +1,82 @@
+{
+  "topic": "v0.6 failed experiment path remains visible",
+  "execution": {
+    "executions": [
+      {
+        "id": "exec-failed",
+        "status": "failed",
+        "run_type": "smoke",
+        "dataset_scope": "fixture",
+        "failure_reason": "Command exited with return code 2.",
+        "result_artifact_ids": ["artifact-failed-metrics"]
+      }
+    ],
+    "failed_run_preserved": true
+  },
+  "result_artifacts": [
+    {
+      "id": "artifact-failed-metrics",
+      "execution_id": "exec-failed",
+      "artifact_type": "metrics_json",
+      "sha256": "fixture-sha256-failed"
+    }
+  ],
+  "result_summary": {
+    "metric_results": [
+      {
+        "id": "metric-result-failed-fpr",
+        "metric_id": "false-positive-rate",
+        "value": 0.2,
+        "sample_size": 50,
+        "raw_artifact_id": "artifact-failed-metrics"
+      }
+    ],
+    "empirical_claims": [
+      {
+        "id": "claim-failed-preserved",
+        "status": "failed",
+        "metric_result_ids": ["metric-result-failed-fpr"]
+      }
+    ]
+  },
+  "statistics": {
+    "analysis_report": true,
+    "low_fpr": true,
+    "low_fpr_warning": true,
+    "underpowered": true,
+    "underpowered_warning": true,
+    "overstates_significance": false
+  },
+  "reproducibility": {
+    "status": "warning",
+    "checks": {
+      "dataset_cards": "pass",
+      "baseline_cards": "pass",
+      "metric_definitions": "pass",
+      "run_manifest": "pass",
+      "logs_captured": "pass",
+      "result_artifacts_hashed": "pass"
+    },
+    "blockers": []
+  },
+  "empirical_review": {
+    "reviewer_reviews": ["empirical"],
+    "area_chair_summary": "Failed run cannot support success claims.",
+    "uses_artifacts": true,
+    "reframes_failed_run_as_success": false,
+    "fatal_flaws": ["The experiment execution failed and cannot support a success claim."]
+  },
+  "paper_package": {
+    "exported": true,
+    "readiness": "failed_result",
+    "labels": ["failed_result"],
+    "expected_results_hypothetical": true,
+    "claims_results_without_artifacts": false,
+    "fake_results_accepted": false,
+    "failed_results_visible": true
+  },
+  "v6_release_gate": {
+    "expected_pass": false,
+    "expected_blockers": ["missing successful fixture execution"]
+  }
+}

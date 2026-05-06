@@ -62,6 +62,14 @@ PAGES = [
     ("prior_work_recall.html", "Prior-Work Recall"),
     ("real_literature_quality.html", "Real Literature Quality"),
     ("v5_release_gate.html", "v5 Release Gate"),
+    ("experiment_workspaces.html", "Experiment Workspaces"),
+    ("experiment_runs.html", "Experiment Runs"),
+    ("datasets.html", "Datasets"),
+    ("baselines.html", "Baselines"),
+    ("metrics.html", "Metrics"),
+    ("results.html", "Results"),
+    ("reproducibility.html", "Reproducibility"),
+    ("empirical_reviews.html", "Empirical Reviews"),
 ]
 
 
@@ -93,6 +101,11 @@ class StaticDashboardBuilder:
         context = _DashboardContext.from_project(program, states)
         return _write_dashboard(Path(program.project.root_dir) / "dashboard", context)
 
+    def build_workspace(self, workspace_id: str) -> DashboardResult:
+        workspace_dir = _find_experiment_workspace_dir(self.config.project_root, workspace_id)
+        context = _DashboardContext.from_workspace(workspace_dir)
+        return _write_dashboard(workspace_dir / "dashboard", context)
+
     def open(self, result: DashboardResult) -> None:
         webbrowser.open(result.index_path.resolve().as_uri())
 
@@ -119,6 +132,7 @@ class _DashboardContext:
         campaign_states: list[CampaignState] | None = None,
         canary_records: list[CampaignCanaryRecord] | None = None,
         run_states: list[ResearchRunState] | None = None,
+        experiments: dict[str, list[dict[str, Any]]] | None = None,
     ) -> None:
         self.title = title
         self.subtitle = subtitle
@@ -138,6 +152,7 @@ class _DashboardContext:
         self.campaign_states = campaign_states or []
         self.canary_records = canary_records or []
         self.run_states = run_states or []
+        self.experiments = experiments or _empty_experiment_context()
 
     @classmethod
     def from_run(cls, state: ResearchRunState) -> _DashboardContext:
@@ -160,6 +175,7 @@ class _DashboardContext:
             campaign_states=[],
             canary_records=[],
             run_states=[state],
+            experiments=_load_experiment_context(Path(state.run_dir)),
         )
 
     @classmethod
@@ -196,6 +212,34 @@ class _DashboardContext:
             campaign_states=campaign_states,
             canary_records=_load_campaign_canaries(Path(program.project.root_dir).parents[1] / "data", program.project.id),
             run_states=states,
+            experiments=_load_experiment_context(Path(program.project.root_dir)),
+        )
+
+    @classmethod
+    def from_workspace(cls, workspace_dir: Path) -> _DashboardContext:
+        workspace = _read_json_if_exists(workspace_dir / "workspace.json")
+        title = f"GapForge Experiment Workspace: {workspace.get('id', workspace_dir.name)}"
+        subtitle = str(workspace.get("direction_id") or workspace.get("project_id") or workspace_dir)
+        return cls(
+            title=title,
+            subtitle=subtitle,
+            base_dir=workspace_dir,
+            papers=[],
+            gaps=[],
+            directions=[],
+            novelty_dossiers=[],
+            evidence_spans=[],
+            coverage_reports=[],
+            rejected_ideas=[],
+            human_reviews=[],
+            review_panels=[],
+            review_queue=None,
+            artifact_links=_workspace_artifact_links(workspace_dir),
+            campaigns=[],
+            campaign_states=[],
+            canary_records=[],
+            run_states=[],
+            experiments=_load_experiment_context(workspace_dir),
         )
 
 
@@ -223,6 +267,14 @@ def _write_dashboard(root: Path, context: _DashboardContext) -> DashboardResult:
         "prior_work_recall.html": _render_prior_work_recall(context),
         "real_literature_quality.html": _render_real_literature_quality(context),
         "v5_release_gate.html": _render_v5_release_gate(context),
+        "experiment_workspaces.html": _render_experiment_workspaces(context),
+        "experiment_runs.html": _render_experiment_runs(context),
+        "datasets.html": _render_experiment_datasets(context),
+        "baselines.html": _render_experiment_baselines(context),
+        "metrics.html": _render_experiment_metrics(context),
+        "results.html": _render_experiment_results(context),
+        "reproducibility.html": _render_experiment_reproducibility(context),
+        "empirical_reviews.html": _render_experiment_reviews(context),
     }
     written = []
     for filename, body in pages.items():
@@ -932,6 +984,245 @@ def _render_v5_release_gate(context: _DashboardContext) -> str:
     )
 
 
+def _render_experiment_workspaces(context: _DashboardContext) -> str:
+    rows = [
+        [
+            _code(str(workspace.get("id", ""))),
+            _code(str(workspace.get("project_id", ""))),
+            _code(str(workspace.get("campaign_id", ""))),
+            _code(str(workspace.get("direction_id", ""))),
+            _code(str(workspace.get("experiment_protocol_id", ""))),
+            _e(str(workspace.get("status", ""))),
+            _e(str(workspace.get("root_dir", ""))),
+            _e(_paper_package_status(context, str(workspace.get("id", "")))),
+        ]
+        for workspace in context.experiments["workspaces"]
+    ]
+    return _filter_box() + _table(["Workspace", "Project", "Campaign", "Direction", "Protocol", "Status", "Root", "Paper Package"], rows)
+
+
+def _render_experiment_runs(context: _DashboardContext) -> str:
+    manifest_rows = [
+        [
+            _code(str(manifest.get("workspace_id", ""))),
+            _code(str(manifest.get("id", ""))),
+            _e(str(manifest.get("run_name", ""))),
+            _e(str(manifest.get("run_type", ""))),
+            _e(", ".join(map(str, _as_list(manifest.get("dataset_ids"))))),
+            _e(", ".join(map(str, _as_list(manifest.get("baseline_ids"))))),
+            _e(", ".join(map(str, _as_list(manifest.get("metric_ids"))))),
+            _e(", ".join(map(str, _as_list(manifest.get("expected_outputs"))))),
+        ]
+        for manifest in context.experiments["manifests"]
+    ]
+    execution_rows = [
+        [
+            _code(str(record.get("workspace_id", ""))),
+            _code(str(record.get("id", ""))),
+            _code(str(record.get("manifest_id", ""))),
+            _e(str(record.get("status", ""))),
+            _e(str(record.get("returncode", ""))),
+            _e(str(record.get("failure_reason", ""))),
+            _e(str(record.get("stdout_path", ""))),
+            _e(str(record.get("stderr_path", ""))),
+            _e(", ".join(map(str, _as_list(record.get("result_artifact_ids"))))),
+        ]
+        for record in context.experiments["executions"]
+    ]
+    failed = [str(record.get("id", "")) for record in context.experiments["executions"] if _execution_failed(record)]
+    return "\n".join(
+        [
+            "<h2>Run Manifests</h2>",
+            _filter_box(),
+            _table(
+                ["Workspace", "Manifest", "Name", "Type", "Datasets", "Baselines", "Metrics", "Expected Outputs"],
+                manifest_rows,
+            ),
+            "<h2>Execution Records</h2>",
+            "<p>Log file paths are shown, but log contents are not embedded in the dashboard.</p>",
+            _table(
+                [
+                    "Workspace",
+                    "Execution",
+                    "Manifest",
+                    "Status",
+                    "Return Code",
+                    "Failure Reason",
+                    "Stdout Path",
+                    "Stderr Path",
+                    "Artifacts",
+                ],
+                execution_rows,
+            ),
+            "<h2>Failed Runs</h2>",
+            _list(failed, css_class="warning"),
+        ]
+    )
+
+
+def _render_experiment_datasets(context: _DashboardContext) -> str:
+    rows = [
+        [
+            _code(str(record.get("workspace_id", ""))),
+            _code(str(record.get("id", ""))),
+            _e(str(record.get("name", ""))),
+            _e(str(record.get("dataset_type", ""))),
+            _e(str(record.get("license", ""))),
+            _e(str(record.get("size_summary", ""))),
+            _e(", ".join(map(str, _as_list(record.get("split_names"))))),
+            _e(str(record.get("intended_use", ""))),
+            _e("; ".join(map(str, _as_list(record.get("limitations")) + _as_list(record.get("safety_notes"))))),
+        ]
+        for record in context.experiments["datasets"]
+    ]
+    warnings = [
+        f"`{record.get('id', '')}` is {record.get('dataset_type')} data and cannot establish real empirical acceptance by itself."
+        for record in context.experiments["datasets"]
+        if str(record.get("dataset_type", "")) in {"fixture", "synthetic", "generated"}
+    ]
+    return (
+        _filter_box()
+        + _table(["Workspace", "Dataset", "Name", "Type", "License", "Size", "Splits", "Use", "Risks"], rows)
+        + "<h2>Fixture/Synthetic Warnings</h2>"
+        + _list(warnings, css_class="warning")
+    )
+
+
+def _render_experiment_baselines(context: _DashboardContext) -> str:
+    rows = [
+        [
+            _code(str(record.get("workspace_id", ""))),
+            _code(str(record.get("id", ""))),
+            _e(str(record.get("name", ""))),
+            _e(str(record.get("baseline_type", ""))),
+            _e(str(record.get("code_available", ""))),
+            _e(
+                str(record.get("implementation_path", "") or str(record.get("code_url", ""))),
+            ),
+            _e(str(record.get("required_for_submission", ""))),
+            _e(str(record.get("risk_if_missing", ""))),
+        ]
+        for record in context.experiments["baselines"]
+    ]
+    return _filter_box() + _table(
+        ["Workspace", "Baseline", "Name", "Type", "Code Available", "Implementation", "Required", "Risk If Missing"], rows
+    )
+
+
+def _render_experiment_metrics(context: _DashboardContext) -> str:
+    rows = [
+        [
+            _code(str(record.get("workspace_id", ""))),
+            _code(str(record.get("id", ""))),
+            _e(str(record.get("name", ""))),
+            _e(str(record.get("metric_type", ""))),
+            _e(str(record.get("higher_is_better", ""))),
+            _e(str(record.get("formula", ""))),
+            _e("; ".join(map(str, _as_list(record.get("edge_cases"))))),
+        ]
+        for record in context.experiments["metrics"]
+    ]
+    return _filter_box() + _table(["Workspace", "Metric", "Name", "Type", "Higher Is Better", "Formula", "Edge Cases"], rows)
+
+
+def _render_experiment_results(context: _DashboardContext) -> str:
+    artifact_rows = [
+        [
+            _code(str(artifact.get("workspace_id", ""))),
+            _code(str(artifact.get("id", ""))),
+            _code(str(artifact.get("execution_id", ""))),
+            _e(str(artifact.get("artifact_type", ""))),
+            _e(str(artifact.get("sha256", ""))),
+            _e(str(artifact.get("safe_to_commit", ""))),
+            _e(str(artifact.get("summary", ""))),
+            _e(str(artifact.get("path", ""))),
+        ]
+        for artifact in context.experiments["artifacts"]
+    ]
+    metric_rows = [
+        [
+            _code(str(result.get("workspace_id", ""))),
+            _code(str(result.get("execution_id", ""))),
+            _code(str(result.get("id", ""))),
+            _code(str(result.get("metric_id", ""))),
+            _e(str(result.get("value", ""))),
+            _e(str(result.get("sample_size", ""))),
+            _e(", ".join(map(str, _as_list(result.get("confidence_interval"))))),
+            _code(str(result.get("raw_artifact_id", ""))),
+        ]
+        for result in context.experiments["metric_results"]
+    ]
+    claim_rows = [
+        [
+            _code(str(claim.get("workspace_id", ""))),
+            _code(str(claim.get("execution_id", ""))),
+            _code(str(claim.get("id", ""))),
+            _e(str(claim.get("status", ""))),
+            _e(str(claim.get("confidence", ""))),
+            _e(str(claim.get("text", ""))),
+            _e(", ".join(map(str, _as_list(claim.get("metric_result_ids"))))),
+            _e("; ".join(map(str, _as_list(claim.get("limitations"))))),
+        ]
+        for claim in context.experiments["empirical_claims"]
+    ]
+    fake_warnings = _fake_result_warnings(context)
+    return "\n".join(
+        [
+            "<h2>Result Artifacts</h2>",
+            _filter_box(),
+            _table(["Workspace", "Artifact", "Execution", "Type", "SHA256", "Safe To Commit", "Summary", "Path"], artifact_rows),
+            "<h2>Metric Results</h2>",
+            _table(["Workspace", "Execution", "Metric Result", "Metric", "Value", "Sample Size", "CI", "Artifact"], metric_rows),
+            "<h2>Empirical Claims</h2>",
+            _table(["Workspace", "Execution", "Claim", "Status", "Confidence", "Text", "Metric Results", "Limitations"], claim_rows),
+            "<h2>Fixture/Synthetic Result Warnings</h2>",
+            _list(fake_warnings, css_class="warning"),
+        ]
+    )
+
+
+def _render_experiment_reproducibility(context: _DashboardContext) -> str:
+    rows: list[list[str]] = []
+    blocker_items: list[str] = []
+    for result in context.experiments["reproducibility"]:
+        checks = result.get("checks", {})
+        rows.append(
+            [
+                _code(str(result.get("workspace_id", ""))),
+                _code(str(result.get("execution_id", ""))),
+                _e(str(result.get("status", ""))),
+                _e("; ".join(f"{key}: {value}" for key, value in checks.items()) if isinstance(checks, dict) else ""),
+                _e("; ".join(map(str, _as_list(result.get("blockers"))))),
+                _e("; ".join(map(str, _as_list(result.get("warnings"))))),
+            ]
+        )
+        blocker_items.extend(f"`{result.get('workspace_id', '')}`: {item}" for item in _as_list(result.get("blockers")))
+    return (
+        _filter_box()
+        + _table(["Workspace", "Execution", "Status", "Checks", "Blockers", "Warnings"], rows)
+        + "<h2>Reproducibility Blockers</h2>"
+        + _list(blocker_items, css_class="warning")
+    )
+
+
+def _render_experiment_reviews(context: _DashboardContext) -> str:
+    rows = [
+        [
+            _code(str(panel.get("workspace_id", ""))),
+            _code(str(panel.get("execution_id", ""))),
+            _e(str(len(_as_list(panel.get("reviewer_reviews"))))),
+            _e(str(panel.get("area_chair_summary", ""))),
+            _e("; ".join(map(str, _as_list(panel.get("fatal_flaws"))))),
+            _e("; ".join(map(str, _as_list(panel.get("required_fixes"))))),
+            _e("; ".join(map(str, _as_list(panel.get("result_claim_softening_recommendations"))))),
+        ]
+        for panel in context.experiments["empirical_reviews"]
+    ]
+    return _filter_box() + _table(
+        ["Workspace", "Execution", "Reviews", "Area Chair Summary", "Fatal Flaws", "Required Fixes", "Claim Softening"], rows
+    )
+
+
 def _run_artifact_links(state: ResearchRunState) -> list[tuple[str, str]]:
     names = [
         "run_report.md",
@@ -963,6 +1254,128 @@ def _project_artifact_links(program: ResearchProgramState) -> list[tuple[str, st
     ]
     base = Path(program.project.root_dir)
     return [(name, f"../{name}") for name in names if (base / name).exists()]
+
+
+def _workspace_artifact_links(workspace_dir: Path) -> list[tuple[str, str]]:
+    names = [
+        "workspace.json",
+        "reports/result_summary.md",
+        "reports/empirical_claim_ledger.md",
+        "reports/reproducibility_check.md",
+        "reports/empirical_review.md",
+        "paper_package_v2/README.md",
+    ]
+    return [(name, f"../{name}") for name in names if (workspace_dir / name).exists()]
+
+
+def _find_experiment_workspace_dir(project_root: Path, workspace_id: str) -> Path:
+    for path in project_root.glob(f"*/experiment_workspaces/{workspace_id}"):
+        if (path / "workspace.json").exists():
+            return path
+    raise FileNotFoundError(f"No experiment workspace found for {workspace_id}")
+
+
+def _empty_experiment_context() -> dict[str, list[dict[str, Any]]]:
+    return {
+        "workspaces": [],
+        "manifests": [],
+        "executions": [],
+        "artifacts": [],
+        "datasets": [],
+        "baselines": [],
+        "metrics": [],
+        "metric_results": [],
+        "empirical_claims": [],
+        "reproducibility": [],
+        "empirical_reviews": [],
+        "paper_packages": [],
+    }
+
+
+def _load_experiment_context(base_dir: Path) -> dict[str, list[dict[str, Any]]]:
+    context = _empty_experiment_context()
+    workspace_dirs = _experiment_workspace_dirs(base_dir)
+    for workspace_dir in workspace_dirs:
+        workspace = _read_json_if_exists(workspace_dir / "workspace.json")
+        workspace_id = str(workspace.get("id") or workspace_dir.name)
+        if workspace:
+            context["workspaces"].append(workspace)
+        context["manifests"].extend(_tagged_json_files(workspace_dir / "manifests", "*.json", workspace_id))
+        context["executions"].extend(_tagged_json_files(workspace_dir / "runs", "*.json", workspace_id))
+        context["artifacts"].extend(_tagged_json_files(workspace_dir / "results", "result-*.artifact.json", workspace_id))
+        context["datasets"].extend(_tagged_json_files(workspace_dir / "data", "dataset-*.record.json", workspace_id))
+        context["baselines"].extend(_tagged_json_files(workspace_dir / "baselines", "baseline-*.record.json", workspace_id))
+        context["metrics"].extend(_tagged_json_files(workspace_dir / "metrics", "metric-*.record.json", workspace_id))
+        context["reproducibility"].extend(_tagged_json_files(workspace_dir / "reports", "reproducibility_check*.json", workspace_id))
+        context["empirical_reviews"].extend(_tagged_json_files(workspace_dir / "reports", "empirical_review*.json", workspace_id))
+        package = _read_json_if_exists(workspace_dir / "paper_package_v2" / "paper_package.json")
+        if package:
+            package["workspace_id"] = workspace_id
+            context["paper_packages"].append(package)
+        for summary in _tagged_json_files(workspace_dir / "reports", "result_summary_*.json", workspace_id):
+            metric_results = _as_list(summary.get("metric_results"))
+            empirical_claims = _as_list(summary.get("empirical_claims"))
+            for item in metric_results:
+                if isinstance(item, dict):
+                    item = {**item, "workspace_id": workspace_id}
+                    context["metric_results"].append(item)
+            for item in empirical_claims:
+                if isinstance(item, dict):
+                    item = {**item, "workspace_id": workspace_id}
+                    context["empirical_claims"].append(item)
+    return context
+
+
+def _experiment_workspace_dirs(base_dir: Path) -> list[Path]:
+    if (base_dir / "workspace.json").exists():
+        return [base_dir]
+    root = base_dir / "experiment_workspaces"
+    if not root.exists():
+        return []
+    return sorted(path for path in root.iterdir() if path.is_dir() and (path / "workspace.json").exists())
+
+
+def _tagged_json_files(root: Path, pattern: str, workspace_id: str) -> list[dict[str, Any]]:
+    if not root.exists():
+        return []
+    records: list[dict[str, Any]] = []
+    seen: set[Path] = set()
+    for path in sorted(root.glob(pattern)):
+        if path in seen:
+            continue
+        seen.add(path)
+        raw = _read_json_if_exists(path)
+        if raw:
+            raw["workspace_id"] = workspace_id
+            records.append(raw)
+    return records
+
+
+def _paper_package_status(context: _DashboardContext, workspace_id: str) -> str:
+    package = next((item for item in context.experiments["paper_packages"] if item.get("workspace_id") == workspace_id), None)
+    if not package:
+        return "not exported"
+    return str(package.get("readiness", "exported"))
+
+
+def _execution_failed(record: dict[str, Any]) -> bool:
+    return str(record.get("status", "")) == "failed" or bool(str(record.get("failure_reason", "")).strip())
+
+
+def _fake_result_warnings(context: _DashboardContext) -> list[str]:
+    fake_workspace_ids = {
+        str(record.get("workspace_id", ""))
+        for record in context.experiments["datasets"]
+        if str(record.get("dataset_type", "")) in {"fixture", "synthetic", "generated"}
+    }
+    warnings = [
+        f"Workspace `{workspace_id}` uses fixture/synthetic/generated data; results are workflow evidence, not real empirical acceptance."
+        for workspace_id in sorted(fake_workspace_ids)
+    ]
+    for package in context.experiments["paper_packages"]:
+        if package.get("workspace_id") in fake_workspace_ids and package.get("readiness") == "paper_ready_empirical":
+            warnings.append(f"Workspace `{package.get('workspace_id')}` appears to accept fake results as paper-ready empirical evidence.")
+    return warnings
 
 
 def _load_campaign_states(program: ResearchProgramState) -> list[CampaignState]:

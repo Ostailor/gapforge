@@ -20,6 +20,7 @@ prompt_packs/
 !src/gapforge/dashboard/
 !src/gapforge/dashboard/*.py
 **/paper_packages/
+**/experiment_workspaces/
 **/safe_bundles/
 **/artifacts/papers/**/*.pdf
 **/agent_tasks/*/outputs/

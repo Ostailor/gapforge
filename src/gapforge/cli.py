@@ -35,6 +35,7 @@ from gapforge.agents.repair import (
 )
 from gapforge.agents.setup import render_real_run_setup
 from gapforge.agents.validation import create_actual_run_attestation as create_run_actual_run_attestation
+from gapforge.baselines import BaselineRegistry, render_baseline_registry_markdown
 from gapforge.campaigns import CampaignManager, CampaignState
 from gapforge.campaigns.acceptance import (
     campaign_actual_run_status,
@@ -59,6 +60,7 @@ from gapforge.canaries import CampaignCanaryRunManager, CanaryReviewManager, Can
 from gapforge.claims.project_sync import ProjectClaimGraphManager
 from gapforge.config import GapForgeConfig
 from gapforge.dashboard import StaticDashboardBuilder
+from gapforge.datasets import DatasetRegistry, render_dataset_registry_markdown, render_dataset_validation_markdown
 from gapforge.diagnostics import (
     build_real_run_diagnostic,
     diagnose_canary_markdown,
@@ -68,10 +70,20 @@ from gapforge.diagnostics import (
 )
 from gapforge.directions.maturation import DirectionMaturationManager
 from gapforge.evals.benchmark import run_evals
-from gapforge.experiment_code import ExperimentCodeTaskGenerator, ExperimentRepoScaffolder
+from gapforge.experiment_code import (
+    ExperimentCodeScaffolderV2,
+    ExperimentCodeTaskGenerator,
+    ExperimentCodeTaskManager,
+    ExperimentRepoScaffolder,
+    render_experiment_code_validation,
+    render_import_result,
+)
 from gapforge.experiments.baselines import render_baseline_candidates_markdown
 from gapforge.experiments.protocol import ExperimentProtocolBuilder, render_protocol_markdown
 from gapforge.experiments.reproducibility import render_reproducibility_checklist
+from gapforge.experiments.reproducibility_checker import ReproducibilityChecker, render_reproducibility_check_markdown
+from gapforge.experiments.runner import ExperimentRunner, render_run_result
+from gapforge.experiments.workspace import ExperimentWorkspaceManager
 from gapforge.export.bibliography import render_bibtex
 from gapforge.export.paper_package import PaperPackageExporter
 from gapforge.fulltext.downloader import PdfDownloader
@@ -83,6 +95,7 @@ from gapforge.llm.config import LLMRuntimeConfig
 from gapforge.llm.fake import FakeLLMClient
 from gapforge.llm.providers import ProviderLLMClient, ProviderUnavailableError, llm_status
 from gapforge.llm.transcripts import LLMTranscriptLogger
+from gapforge.metrics import MetricRegistry, render_metric_registry_markdown, render_statistical_plan_markdown
 from gapforge.models import AgentTaskSpec, IndexManifest, ResearchProgramState, ResearchRunState, RetrievalResult, to_plain
 from gapforge.novelty.recall_gate import (
     assess_campaign_prior_work_recall,
@@ -102,15 +115,29 @@ from gapforge.real_literature import (
     write_real_campaign_dry_run,
 )
 from gapforge.related_work.matrix import RelatedWorkMatrixBuilder
-from gapforge.release_gate import V04ReleaseGateEnforcer, V05ReleaseGateEnforcer, render_v04_release_gate_markdown
+from gapforge.release_gate import (
+    V04ReleaseGateEnforcer,
+    V05ReleaseGateEnforcer,
+    V06ReleaseGateEnforcer,
+    render_v04_release_gate_markdown,
+)
 from gapforge.release_gate.v05 import render_v05_release_gate_markdown
+from gapforge.release_gate.v06 import render_v06_release_gate_markdown
 from gapforge.reporting import write_final_report
+from gapforge.results import ResultParser, ResultStatisticsAnalyzer, render_analysis_report_markdown, render_result_summary_markdown
 from gapforge.retrieval import build_project_index, build_run_index, search_project_index, search_run_index
 from gapforge.retrieval.index_store import RetrievalIndexStore
 from gapforge.review.audit import render_human_reviews_markdown
 from gapforge.review.edits import HumanReviewEditor
 from gapforge.review.queue import ReviewQueueManager, render_review_queue_markdown
-from gapforge.reviewers import ReviewPanelBuilder, render_meta_review_markdown, render_rebuttal_plans_markdown, render_review_panel_markdown
+from gapforge.reviewers import (
+    EmpiricalReviewBuilder,
+    ReviewPanelBuilder,
+    render_empirical_review_markdown,
+    render_meta_review_markdown,
+    render_rebuttal_plans_markdown,
+    render_review_panel_markdown,
+)
 from gapforge.safety import (
     audit_project_artifacts,
     audit_run_artifacts,
@@ -400,6 +427,7 @@ def build_parser() -> argparse.ArgumentParser:
     eval_parser.add_argument("--v3", action="store_true", help="Run v0.3 curated real-world-style evaluation fixtures.")
     eval_parser.add_argument("--v4", action="store_true", help="Run v0.4 campaign and agent-behavior evaluation fixtures.")
     eval_parser.add_argument("--v5", action="store_true", help="Run v0.5 real-literature campaign quality evaluation fixtures.")
+    eval_parser.add_argument("--v6", action="store_true", help="Run v0.6 experiment execution evaluation fixtures.")
     eval_parser.add_argument("--write-report", action="store_true")
 
     report_parser = subparsers.add_parser("report", help="Write final_report.md or final_report.json.")
@@ -415,8 +443,10 @@ def build_parser() -> argparse.ArgumentParser:
     dashboard_scope = dashboard_parser.add_mutually_exclusive_group(required=True)
     dashboard_scope.add_argument("--run-id")
     dashboard_scope.add_argument("--project-id")
+    dashboard_scope.add_argument("--workspace-id")
     dashboard_parser.add_argument("--open", action="store_true", help="Open the dashboard in the default browser.")
     dashboard_parser.add_argument("--include-actual-runs", action="store_true", help="Include v0.4 actual-run acceptance pages.")
+    dashboard_parser.add_argument("--include-experiments", action="store_true", help="Include v0.6 experiment execution pages.")
 
     release_gate_dashboard_parser = subparsers.add_parser(
         "release-gate-dashboard", help="Generate a project dashboard and print the release-gate page path."
@@ -1000,6 +1030,10 @@ def build_parser() -> argparse.ArgumentParser:
     v5_release_gate_parser.add_argument("--write-report", action="store_true")
     v5_release_gate_parser.add_argument("--json", action="store_true")
 
+    v6_release_gate_parser = subparsers.add_parser("v6-release-gate", help="Enforce the v0.6 empirical validation release gate.")
+    v6_release_gate_parser.add_argument("--write-report", action="store_true")
+    v6_release_gate_parser.add_argument("--json", action="store_true")
+
     rollback_import_parser = subparsers.add_parser("rollback-import", help="Rollback a campaign import by import ID.")
     rollback_import_parser.add_argument("--import-id", required=True)
 
@@ -1062,6 +1096,140 @@ def build_parser() -> argparse.ArgumentParser:
     protocol_parser.add_argument("--project-id", required=True)
     protocol_parser.add_argument("--direction-id", required=True)
 
+    experiment_workspace_parser = subparsers.add_parser(
+        "experiment-workspace-create", help="Create a durable experiment execution workspace."
+    )
+    experiment_workspace_parser.add_argument("--project-id", required=True)
+    experiment_workspace_parser.add_argument("--direction-id", required=True)
+    experiment_workspace_parser.add_argument("--campaign-id", default="")
+    experiment_workspace_parser.add_argument("--experiment-protocol-id", default="")
+
+    experiment_workspace_status_parser = subparsers.add_parser("experiment-workspace-status", help="Print experiment workspace status.")
+    experiment_workspace_status_parser.add_argument("--workspace-id", required=True)
+
+    experiment_manifest_parser = subparsers.add_parser(
+        "experiment-manifest-create", help="Create an experiment run manifest without executing it."
+    )
+    experiment_manifest_parser.add_argument("--workspace-id", required=True)
+    experiment_manifest_parser.add_argument("--run-type", default="smoke")
+    experiment_manifest_parser.add_argument("--run-name", default="")
+    experiment_manifest_parser.add_argument("--dataset-id", action="append", dest="dataset_ids", default=[])
+    experiment_manifest_parser.add_argument("--baseline-id", action="append", dest="baseline_ids", default=[])
+    experiment_manifest_parser.add_argument("--metric-id", action="append", dest="metric_ids", default=[])
+    experiment_manifest_parser.add_argument("--command", dest="run_command", default="")
+    experiment_manifest_parser.add_argument("--expected-output", action="append", dest="expected_outputs", default=[])
+    experiment_manifest_parser.add_argument("--random-seed", type=int, default=0)
+
+    experiment_runs_parser = subparsers.add_parser("experiment-runs", help="List execution records for an experiment workspace.")
+    experiment_runs_parser.add_argument("--workspace-id", required=True)
+
+    experiment_run_parser = subparsers.add_parser("experiment-run", help="Execute an experiment run manifest.")
+    experiment_run_parser.add_argument("--workspace-id", required=True)
+    experiment_run_scope = experiment_run_parser.add_mutually_exclusive_group(required=True)
+    experiment_run_scope.add_argument("--manifest-id")
+    experiment_run_scope.add_argument("--run-type")
+    experiment_run_parser.add_argument("--timeout-seconds", type=int, default=300)
+    experiment_run_parser.add_argument("--dry-run", action="store_true")
+
+    experiment_run_status_parser = subparsers.add_parser("experiment-run-status", help="Print an experiment execution record.")
+    experiment_run_status_parser.add_argument("--execution-id", required=True)
+
+    experiment_rerun_parser = subparsers.add_parser("experiment-rerun", help="Rerun the manifest from a previous execution.")
+    experiment_rerun_parser.add_argument("--execution-id", required=True)
+    experiment_rerun_parser.add_argument("--timeout-seconds", type=int, default=300)
+    experiment_rerun_parser.add_argument("--dry-run", action="store_true")
+
+    parse_results_parser = subparsers.add_parser("parse-results", help="Parse experiment result artifacts into empirical claims.")
+    parse_results_parser.add_argument("--execution-id", required=True)
+
+    result_summary_parser = subparsers.add_parser("result-summary", help="Print parsed experiment result summary.")
+    result_summary_parser.add_argument("--execution-id", required=True)
+
+    empirical_claims_parser = subparsers.add_parser("empirical-claims", help="Print workspace empirical claim ledger.")
+    empirical_claims_parser.add_argument("--workspace-id", required=True)
+
+    analyze_results_parser = subparsers.add_parser("analyze-results", help="Analyze parsed experiment metrics with uncertainty.")
+    analyze_results_scope = analyze_results_parser.add_mutually_exclusive_group(required=True)
+    analyze_results_scope.add_argument("--execution-id")
+    analyze_results_scope.add_argument("--workspace-id")
+
+    low_fpr_power_parser = subparsers.add_parser("low-fpr-power-check", help="Check low-FPR experiment sample-size caution.")
+    low_fpr_power_parser.add_argument("--workspace-id", required=True)
+
+    reproducibility_check_parser = subparsers.add_parser(
+        "reproducibility-check", help="Audit an experiment workspace or execution for reproducibility artifacts."
+    )
+    reproducibility_check_scope = reproducibility_check_parser.add_mutually_exclusive_group(required=True)
+    reproducibility_check_scope.add_argument("--workspace-id")
+    reproducibility_check_scope.add_argument("--execution-id")
+
+    empirical_review_parser = subparsers.add_parser("empirical-review", help="Run an empirical reviewer panel over experiment results.")
+    empirical_review_scope = empirical_review_parser.add_mutually_exclusive_group(required=True)
+    empirical_review_scope.add_argument("--workspace-id")
+    empirical_review_scope.add_argument("--execution-id")
+
+    dataset_register_parser = subparsers.add_parser("dataset-register", help="Register a dataset for an experiment workspace.")
+    dataset_register_parser.add_argument("--workspace-id", required=True)
+    dataset_register_parser.add_argument("--name", required=True)
+    dataset_register_parser.add_argument("--path", required=True)
+    dataset_register_parser.add_argument("--dataset-type", default="unknown")
+    dataset_register_parser.add_argument("--description", default="")
+    dataset_register_parser.add_argument("--source", default="")
+    dataset_register_parser.add_argument("--source-url", default="")
+    dataset_register_parser.add_argument("--version", default="")
+    dataset_register_parser.add_argument("--license", default="")
+    dataset_register_parser.add_argument("--intended-use", default="")
+
+    dataset_card_parser = subparsers.add_parser("dataset-card", help="Render a dataset card.")
+    dataset_card_parser.add_argument("--dataset-id", required=True)
+
+    dataset_validate_parser = subparsers.add_parser("dataset-validate", help="Validate a registered dataset.")
+    dataset_validate_parser.add_argument("--dataset-id", required=True)
+
+    dataset_list_parser = subparsers.add_parser("dataset-list", help="List datasets registered for an experiment workspace.")
+    dataset_list_parser.add_argument("--workspace-id", required=True)
+
+    baseline_register_parser = subparsers.add_parser("baseline-register", help="Register a baseline for an experiment workspace.")
+    baseline_register_parser.add_argument("--workspace-id", required=True)
+    baseline_register_parser.add_argument("--name", required=True)
+    baseline_register_parser.add_argument("--description", default="")
+    baseline_register_parser.add_argument("--baseline-type", default="unknown")
+    baseline_register_parser.add_argument("--source-paper-id", action="append", dest="source_paper_ids", default=[])
+    baseline_register_parser.add_argument("--code-url", default="")
+    baseline_register_parser.add_argument("--implementation-path", default="")
+    baseline_register_parser.add_argument("--required-for-submission", action="store_true")
+    baseline_register_parser.add_argument("--risk-if-missing", default="")
+
+    baseline_from_related_work_parser = subparsers.add_parser(
+        "baseline-from-related-work", help="Create baseline records from a direction related-work matrix."
+    )
+    baseline_from_related_work_parser.add_argument("--project-id", required=True)
+    baseline_from_related_work_parser.add_argument("--direction-id", required=True)
+
+    baseline_list_parser = subparsers.add_parser("baseline-list", help="List baselines registered for an experiment workspace.")
+    baseline_list_parser.add_argument("--workspace-id", required=True)
+
+    baseline_card_parser = subparsers.add_parser("baseline-card", help="Render a baseline card.")
+    baseline_card_parser.add_argument("--baseline-id", required=True)
+
+    metric_register_parser = subparsers.add_parser("metric-register", help="Register a metric for an experiment workspace.")
+    metric_register_parser.add_argument("--workspace-id", required=True)
+    metric_register_parser.add_argument("--name", required=True)
+    metric_register_parser.add_argument("--description", default="")
+    metric_register_parser.add_argument("--metric-type", default="custom")
+    metric_register_parser.add_argument("--formula", default="")
+    metric_register_parser.add_argument("--lower-is-better", action="store_true")
+    metric_register_parser.add_argument("--required-input", action="append", dest="required_inputs", default=[])
+    metric_register_parser.add_argument("--edge-case", action="append", dest="edge_cases", default=[])
+
+    metric_list_parser = subparsers.add_parser("metric-list", help="List metrics registered for an experiment workspace.")
+    metric_list_parser.add_argument("--workspace-id", required=True)
+
+    stats_plan_parser = subparsers.add_parser("stats-plan", help="Create a statistical test plan.")
+    stats_plan_scope = stats_plan_parser.add_mutually_exclusive_group(required=True)
+    stats_plan_scope.add_argument("--workspace-id")
+    stats_plan_scope.add_argument("--experiment-id")
+
     generate_code_tasks_parser = subparsers.add_parser(
         "generate-code-tasks", help="Generate Codex handoff tasks for experiment implementation."
     )
@@ -1071,6 +1239,41 @@ def build_parser() -> argparse.ArgumentParser:
     scaffold_experiment_parser = subparsers.add_parser("scaffold-experiment-repo", help="Create a minimal experiment repository scaffold.")
     scaffold_experiment_parser.add_argument("--campaign-id", required=True)
     scaffold_experiment_parser.add_argument("--direction-id", required=True)
+
+    scaffold_experiment_code_parser = subparsers.add_parser(
+        "scaffold-experiment-code", help="Create runnable smoke-test code inside an experiment workspace."
+    )
+    scaffold_experiment_code_parser.add_argument("--workspace-id", required=True)
+
+    experiment_code_status_parser = subparsers.add_parser("experiment-code-status", help="Print runnable scaffold status.")
+    experiment_code_status_parser.add_argument("--workspace-id", required=True)
+
+    experiment_code_validate_parser = subparsers.add_parser("experiment-code-validate", help="Validate runnable experiment scaffold code.")
+    experiment_code_validate_parser.add_argument("--workspace-id", required=True)
+    experiment_code_validate_parser.add_argument("--no-smoke", action="store_true", help="Check file layout without running smoke tests.")
+
+    experiment_code_task_parser = subparsers.add_parser("experiment-code-task", help="Create a Codex task pack for workspace code.")
+    experiment_code_task_parser.add_argument("--workspace-id", required=True)
+    experiment_code_task_parser.add_argument(
+        "--type",
+        required=True,
+        choices=[
+            "implement_dataset_loader",
+            "implement_baseline",
+            "implement_metric",
+            "implement_experiment_runner",
+            "implement_ablation",
+            "write_tests",
+            "debug_smoke_run",
+            "analyze_results",
+        ],
+    )
+
+    experiment_code_handoff_parser = subparsers.add_parser("experiment-code-handoff", help="Write handoff for an experiment code task.")
+    experiment_code_handoff_parser.add_argument("--task-id", required=True)
+
+    experiment_code_import_parser = subparsers.add_parser("experiment-code-import", help="Import validated experiment code task outputs.")
+    experiment_code_import_parser.add_argument("--task-id", required=True)
 
     codex_code_task_parser = subparsers.add_parser("codex-code-task", help="Write a Codex implementation task file.")
     codex_code_task_parser.add_argument("--code-task-id", required=True)
@@ -1099,6 +1302,13 @@ def build_parser() -> argparse.ArgumentParser:
     export_package_parser.add_argument("--project-id", required=True)
     export_package_parser.add_argument("--direction-id", required=True)
     export_package_parser.add_argument("--allow-rejected", action="store_true")
+
+    export_package_v2_parser = subparsers.add_parser(
+        "export-paper-package-v2", help="Export a v0.6 empirical paper package for a workspace or direction."
+    )
+    export_package_v2_scope = export_package_v2_parser.add_mutually_exclusive_group(required=True)
+    export_package_v2_scope.add_argument("--workspace-id")
+    export_package_v2_scope.add_argument("--direction-id")
 
     export_manuscript_parser = subparsers.add_parser("export-manuscript", help="Export a run-level manuscript starter kit for a gap.")
     export_manuscript_parser.add_argument("--run-id", required=True)
@@ -1562,7 +1772,16 @@ def _dispatch(
         print(json.dumps(to_plain(status_result), indent=2))
         return 0
     if args.command == "eval":
-        report = run_evals(fixture=args.fixture, output_dir=config.root, write_report=True, v2=args.v2, v3=args.v3, v4=args.v4, v5=args.v5)
+        report = run_evals(
+            fixture=args.fixture,
+            output_dir=config.root,
+            write_report=True,
+            v2=args.v2,
+            v3=args.v3,
+            v4=args.v4,
+            v5=args.v5,
+            v6=args.v6,
+        )
         target = report.report_path or (config.root / "eval_report.md")
         print(f"Wrote evaluation report to {target}")
         print(f"Overall score: {report.overall_score:.3f}")
@@ -1574,7 +1793,12 @@ def _dispatch(
         return 0
     if args.command == "dashboard":
         dashboard = StaticDashboardBuilder(config)
-        result = dashboard.build_project(args.project_id) if args.project_id else dashboard.build_run(args.run_id)
+        if args.workspace_id:
+            result = dashboard.build_workspace(args.workspace_id)
+        elif args.project_id:
+            result = dashboard.build_project(args.project_id)
+        else:
+            result = dashboard.build_run(args.run_id)
         if args.open:
             dashboard.open(result)
         print(f"Wrote dashboard to {result.index_path}")
@@ -2510,6 +2734,15 @@ def _dispatch(
         else:
             print(render_v05_release_gate_markdown(v5_gate_result), end="")
         return 0 if v5_gate_result.passed else 1
+    if args.command == "v6-release-gate":
+        v6_gate_result = V06ReleaseGateEnforcer(config).evaluate()
+        if args.write_report:
+            V06ReleaseGateEnforcer(config).write_outputs(v6_gate_result)
+        if args.json:
+            print(json.dumps(v6_gate_result.to_dict(), indent=2))
+        else:
+            print(render_v06_release_gate_markdown(v6_gate_result), end="")
+        return 0 if v6_gate_result.passed else 1
     if args.command == "rollback-import":
         rollback_record = rollback_import(config, args.import_id)
         print(json.dumps(to_plain(rollback_record), indent=2))
@@ -2600,6 +2833,173 @@ def _dispatch(
         protocol = ExperimentProtocolBuilder(config).build_for_project(args.project_id, args.direction_id)
         print(render_protocol_markdown(protocol), end="")
         return 0
+    if args.command == "experiment-workspace-create":
+        workspace = ExperimentWorkspaceManager(config).create_workspace(
+            project_id=args.project_id,
+            direction_id=args.direction_id,
+            campaign_id=args.campaign_id,
+            experiment_protocol_id=args.experiment_protocol_id,
+        )
+        print(json.dumps(to_plain(workspace), indent=2))
+        return 0
+    if args.command == "experiment-workspace-status":
+        print(ExperimentWorkspaceManager(config).workspace_status_markdown(args.workspace_id), end="")
+        return 0
+    if args.command == "experiment-manifest-create":
+        experiment_manifest = ExperimentWorkspaceManager(config).create_manifest(
+            workspace_id=args.workspace_id,
+            run_type=args.run_type,
+            run_name=args.run_name,
+            dataset_ids=args.dataset_ids or None,
+            baseline_ids=args.baseline_ids or None,
+            metric_ids=args.metric_ids or None,
+            command=args.run_command,
+            expected_outputs=args.expected_outputs or None,
+            random_seed=args.random_seed,
+        )
+        print(json.dumps(to_plain(experiment_manifest), indent=2))
+        return 0
+    if args.command == "experiment-runs":
+        execution_records = ExperimentWorkspaceManager(config).list_execution_records(args.workspace_id)
+        print(json.dumps(to_plain(execution_records), indent=2))
+        return 0
+    if args.command == "experiment-run":
+        run_result = ExperimentRunner(config).run(
+            workspace_id=args.workspace_id,
+            manifest_id=args.manifest_id or "",
+            run_type=args.run_type or "",
+            timeout_seconds=args.timeout_seconds,
+            dry_run=args.dry_run,
+        )
+        print(render_run_result(run_result), end="")
+        return 0 if run_result.execution.status in {"complete", "skipped"} else 1
+    if args.command == "experiment-run-status":
+        print(ExperimentRunner(config).render_execution_status(args.execution_id), end="")
+        return 0
+    if args.command == "experiment-rerun":
+        run_result = ExperimentRunner(config).rerun(
+            args.execution_id,
+            timeout_seconds=args.timeout_seconds,
+            dry_run=args.dry_run,
+        )
+        print(render_run_result(run_result), end="")
+        return 0 if run_result.execution.status in {"complete", "skipped"} else 1
+    if args.command == "parse-results":
+        parsed_result_summary = ResultParser(config).parse_execution(args.execution_id)
+        print(render_result_summary_markdown(parsed_result_summary), end="")
+        return 0
+    if args.command == "result-summary":
+        parsed_result_summary = ResultParser(config).load_or_parse_summary(args.execution_id)
+        print(render_result_summary_markdown(parsed_result_summary), end="")
+        return 0
+    if args.command == "empirical-claims":
+        print(ResultParser(config).render_empirical_claims(args.workspace_id), end="")
+        return 0
+    if args.command == "analyze-results":
+        statistics_analyzer = ResultStatisticsAnalyzer(config)
+        if args.execution_id:
+            statistical_analysis_report = statistics_analyzer.analyze_execution(args.execution_id)
+        else:
+            statistical_analysis_report = statistics_analyzer.analyze_workspace(args.workspace_id)
+        print(render_analysis_report_markdown(statistical_analysis_report), end="")
+        return 0
+    if args.command == "low-fpr-power-check":
+        low_fpr_report = ResultStatisticsAnalyzer(config).low_fpr_power_check(args.workspace_id)
+        print(render_analysis_report_markdown(low_fpr_report), end="")
+        return 0
+    if args.command == "reproducibility-check":
+        reproducibility_checker = ReproducibilityChecker(config)
+        if args.execution_id:
+            reproducibility_result = reproducibility_checker.check_execution(args.execution_id)
+        else:
+            reproducibility_result = reproducibility_checker.check_workspace(args.workspace_id)
+        print(render_reproducibility_check_markdown(reproducibility_result), end="")
+        return 0 if reproducibility_result.status in {"pass", "warning"} else 1
+    if args.command == "empirical-review":
+        empirical_review_builder = EmpiricalReviewBuilder(config)
+        if args.execution_id:
+            empirical_review_panel = empirical_review_builder.review_execution(args.execution_id)
+        else:
+            empirical_review_panel = empirical_review_builder.review_workspace(args.workspace_id)
+        print(render_empirical_review_markdown(empirical_review_panel), end="")
+        return 0
+    if args.command == "dataset-register":
+        dataset_record = DatasetRegistry(config).register_dataset(
+            workspace_id=args.workspace_id,
+            name=args.name,
+            path=args.path,
+            dataset_type=args.dataset_type,
+            description=args.description,
+            source=args.source,
+            source_url=args.source_url,
+            version=args.version,
+            license=args.license,
+            intended_use=args.intended_use,
+        )
+        print(json.dumps(to_plain(dataset_record), indent=2))
+        return 0
+    if args.command == "dataset-card":
+        print(DatasetRegistry(config).render_card(args.dataset_id), end="")
+        return 0
+    if args.command == "dataset-validate":
+        dataset_validation = DatasetRegistry(config).validate_dataset(args.dataset_id)
+        print(render_dataset_validation_markdown(dataset_validation), end="")
+        return 0
+    if args.command == "dataset-list":
+        dataset_records = DatasetRegistry(config).list_datasets(args.workspace_id)
+        print(render_dataset_registry_markdown(dataset_records), end="")
+        return 0
+    if args.command == "baseline-register":
+        baseline_record = BaselineRegistry(config).register_baseline(
+            workspace_id=args.workspace_id,
+            name=args.name,
+            description=args.description,
+            baseline_type=args.baseline_type,
+            source_paper_ids=args.source_paper_ids,
+            code_url=args.code_url,
+            implementation_path=args.implementation_path,
+            required_for_submission=args.required_for_submission,
+            risk_if_missing=args.risk_if_missing,
+        )
+        print(json.dumps(to_plain(baseline_record), indent=2))
+        return 0
+    if args.command == "baseline-from-related-work":
+        baseline_records = BaselineRegistry(config).from_related_work(project_id=args.project_id, direction_id=args.direction_id)
+        print(json.dumps(to_plain(baseline_records), indent=2))
+        return 0
+    if args.command == "baseline-list":
+        baseline_records = BaselineRegistry(config).list_baselines(args.workspace_id)
+        print(render_baseline_registry_markdown(baseline_records), end="")
+        return 0
+    if args.command == "baseline-card":
+        print(BaselineRegistry(config).render_card(args.baseline_id), end="")
+        return 0
+    if args.command == "metric-register":
+        metric_record = MetricRegistry(config).register_metric(
+            workspace_id=args.workspace_id,
+            name=args.name,
+            description=args.description,
+            metric_type=args.metric_type,
+            formula=args.formula,
+            higher_is_better=not args.lower_is_better,
+            required_inputs=args.required_inputs,
+            edge_cases=args.edge_cases,
+        )
+        print(json.dumps(to_plain(metric_record), indent=2))
+        return 0
+    if args.command == "metric-list":
+        metric_records = MetricRegistry(config).list_metrics(args.workspace_id)
+        print(render_metric_registry_markdown(metric_records), end="")
+        return 0
+    if args.command == "stats-plan":
+        metric_registry = MetricRegistry(config)
+        stats_plan = metric_registry.create_stats_plan(
+            workspace_id=args.workspace_id or "",
+            experiment_id=args.experiment_id or "",
+        )
+        metric_records = metric_registry.list_metrics(args.workspace_id) if args.workspace_id else []
+        print(render_statistical_plan_markdown(stats_plan, metric_records), end="")
+        return 0
     if args.command == "generate-code-tasks":
         tasks = ExperimentCodeTaskGenerator(config).generate_tasks(
             campaign_id=args.campaign_id,
@@ -2614,6 +3014,29 @@ def _dispatch(
         )
         print(json.dumps(to_plain(scaffold), indent=2))
         return 0
+    if args.command == "scaffold-experiment-code":
+        code_root = ExperimentCodeScaffolderV2(config).scaffold(args.workspace_id)
+        print(code_root)
+        return 0
+    if args.command == "experiment-code-status":
+        print(ExperimentCodeScaffolderV2(config).status(args.workspace_id), end="")
+        return 0
+    if args.command == "experiment-code-validate":
+        code_validation = ExperimentCodeScaffolderV2(config).validate(args.workspace_id, run_smoke=not args.no_smoke)
+        print(render_experiment_code_validation(code_validation), end="")
+        return 0 if code_validation.status in {"valid", "warning"} else 1
+    if args.command == "experiment-code-task":
+        code_task = ExperimentCodeTaskManager(config).create_task(workspace_id=args.workspace_id, task_type=args.type)
+        print(json.dumps(to_plain(code_task), indent=2))
+        return 0
+    if args.command == "experiment-code-handoff":
+        path = ExperimentCodeTaskManager(config).write_handoff(args.task_id)
+        print(path)
+        return 0
+    if args.command == "experiment-code-import":
+        import_result = ExperimentCodeTaskManager(config).import_outputs(args.task_id)
+        print(render_import_result(import_result), end="")
+        return 0 if import_result.status in {"applied", "partial"} else 1
     if args.command == "codex-code-task":
         path = ExperimentCodeTaskGenerator(config).write_codex_task(args.code_task_id)
         print(path)
@@ -2652,6 +3075,17 @@ def _dispatch(
         )
         print(
             f"Exported paper package {package.id} with {len(package.files)} files "
+            f"(readiness={package.readiness}, missing={len(package.missing_requirements)})."
+        )
+        return 0
+    if args.command == "export-paper-package-v2":
+        exporter = PaperPackageExporter(config)
+        if args.workspace_id:
+            package = exporter.export_workspace_v2(args.workspace_id)
+        else:
+            package = exporter.export_direction_v2(args.direction_id)
+        print(
+            f"Exported v0.6 paper package {package.id} with {len(package.files)} files "
             f"(readiness={package.readiness}, missing={len(package.missing_requirements)})."
         )
         return 0
