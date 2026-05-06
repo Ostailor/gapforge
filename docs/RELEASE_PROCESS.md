@@ -107,6 +107,50 @@ gapforge campaign-acceptance --campaign-id <campaign-id>
 
 Release notes must state whether the v0.4.1 task-pack Codex usability canary completed. That is not the same as full v0.4 actual-run acceptance, which still requires the v4 release gate and multiple accepted real campaigns.
 
+## v0.5 Live-Literature Quality Gate
+
+v0.5 must not claim research-quality validation based only on workflow canaries. It must require accepted live-literature campaigns over real source results and real paper metadata.
+
+Before tagging v0.5:
+
+```bash
+make ci
+gapforge eval --v4 --write-report
+gapforge eval --v5 --write-report
+gapforge setup-codex
+gapforge v4-release-gate --write-report --json
+gapforge real-campaign-dry-run --profile live_low_fpr_collusion --write-report
+gapforge live-source-diagnostic --topic "<topic>" --source-profile <profile> --write-report
+gapforge real-literature-run --profile <live-literature-profile>
+gapforge campaign-report --campaign-id <campaign-id>
+gapforge real-literature-review --campaign-id <campaign-id> --accept-quality --reviewer "<expert>"
+gapforge v5-release-gate --project-id <project-id> --write-report --json
+```
+
+The v0.5 release gate should require:
+
+- deterministic CI remains passing
+- fake-agent campaign smoke remains passing
+- v0.4.1 workflow path remains passing or is explicitly documented as unavailable
+- at least three accepted live-literature campaigns
+- at least two source-policy fields represented
+- at least one accepted refusal campaign for poor coverage, weak novelty, or closest-prior-work conflict
+- at least one experiment-ready campaign with source coverage, novelty dossier, related-work matrix, experiment protocol, and human review
+- no fake citations, unsupported high-confidence claims, strong novelty without prior work, hidden missing searches, or fixture-only campaigns counted as research quality
+
+The v0.5 release gate is different from the v0.4 workflow gate. v0.4 proves that Codex output can be validated/imported/attested/reviewed. v0.5 must prove that live source coverage, closest-prior-work recall, evidence grounding, and human research-quality review are adequate for the accepted campaigns.
+
+Release notes must distinguish:
+
+- deterministic/fake CI status
+- v0.4.1 workflow canary status
+- v0.5 live-literature campaign status
+- accepted/rejected live campaigns
+- expert-review findings
+- missed-prior-work postmortems, if any
+
+If live sources are unavailable, record the campaigns as not-run or refused. Do not fake a live-literature pass.
+
 ## Tagging
 
 Use semantic version tags:
@@ -136,4 +180,5 @@ Release notes should include:
 - Do not claim actual Codex/GPT-5.4 canary validation unless the canary ran and human review was recorded.
 - Do not claim actual-run acceptance unless the release-gate front matter says `actual_run_acceptance_passed: true` and at least one real canary is accepted.
 - For v0.4, do not claim actual-run acceptance unless multiple real Codex/GPT-5.4 campaigns are accepted and the campaign release gate passes.
+- For v0.5, do not claim live-literature quality unless accepted live-source campaigns and expert reviews prove it.
 - Do not publish generated `runs/`, caches, or local environment artifacts as source.

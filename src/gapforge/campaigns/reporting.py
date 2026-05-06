@@ -49,7 +49,9 @@ def write_campaign_report(config: GapForgeConfig, campaign_id: str, *, output_fo
     if output_format != "markdown":
         raise ValueError("Campaign report format must be `markdown` or `json`.")
     path = campaign_dir / "campaign_report.md"
-    path.write_text(render_campaign_report_markdown(payload), encoding="utf-8")
+    markdown = render_campaign_report_markdown(payload)
+    path.write_text(markdown, encoding="utf-8")
+    (campaign_dir / "real_literature_campaign_report.md").write_text(markdown, encoding="utf-8")
     (campaign_dir / "campaign_report.json").write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
     return path
 
@@ -78,6 +80,7 @@ def build_campaign_report_payload(
     recommendation = _recommended_direction(state, program, runs, stop_reason=str(stop["reason"]))
     source_coverage = _source_coverage_payload(runs)
     retrieval_coverage = _retrieval_coverage_payload(program)
+    real_literature_quality = _real_literature_quality_payload(state, runs, program, campaign_dir)
     return {
         "campaign_summary": {
             "campaign_id": state.campaign.id,
@@ -103,6 +106,7 @@ def build_campaign_report_payload(
         "timeline": _timeline(state),
         "decisions": [_decision_payload(decision) for decision in state.decisions],
         "source_coverage": source_coverage,
+        "real_literature_quality": real_literature_quality,
         "retrieval_coverage": retrieval_coverage,
         "papers_read": _papers_read_payload(runs),
         "evidence_backed_gaps": _gaps_payload(runs),
@@ -219,6 +223,10 @@ def render_campaign_report_markdown(payload: dict[str, Any]) -> str:
         "## 7. Source coverage",
         "",
         *_coverage_lines(payload["source_coverage"]),
+        "",
+        "## 7a. Real-literature quality",
+        "",
+        *_real_literature_quality_lines(payload["real_literature_quality"]),
         "",
         "## 8. Retrieval coverage",
         "",
@@ -359,6 +367,66 @@ def _source_coverage_payload(runs: list[ResearchRunState]) -> dict[str, Any]:
         "fallback_paper_count": sum(coverage.fallback_paper_count for coverage in coverages),
         "warnings": warnings,
         "confidence": _best_confidence([coverage.confidence for coverage in coverages]),
+    }
+
+
+def _real_literature_quality_payload(
+    state: CampaignState,
+    runs: list[ResearchRunState],
+    program: ResearchProgramState,
+    campaign_dir: Path | None,
+) -> dict[str, Any]:
+    review = _latest_real_literature_review(campaign_dir)
+    acceptance = _read_campaign_dict(campaign_dir, "real_literature_acceptance.json")
+    diagnostics = _read_campaign_dict(campaign_dir, "live_source_diagnostic.json")
+    health_checks = diagnostics.get("source_health_checks", []) if diagnostics else _read_campaign_list(campaign_dir, "source_health.json")
+    campaign_rounds = _read_campaign_list(campaign_dir, "search_rounds.json")
+    completed_campaign_rounds = [
+        str(item.get("round_type", ""))
+        for item in campaign_rounds
+        if isinstance(item, dict) and item.get("status") == "complete" and item.get("round_type")
+    ]
+    stop_reasons = _stop_reasons(state)
+    return {
+        "live_source_check_count": len(health_checks) if isinstance(health_checks, list) else 0,
+        "healthy_sources": [
+            str(item.get("source_name", "")) for item in health_checks if isinstance(item, dict) and item.get("status") == "healthy"
+        ],
+        "fallback_paper_count": sum(
+            coverage.fallback_paper_count for run in runs if run.source_coverage for coverage in [run.source_coverage]
+        ),
+        "search_strategy_count": sum(len(run.search_strategies) for run in runs)
+        + int(bool(_read_campaign_dict(campaign_dir, "search_strategy.json"))),
+        "search_round_count": sum(len(run.search_rounds) for run in runs) + len(campaign_rounds),
+        "completed_search_rounds": sorted(
+            {round_item.round_type for run in runs for round_item in run.search_rounds if round_item.status == "complete"}
+            | set(completed_campaign_rounds)
+        ),
+        "missing_prior_work_searches": sorted(
+            {item for run in runs for assessment in run.prior_work_recall_assessments for item in assessment.missing_required_searches}
+        ),
+        "canonicalized_papers": _canonicalization_present(program),
+        "prior_work_recall_count": sum(len(run.prior_work_recall_assessments) for run in runs),
+        "quality_review": review,
+        "accepted_for_workflow": bool(review.get("accepted_for_workflow")) or bool(acceptance.get("accepted_for_workflow")),
+        "accepted_for_research_quality": bool(review.get("accepted_for_research_quality"))
+        or bool(acceptance.get("accepted_for_research_quality")),
+        "quality_blockers": acceptance.get("blocking_failures", []),
+        "stop_reasons": stop_reasons,
+        "refusal_reason": next((reason for reason in stop_reasons if "coverage" in reason.lower() or "novelty" in reason.lower()), ""),
+        "remaining_search_gaps": sorted(
+            {
+                item
+                for run in runs
+                for assessment in run.prior_work_recall_assessments
+                for item in assessment.missing_required_searches + assessment.blocking_issues
+            }
+        ),
+        "codex_synthesis_artifacts": [
+            artifact
+            for artifact in _artifact_paths(campaign_dir).values()
+            if "task" in artifact.lower() or "agent" in artifact.lower() or "campaign_report" in artifact.lower()
+        ],
     }
 
 
@@ -600,6 +668,84 @@ def _retrieval_lines(payload: dict[str, Any]) -> list[str]:
     if payload.get("warning"):
         lines.append(f"- Warning: {payload['warning']}")
     return lines
+
+
+def _real_literature_quality_lines(payload: dict[str, Any]) -> list[str]:
+    review = payload.get("quality_review", {}) if isinstance(payload.get("quality_review"), dict) else {}
+    return [
+        f"- Live source health: {payload.get('live_source_check_count', 0)} check(s); "
+        f"healthy={', '.join(payload.get('healthy_sources', [])) or 'none'}",
+        f"- Healthy sources: {', '.join(payload.get('healthy_sources', [])) or 'none'}",
+        f"- Fallback/fixture papers: {payload.get('fallback_paper_count', 0)}",
+        f"- Search strategy: {payload.get('search_strategy_count', 0)} strategy artifact(s)",
+        f"- Search rounds completed: {', '.join(payload.get('completed_search_rounds', [])) or 'none'} "
+        f"({payload.get('search_round_count', 0)} total round artifact(s))",
+        f"- Completed search round types: {', '.join(payload.get('completed_search_rounds', [])) or 'none'}",
+        f"- Missing prior-work search rounds: {', '.join(payload.get('missing_prior_work_searches', [])) or 'none'}",
+        f"- Papers collected and canonicalized: canonicalization recorded={_yes_no(bool(payload.get('canonicalized_papers')))}",
+        "- Full-text/abstract coverage: see Source coverage; fallback and abstract-only counts are quality risks.",
+        f"- Prior-work recall assessments: {payload.get('prior_work_recall_count', 0)}",
+        "- Gaps and counterevidence: see Evidence-backed gaps and Novelty dossiers.",
+        f"- Codex synthesis artifacts: {', '.join(payload.get('codex_synthesis_artifacts', [])) or 'none recorded'}",
+        f"- Human quality review: reviewer={review.get('reviewer', 'none')}",
+        f"- Workflow accepted: {_yes_no(bool(payload.get('accepted_for_workflow')))}",
+        f"- Research-quality accepted: {_yes_no(bool(payload.get('accepted_for_research_quality')))}",
+        f"- Workflow acceptance vs research-quality acceptance: {_yes_no(bool(payload.get('accepted_for_workflow')))} / "
+        f"{_yes_no(bool(payload.get('accepted_for_research_quality')))}",
+        f"- Stop reason: {'; '.join(map(str, payload.get('stop_reasons', []))) or 'none recorded'}",
+        f"- Remaining search gaps: {'; '.join(map(str, payload.get('remaining_search_gaps', []))) or 'none recorded'}",
+        f"- Next actions: {'; '.join(map(str, payload.get('quality_blockers', []))) or 'continue only after search and review gates pass'}",
+        f"- Quality blockers: {'; '.join(map(str, payload.get('quality_blockers', []))) or 'none'}",
+        f"- Recommendation refused because: {payload.get('refusal_reason') or 'no explicit refusal reason recorded'}",
+        "- Interpretation: workflow acceptance is not research-quality acceptance; quality rejection blocks real-literature claims.",
+    ]
+
+
+def _read_campaign_dict(campaign_dir: Path | None, filename: str) -> dict[str, Any]:
+    if campaign_dir is None:
+        return {}
+    path = campaign_dir / filename
+    if not path.exists():
+        return {}
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return raw if isinstance(raw, dict) else {}
+
+
+def _read_campaign_list(campaign_dir: Path | None, filename: str) -> list[dict[str, Any]]:
+    if campaign_dir is None:
+        return []
+    path = campaign_dir / filename
+    if not path.exists():
+        return []
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return []
+    return raw if isinstance(raw, list) else [raw] if isinstance(raw, dict) else []
+
+
+def _latest_real_literature_review(campaign_dir: Path | None) -> dict[str, Any]:
+    reviews = _read_campaign_list(campaign_dir, "real_literature_reviews.json")
+    return reviews[-1] if reviews else {}
+
+
+def _canonicalization_present(program: ResearchProgramState) -> bool:
+    root = Path(program.project.root_dir)
+    path = root / "canonical_paper_identities.json"
+    if path.exists():
+        try:
+            raw = json.loads(path.read_text(encoding="utf-8"))
+            return isinstance(raw, list) and bool(raw)
+        except json.JSONDecodeError:
+            return False
+    return False
+
+
+def _stop_reasons(state: CampaignState) -> list[str]:
+    return [condition.reason for condition in state.stop_conditions if condition.reason]
 
 
 def _classification_basis(reason: str, state: CampaignState, runs: list[ResearchRunState], program: ResearchProgramState) -> list[str]:

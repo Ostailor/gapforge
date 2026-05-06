@@ -105,6 +105,32 @@ class Paper:
 
 
 @dataclass(slots=True)
+class CanonicalPaperIdentity:
+    canonical_id: str
+    title: str
+    normalized_title: str = ""
+    doi: str = ""
+    arxiv_id: str = ""
+    openreview_id: str = ""
+    semantic_scholar_id: str = ""
+    urls: list[str] = field(default_factory=list)
+    source_paper_ids: list[str] = field(default_factory=list)
+    confidence: str = "low"
+    provenance: Provenance = field(default_factory=lambda: Provenance(created_by_skill="paper-canonicalization"))
+
+
+@dataclass(slots=True)
+class PaperMergeDecision:
+    kept_paper_id: str
+    merged_paper_ids: list[str] = field(default_factory=list)
+    merge_reason: str = ""
+    fields_preserved: list[str] = field(default_factory=list)
+    fields_rejected: list[str] = field(default_factory=list)
+    confidence: str = "low"
+    provenance: Provenance = field(default_factory=lambda: Provenance(created_by_skill="paper-canonicalization"))
+
+
+@dataclass(slots=True)
 class PaperArtifact:
     id: str
     paper_id: str
@@ -179,6 +205,39 @@ class SearchQueryRecord:
 
 
 @dataclass(slots=True)
+class SearchStrategy:
+    id: str
+    topic: str
+    source_profile: str = "generic"
+    primary_queries: list[str] = field(default_factory=list)
+    recency_queries: list[str] = field(default_factory=list)
+    survey_queries: list[str] = field(default_factory=list)
+    benchmark_queries: list[str] = field(default_factory=list)
+    dataset_queries: list[str] = field(default_factory=list)
+    method_queries: list[str] = field(default_factory=list)
+    closest_prior_work_queries: list[str] = field(default_factory=list)
+    adjacent_field_queries: list[str] = field(default_factory=list)
+    exclusion_queries: list[str] = field(default_factory=list)
+    expected_sources: list[str] = field(default_factory=list)
+    coverage_targets: dict[str, object] = field(default_factory=dict)
+    provenance: Provenance = field(default_factory=lambda: Provenance(created_by_skill="search-strategy-planner"))
+
+
+@dataclass(slots=True)
+class SearchRound:
+    id: str
+    strategy_id: str
+    round_type: str = "initial"
+    queries: list[str] = field(default_factory=list)
+    sources: list[str] = field(default_factory=list)
+    max_results: int = 10
+    status: str = "planned"
+    result_paper_ids: list[str] = field(default_factory=list)
+    failures: list[str] = field(default_factory=list)
+    provenance: Provenance = field(default_factory=lambda: Provenance(created_by_skill="search-strategy-planner"))
+
+
+@dataclass(slots=True)
 class SourceCoverageReport:
     run_id: str
     topic: str
@@ -194,6 +253,34 @@ class SourceCoverageReport:
     missing_source_types: list[str] = field(default_factory=list)
     coverage_warnings: list[str] = field(default_factory=list)
     confidence: str = "low"
+
+
+@dataclass(slots=True)
+class SourceHealthCheck:
+    source_name: str
+    status: str = "unavailable"
+    test_query: str = ""
+    result_count: int = 0
+    latency_ms: int = 0
+    error: str = ""
+    warning: str = ""
+    checked_at: str = ""
+    provenance: Provenance = field(default_factory=lambda: Provenance(created_by_skill="source-health"))
+
+
+@dataclass(slots=True)
+class LiveSourceDiagnostic:
+    id: str
+    topic: str
+    source_profile: str = "generic"
+    source_health_checks: list[SourceHealthCheck] = field(default_factory=list)
+    usable_sources: list[str] = field(default_factory=list)
+    degraded_sources: list[str] = field(default_factory=list)
+    unavailable_sources: list[str] = field(default_factory=list)
+    minimum_coverage_met: bool = False
+    recommended_fallbacks: list[str] = field(default_factory=list)
+    blocking_issues: list[str] = field(default_factory=list)
+    provenance: Provenance = field(default_factory=lambda: Provenance(created_by_skill="live-source-diagnostic"))
 
 
 @dataclass(slots=True)
@@ -652,6 +739,22 @@ class NoveltyDossier:
     reviewer_objection: str = ""
     recommended_action: str = ""
     provenance: Provenance = field(default_factory=lambda: Provenance(created_by_skill="unknown"))
+
+
+@dataclass(slots=True)
+class PriorWorkRecallAssessment:
+    id: str
+    target_id: str
+    required_query_rounds: list[str] = field(default_factory=list)
+    completed_query_rounds: list[str] = field(default_factory=list)
+    candidate_prior_work_ids: list[str] = field(default_factory=list)
+    top_prior_work_ids: list[str] = field(default_factory=list)
+    missing_required_searches: list[str] = field(default_factory=list)
+    likely_duplicate: bool = False
+    recall_confidence: str = "low"
+    novelty_allowed: bool = False
+    blocking_issues: list[str] = field(default_factory=list)
+    provenance: Provenance = field(default_factory=lambda: Provenance(created_by_skill="prior-work-recall-gate"))
 
 
 @dataclass(slots=True)
@@ -1519,6 +1622,70 @@ class CampaignCanaryRecord:
 
 
 @dataclass(slots=True)
+class RealLiteratureCampaignProfile:
+    id: str
+    title: str
+    topic: str
+    source_profile: str = "generic"
+    required_live_sources: list[str] = field(default_factory=list)
+    recommended_live_sources: list[str] = field(default_factory=list)
+    max_papers: int = 40
+    max_expanded_papers: int = 20
+    min_real_papers: int = 10
+    min_full_text_or_abstract_notes: int = 5
+    min_closest_prior_work: int = 1
+    expected_artifacts: list[str] = field(default_factory=list)
+    acceptance_criteria: list[str] = field(default_factory=list)
+    known_risks: list[str] = field(default_factory=list)
+    provenance: Provenance = field(default_factory=lambda: Provenance(created_by_skill="real-literature-profile"))
+
+
+@dataclass(slots=True)
+class RealLiteratureCampaignRecord:
+    id: str
+    profile_id: str
+    campaign_id: str = ""
+    project_id: str = ""
+    run_ids: list[str] = field(default_factory=list)
+    live_source_diagnostic_id: str = ""
+    real_paper_count: int = 0
+    fallback_paper_count: int = 0
+    full_text_count: int = 0
+    abstract_only_count: int = 0
+    novelty_dossier_count: int = 0
+    accepted: bool = False
+    rejection_reason: str = ""
+    human_review_id: str = ""
+    provenance: Provenance = field(default_factory=lambda: Provenance(created_by_skill="real-literature-runner"))
+
+
+@dataclass(slots=True)
+class RealLiteratureHumanReview:
+    id: str
+    campaign_id: str
+    reviewer: str = "human"
+    reviewed_at: str = ""
+    source_quality_score: int = 0
+    paper_relevance_score: int = 0
+    prior_work_recall_score: int = 0
+    evidence_grounding_score: int = 0
+    novelty_honesty_score: int = 0
+    gap_importance_score: int = 0
+    experiment_feasibility_score: int = 0
+    reviewer_objection_quality_score: int = 0
+    report_honesty_score: int = 0
+    missed_obvious_prior_work: bool = False
+    fake_citation_found: bool = False
+    unsupported_high_confidence_claim_found: bool = False
+    overclaimed_novelty: bool = False
+    accepted_for_workflow: bool = False
+    accepted_for_research_quality: bool = False
+    reasons: list[str] = field(default_factory=list)
+    required_fixes: list[str] = field(default_factory=list)
+    provenance: Provenance = field(default_factory=lambda: Provenance(created_by_skill="real-literature-human-review"))
+
+
+@dataclass(slots=True)
 class CanaryHumanReview:
     id: str
     canary_run_id: str
@@ -1619,6 +1786,8 @@ class ResearchRunState:
     paper_sections: list[PaperSection] = field(default_factory=list)
     evidence_spans: list[EvidenceSpan] = field(default_factory=list)
     search_queries: list[SearchQueryRecord] = field(default_factory=list)
+    search_strategies: list[SearchStrategy] = field(default_factory=list)
+    search_rounds: list[SearchRound] = field(default_factory=list)
     source_coverage: SourceCoverageReport | None = None
     coverage_stopping_assessment: CoverageStoppingAssessment | None = None
     citation_graph: CitationGraph | None = None
@@ -1639,6 +1808,7 @@ class ResearchRunState:
     cross_domain_transfers: list[CrossDomainTransferCandidate] = field(default_factory=list)
     novelty_assessments: list[NoveltyAssessment] = field(default_factory=list)
     novelty_dossiers: list[NoveltyDossier] = field(default_factory=list)
+    prior_work_recall_assessments: list[PriorWorkRecallAssessment] = field(default_factory=list)
     related_work_matrices: list[RelatedWorkMatrix] = field(default_factory=list)
     experiments: list[ExperimentPlan] = field(default_factory=list)
     experiment_protocols: list[ExperimentProtocol] = field(default_factory=list)

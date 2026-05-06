@@ -1,0 +1,11 @@
+{
+  "topic": "narrow undercovered AI safety monitoring setting",
+  "passed": true,
+  "quality_acceptance_expected": true,
+  "minimum_live_coverage_met": false,
+  "refusal_expected": true,
+  "duplicate_prior_work": false,
+  "prior_work_recall_should_block": false,
+  "stop_reason": "not_ready_poor_coverage",
+  "expected_blockers": []
+}

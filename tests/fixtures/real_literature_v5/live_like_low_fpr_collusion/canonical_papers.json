@@ -1,0 +1,22 @@
+[
+  {
+    "canonical_id": "live_like_low_fpr_collusion-paper-1",
+    "title": "Closest prior work for low false positive collusion detection in LLM agents",
+    "normalized_title": "closest prior work for low false positive collusion detection in llm agents",
+    "doi": "10.5555/live_like_low_fpr_collusion.1",
+    "source_paper_ids": [
+      "live_like_low_fpr_collusion-paper-1"
+    ],
+    "confidence": "high"
+  },
+  {
+    "canonical_id": "live_like_low_fpr_collusion-paper-2",
+    "title": "Survey background for low false positive collusion detection in LLM agents",
+    "normalized_title": "survey background for low false positive collusion detection in llm agents",
+    "doi": "10.5555/live_like_low_fpr_collusion.2",
+    "source_paper_ids": [
+      "live_like_low_fpr_collusion-paper-2"
+    ],
+    "confidence": "high"
+  }
+]

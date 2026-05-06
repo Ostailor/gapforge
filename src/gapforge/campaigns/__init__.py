@@ -149,7 +149,9 @@ class CampaignManager:
 
         program, runs = load_campaign_report_context(self.config, state)
         payload = build_campaign_report_payload(state, program, runs, campaign_dir=campaign_dir)
-        (campaign_dir / "campaign_report.md").write_text(render_campaign_report_markdown(payload), encoding="utf-8")
+        campaign_markdown = render_campaign_report_markdown(payload)
+        (campaign_dir / "campaign_report.md").write_text(campaign_markdown, encoding="utf-8")
+        (campaign_dir / "real_literature_campaign_report.md").write_text(campaign_markdown, encoding="utf-8")
         _write_json(campaign_dir / "campaign_report.json", payload)
         self._sync_project_campaign_index(state.campaign)
 

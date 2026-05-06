@@ -142,3 +142,51 @@ Human reviewers should judge Codex/GPT-5.4 output by:
 - absence of fabricated results
 
 The model's confidence is not an acceptance criterion. Evidence is.
+
+## v0.5 Live-Literature Role
+
+For v0.5, Codex/GPT-5.4 should be evaluated as a research campaign assistant over live literature, not just as a task-pack output generator. The bar is higher than v0.4.1 workflow acceptance.
+
+Codex may help:
+
+- propose source-policy-aware search queries
+- read and compare retrieved papers
+- identify closest prior work
+- synthesize evidence-backed gaps
+- classify related work
+- critique experiment protocols
+- recommend refusal when novelty or coverage is weak
+
+Codex still may not:
+
+- invent papers, citations, quotes, datasets, metrics, or results
+- claim novelty without closest prior work
+- treat fixture-only canaries as research-quality evidence
+- override source coverage warnings
+- convert model confidence into claim confidence
+
+v0.5 live-literature acceptance requires human expert review of source coverage, closest-prior-work recall, citation grounding, gap quality, experiment protocol quality, and rejection behavior. See `docs/V0_5_REAL_LITERATURE_CAMPAIGNS.md` and `docs/V0_5_QUALITY_GATES.md`.
+
+## v0.5 Codex Task Discipline
+
+For live-literature campaigns, Codex should be asked to synthesize only after GapForge has recorded source health, search strategy, search rounds, canonicalization, retrieval, and prior-work recall status.
+
+Codex task prompts should include:
+
+- topic and source policy profile
+- live source diagnostic status and missing sources
+- search rounds completed and missing prior-work rounds
+- allowed paper IDs, EvidenceSpan locators, and closest-prior-work candidates
+- rejected ideas and human constraints
+- exact JSON output contracts and validation rules
+
+Codex outputs must:
+
+- propose at most the requested number of directions
+- cite only known paper IDs and evidence locators
+- mark novelty unknown when closest prior work is missing
+- turn unknown citations into search requests
+- label expected results as hypothetical
+- store public reasoning summaries only
+
+Fake-agent, fixture-only, or dry-run outputs are useful for CI and usability checks. They do not count as v0.5 real-literature quality.

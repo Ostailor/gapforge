@@ -1,0 +1,38 @@
+{
+  "id": "strategy-live_like_undercovered_refusal",
+  "topic": "narrow undercovered AI safety monitoring setting",
+  "source_profile": "ai_safety",
+  "primary_queries": [
+    "narrow undercovered AI safety monitoring setting"
+  ],
+  "recency_queries": [
+    "narrow undercovered AI safety monitoring setting 2024 2025"
+  ],
+  "survey_queries": [
+    "narrow undercovered AI safety monitoring setting survey"
+  ],
+  "benchmark_queries": [
+    "narrow undercovered AI safety monitoring setting benchmark dataset"
+  ],
+  "dataset_queries": [
+    "narrow undercovered AI safety monitoring setting dataset"
+  ],
+  "method_queries": [
+    "narrow undercovered AI safety monitoring setting method metric"
+  ],
+  "closest_prior_work_queries": [
+    "narrow undercovered AI safety monitoring setting closest prior work"
+  ],
+  "adjacent_field_queries": [],
+  "exclusion_queries": [
+    "narrow undercovered AI safety monitoring setting limitations"
+  ],
+  "expected_sources": [
+    "arxiv",
+    "semantic_scholar"
+  ],
+  "coverage_targets": {
+    "minimum_papers": 5,
+    "minimum_surveys": 1
+  }
+}

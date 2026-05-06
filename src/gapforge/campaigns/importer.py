@@ -10,7 +10,8 @@ from gapforge.campaigns.patch_apply import apply_campaign_patch_paths
 from gapforge.campaigns.patch_validation import validate_campaign_patch
 from gapforge.campaigns.rollback import create_campaign_snapshot
 from gapforge.config import GapForgeConfig
-from gapforge.models import AgentActualRunAttestation, CampaignImportRecord, Provenance
+from gapforge.models import AgentActualRunAttestation, CampaignImportRecord, Provenance, ResearchDirection
+from gapforge.project_memory import ProjectMemoryManager
 from gapforge.state import utc_now_iso
 
 
@@ -46,6 +47,7 @@ class CampaignOutputImporter:
 
         if record.accepted_objects:
             apply_campaign_patch_paths(state, record.id, record.accepted_objects)
+            self._apply_project_synthesis_patches(state, record)
             record.status = "partial" if record.rejected_objects or record.issues else "applied"
         else:
             record.status = "rejected"
@@ -85,6 +87,47 @@ class CampaignOutputImporter:
             self._write_failed_step_diagnostic(campaign_id, task_id)
         return record
 
+    def _apply_project_synthesis_patches(self, state, record: CampaignImportRecord) -> None:  # noqa: ANN001
+        files = {item["source_path"] for item in record.accepted_objects if item.get("type") == "file" and item.get("source_path")}
+        direction_paths = [Path(path) for path in files if Path(path).name == "research_directions_patch.json"]
+        if not direction_paths:
+            return
+        project_manager = ProjectMemoryManager(self.config)
+        program = project_manager.load_project(state.campaign.project_id)
+        existing = {direction.id for direction in program.research_directions}
+        for path in direction_paths:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            for item in _items(payload.get("research_directions_patch")):
+                direction_id = str(item.get("id") or item.get("direction_id") or "").strip()
+                if not direction_id or direction_id in existing:
+                    continue
+                program.research_directions.append(
+                    ResearchDirection(
+                        id=direction_id,
+                        project_id=program.project.id,
+                        title=str(item.get("title") or direction_id),
+                        summary=str(item.get("summary") or ""),
+                        linked_gap_ids=[str(value) for value in item.get("linked_gap_ids", []) if value],
+                        linked_hypothesis_ids=[str(value) for value in item.get("linked_hypothesis_ids", []) if value],
+                        linked_experiment_ids=[str(value) for value in item.get("linked_experiment_ids", []) if value],
+                        linked_novelty_dossier_ids=[str(value) for value in item.get("linked_novelty_dossier_ids", []) if value],
+                        supporting_paper_ids=[str(value) for value in item.get("supporting_paper_ids", []) if value],
+                        counterevidence_paper_ids=[str(value) for value in item.get("counterevidence_paper_ids", []) if value],
+                        maturity=str(item.get("maturity") or "candidate"),
+                        readiness_score=float(item.get("readiness_score") or 0.0),
+                        blocking_issues=[str(value) for value in item.get("blocking_issues", []) if value],
+                        next_actions=[str(value) for value in item.get("next_actions", []) if value],
+                        provenance=Provenance(
+                            created_by_skill="campaign-importer",
+                            source_ids=[record.id, path.name],
+                            timestamp=utc_now_iso(),
+                            reasoning_summary="Imported validated Codex research synthesis direction.",
+                        ),
+                    )
+                )
+                existing.add(direction_id)
+        project_manager.save_project(program)
+
     def list_imports(self, campaign_id: str) -> list[CampaignImportRecord]:
         return self.manager.load_campaign_state(campaign_id).imports
 
@@ -112,3 +155,11 @@ def _record_payload(record: CampaignImportRecord) -> dict[str, object]:
 def _step_for_task(state, task_id: str):  # noqa: ANN001,ANN201
     matches = [step for step in state.steps if step.task_spec_id == task_id]
     return matches[-1] if matches else None
+
+
+def _items(value):  # noqa: ANN001,ANN201
+    if isinstance(value, dict):
+        return [value]
+    if isinstance(value, list):
+        return [item for item in value if isinstance(item, dict)]
+    return []

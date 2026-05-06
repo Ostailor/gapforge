@@ -1,0 +1,71 @@
+[
+  {
+    "id": "round-initial-live_like_prior_work_duplicate",
+    "strategy_id": "strategy-live_like_prior_work_duplicate",
+    "round_type": "initial",
+    "queries": [
+      "duplicate prior work for low false positive collusion detection"
+    ],
+    "sources": [
+      "arxiv"
+    ],
+    "max_results": 10,
+    "status": "complete",
+    "result_paper_ids": [
+      "live_like_prior_work_duplicate-paper-1",
+      "live_like_prior_work_duplicate-paper-2"
+    ],
+    "failures": []
+  },
+  {
+    "id": "round-survey-live_like_prior_work_duplicate",
+    "strategy_id": "strategy-live_like_prior_work_duplicate",
+    "round_type": "survey",
+    "queries": [
+      "duplicate prior work for low false positive collusion detection survey"
+    ],
+    "sources": [
+      "semantic_scholar"
+    ],
+    "max_results": 10,
+    "status": "complete",
+    "result_paper_ids": [
+      "live_like_prior_work_duplicate-paper-2"
+    ],
+    "failures": []
+  },
+  {
+    "id": "round-benchmark-live_like_prior_work_duplicate",
+    "strategy_id": "strategy-live_like_prior_work_duplicate",
+    "round_type": "benchmark",
+    "queries": [
+      "duplicate prior work for low false positive collusion detection benchmark dataset"
+    ],
+    "sources": [
+      "arxiv"
+    ],
+    "max_results": 10,
+    "status": "complete",
+    "result_paper_ids": [
+      "live_like_prior_work_duplicate-paper-1"
+    ],
+    "failures": []
+  },
+  {
+    "id": "round-novelty-live_like_prior_work_duplicate",
+    "strategy_id": "strategy-live_like_prior_work_duplicate",
+    "round_type": "novelty",
+    "queries": [
+      "duplicate prior work for low false positive collusion detection closest prior work"
+    ],
+    "sources": [
+      "semantic_scholar"
+    ],
+    "max_results": 10,
+    "status": "complete",
+    "result_paper_ids": [
+      "live_like_prior_work_duplicate-paper-1"
+    ],
+    "failures": []
+  }
+]

@@ -86,5 +86,9 @@ def _task_objective(task_type: str) -> str:
         "experiment_architect": "Draft executable experiment protocols, baseline requests, and reproducibility checklists.",
         "reviewer_panel": "Attack the campaign's strongest direction with reviewer-style objections and required fixes.",
         "campaign_stop_decision": "Decide whether the campaign should stop, continue, or refuse recommendation under weak evidence.",
+        "research_synthesis": (
+            "Synthesize at most three evidence-grounded research directions from completed search rounds, source coverage, "
+            "retrieval context, prior-work recall, counterevidence, and human constraints. This is not free-form ideation."
+        ),
     }
     return objectives.get(task_type, "Complete the campaign task using only listed artifacts and validated JSON patches.")

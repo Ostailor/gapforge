@@ -1,0 +1,39 @@
+{
+  "id": "strategy-live_like_low_fpr_collusion",
+  "topic": "low false positive collusion detection in LLM agents",
+  "source_profile": "ai_safety",
+  "primary_queries": [
+    "low false positive collusion detection in LLM agents"
+  ],
+  "recency_queries": [
+    "low false positive collusion detection in LLM agents 2024 2025"
+  ],
+  "survey_queries": [
+    "low false positive collusion detection in LLM agents survey"
+  ],
+  "benchmark_queries": [
+    "low false positive collusion detection in LLM agents benchmark dataset"
+  ],
+  "dataset_queries": [
+    "low false positive collusion detection in LLM agents dataset"
+  ],
+  "method_queries": [
+    "low false positive collusion detection in LLM agents method metric"
+  ],
+  "closest_prior_work_queries": [
+    "low false positive collusion detection in LLM agents closest prior work"
+  ],
+  "adjacent_field_queries": [],
+  "exclusion_queries": [
+    "low false positive collusion detection in LLM agents limitations"
+  ],
+  "expected_sources": [
+    "arxiv",
+    "semantic_scholar",
+    "openreview"
+  ],
+  "coverage_targets": {
+    "minimum_papers": 5,
+    "minimum_surveys": 1
+  }
+}

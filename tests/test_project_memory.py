@@ -27,7 +27,9 @@ from gapforge.experiment_code import ExperimentCodeTaskGenerator, ExperimentRepo
 from gapforge.models import (
     AgentSearchRequest,
     BaselineCandidate,
+    CampaignDecision,
     CampaignImportRecord,
+    CampaignMilestone,
     Claim,
     EvidenceSpan,
     ExperimentProtocol,
@@ -39,11 +41,14 @@ from gapforge.models import (
     Paper,
     PaperNote,
     PaperSection,
+    PriorWorkRecallAssessment,
     RejectedIdea,
     RelatedWorkMatrix,
     ResearchDirection,
     ReviewQueue,
     ReviewQueueItem,
+    SearchRound,
+    SearchStrategy,
     SourceCoverageReport,
 )
 from gapforge.project_memory import PROJECT_ARTIFACTS, ProjectMemoryManager
@@ -1029,6 +1034,103 @@ def test_campaign_controller_open_review_queue_requests_human_review(tmp_path: P
     assert action.decision_type == "request_human_review"
 
 
+def test_real_literature_controller_starts_with_source_health_then_search_strategy(tmp_path: Path) -> None:
+    config = GapForgeConfig.from_cwd(tmp_path)
+    program = ProjectMemoryManager(config).create_project("Real Literature Source Health")
+    campaign = CampaignManager(config).create_campaign(
+        "low false positive collusion detection",
+        project_id=program.project.id,
+        source_profile="generic",
+    )
+
+    first_action = CampaignController(config).next_action(campaign.campaign.id, real_literature=True)
+    _mark_live_sources_ready(config, campaign.campaign.id)
+    second_action = CampaignController(config).next_action(campaign.campaign.id, real_literature=True)
+
+    assert first_action.decision_type == "source_health_check"
+    assert second_action.decision_type == "plan_search_strategy"
+
+
+def test_real_literature_controller_stops_when_source_health_is_disabled(monkeypatch, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
+    monkeypatch.setenv("GAPFORGE_DISABLE_NETWORK", "1")
+    config = GapForgeConfig.from_cwd(tmp_path)
+    program = ProjectMemoryManager(config).create_project("Real Literature Disabled Sources")
+    campaign = CampaignManager(config).create_campaign(
+        "low false positive collusion detection",
+        project_id=program.project.id,
+        source_profile="generic",
+    )
+
+    result = CampaignController(config).run(campaign.campaign.id, real_literature=True, max_iterations=2)
+
+    assert [decision.decision_type for decision in result.decisions] == [
+        "source_health_check",
+        "stop_insufficient_live_coverage",
+    ]
+    assert result.stop_conditions
+    assert "Live source diagnostics" in result.stop_conditions[-1].reason
+
+
+def test_real_literature_controller_canonicalizes_before_novelty(tmp_path: Path) -> None:
+    config, campaign_id, run_id = _controller_campaign_with_run(tmp_path, full_text=True, mode="deterministic")
+    _mark_live_sources_ready(config, campaign_id)
+    _add_completed_search_rounds(config, run_id)
+
+    action = CampaignController(config).next_action(campaign_id, real_literature=True)
+
+    assert action.decision_type == "canonicalize_papers"
+
+
+def test_real_literature_controller_runs_prior_work_recall_before_recommendation(tmp_path: Path) -> None:
+    config, campaign_id, run_id = _controller_campaign_ready_for_real_literature_recall(tmp_path)
+
+    action = CampaignController(config).next_action(campaign_id, real_literature=True)
+
+    assert action.decision_type == "run_prior_work_recall_gate"
+    assert action.decision_type != "request_codex_synthesis"
+
+
+def test_real_literature_controller_codex_synthesis_waits_for_search_thresholds(tmp_path: Path) -> None:
+    config = GapForgeConfig.from_cwd(tmp_path)
+    program = ProjectMemoryManager(config).create_project("Real Literature Codex Waits")
+    campaign = CampaignManager(config).create_campaign(
+        "low false positive collusion detection",
+        project_id=program.project.id,
+        mode="codex_task_pack",
+        source_profile="generic",
+    )
+    _mark_live_sources_ready(config, campaign.campaign.id)
+
+    action = CampaignController(config).next_action(campaign.campaign.id, real_literature=True)
+
+    assert action.decision_type == "plan_search_strategy"
+    assert action.decision_type not in {"ask_codex", "request_codex_synthesis"}
+
+
+def test_real_literature_controller_blocks_when_recall_gate_fails(tmp_path: Path) -> None:
+    config, campaign_id, run_id = _controller_campaign_ready_for_real_literature_recall(tmp_path)
+    state_manager = ResearchStateManager(config)
+    run_state = state_manager.load_run(run_id)
+    run_state.prior_work_recall_assessments.append(
+        PriorWorkRecallAssessment(
+            id="recall-1",
+            target_id="gap-1",
+            required_query_rounds=["exact_phrase_search"],
+            completed_query_rounds=[],
+            missing_required_searches=["exact_phrase_search"],
+            novelty_allowed=False,
+            blocking_issues=["exact_phrase_search"],
+            recall_confidence="low",
+        )
+    )
+    state_manager.save_run(run_state)
+
+    action = CampaignController(config).next_action(campaign_id, real_literature=True)
+
+    assert action.decision_type == "stop_insufficient_live_coverage"
+    assert "exact_phrase_search" in action.evidence
+
+
 def test_campaign_report_renders_with_explicit_stop_reason(tmp_path: Path) -> None:
     config, campaign_id, _run_id = _controller_campaign_with_run(tmp_path, full_text=True)
     CampaignManager(config).stop_campaign(campaign_id, reason="No useful direction is ready under current evidence.")
@@ -1760,6 +1862,66 @@ def _controller_campaign_ready_for_novelty(tmp_path: Path, *, mode: str, novelty
     program = project_manager.sync_project_memory(CampaignManager(config).load_campaign_state(campaign_id).campaign.project_id)
     build_project_index(program)
     return config, campaign_id, run_id
+
+
+def _controller_campaign_ready_for_real_literature_recall(tmp_path: Path):
+    config, campaign_id, run_id = _controller_campaign_ready_for_novelty(tmp_path, mode="deterministic", novelty_verdict="pursue")
+    _mark_live_sources_ready(config, campaign_id)
+    _mark_campaign_decision_done(config, campaign_id, "canonicalize_papers")
+    _add_completed_search_rounds(config, run_id)
+    return config, campaign_id, run_id
+
+
+def _mark_live_sources_ready(config: GapForgeConfig, campaign_id: str) -> None:
+    manager = CampaignManager(config)
+    campaign_state = manager.load_campaign_state(campaign_id)
+    _append_campaign_decision(campaign_state, "source_health_check")
+    campaign_state.milestones.append(
+        CampaignMilestone(
+            id="milestone-live-sources-ready",
+            campaign_id=campaign_id,
+            milestone_type="live_sources_ready",
+            status="complete",
+            linked_artifacts=["fixture-source-health"],
+            notes="Fixture source health passed.",
+        )
+    )
+    manager.save_campaign_state(campaign_state)
+
+
+def _mark_campaign_decision_done(config: GapForgeConfig, campaign_id: str, decision_type: str) -> None:
+    manager = CampaignManager(config)
+    campaign_state = manager.load_campaign_state(campaign_id)
+    _append_campaign_decision(campaign_state, decision_type)
+    manager.save_campaign_state(campaign_state)
+
+
+def _append_campaign_decision(campaign_state, decision_type: str) -> None:
+    if any(decision.decision_type == decision_type for decision in campaign_state.decisions):
+        return
+    campaign_state.decisions.append(
+        CampaignDecision(
+            id=f"decision-{decision_type}",
+            campaign_id=campaign_state.campaign.id,
+            iteration=len(campaign_state.decisions) + 1,
+            decision_type=decision_type,
+            status="complete",
+            reason=f"Fixture marked {decision_type} complete.",
+        )
+    )
+
+
+def _add_completed_search_rounds(config: GapForgeConfig, run_id: str) -> None:
+    state_manager = ResearchStateManager(config)
+    run_state = state_manager.load_run(run_id)
+    run_state.search_strategies.append(SearchStrategy(id="strategy-fixture", topic=run_state.topic.text, source_profile="generic"))
+    run_state.search_rounds.extend(
+        [
+            SearchRound(id=f"round-{round_type}", strategy_id="strategy-fixture", round_type=round_type, status="complete")
+            for round_type in ["initial", "novelty", "benchmark", "survey"]
+        ]
+    )
+    state_manager.save_run(run_state)
 
 
 def _campaign_ready_for_acceptance(tmp_path: Path, *, with_actual_output: bool):

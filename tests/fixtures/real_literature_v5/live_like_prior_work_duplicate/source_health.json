@@ -1,0 +1,32 @@
+[
+  {
+    "source_name": "arxiv",
+    "status": "healthy",
+    "test_query": "duplicate prior work for low false positive collusion detection",
+    "result_count": 8,
+    "latency_ms": 120,
+    "error": "",
+    "warning": "",
+    "checked_at": "2026-05-06T00:00:00Z"
+  },
+  {
+    "source_name": "semantic_scholar",
+    "status": "healthy",
+    "test_query": "duplicate prior work for low false positive collusion detection",
+    "result_count": 10,
+    "latency_ms": 180,
+    "error": "",
+    "warning": "",
+    "checked_at": "2026-05-06T00:00:00Z"
+  },
+  {
+    "source_name": "openreview",
+    "status": "degraded",
+    "test_query": "duplicate prior work for low false positive collusion detection",
+    "result_count": 3,
+    "latency_ms": 240,
+    "error": "",
+    "warning": "fixture metadata only",
+    "checked_at": "2026-05-06T00:00:00Z"
+  }
+]

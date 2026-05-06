@@ -1,0 +1,26 @@
+[
+  {
+    "id": "live_like_prior_work_duplicate-paper-1",
+    "title": "Closest prior work for duplicate prior work for low false positive collusion detection",
+    "authors": [
+      "Fixture Author"
+    ],
+    "abstract": "Synthetic short excerpt metadata. This is fixture content, not a real literature conclusion.",
+    "year": 2025,
+    "source": "fixture",
+    "doi": "10.5555/live_like_prior_work_duplicate.1",
+    "url": "https://example.invalid/fixture"
+  },
+  {
+    "id": "live_like_prior_work_duplicate-paper-2",
+    "title": "Survey background for duplicate prior work for low false positive collusion detection",
+    "authors": [
+      "Fixture Surveyor"
+    ],
+    "abstract": "Synthetic survey metadata for offline eval behavior.",
+    "year": 2024,
+    "source": "fixture",
+    "doi": "10.5555/live_like_prior_work_duplicate.2",
+    "url": "https://example.invalid/survey"
+  }
+]

@@ -145,3 +145,26 @@ gapforge eval --v4 --write-report
 Real Codex/GPT-5.4 campaign validation is a release-gate activity, not a CI requirement.
 
 Manual real-run validation should follow `docs/CODEX_QUICKSTART.md` and `docs/REAL_RUN_REVIEW_CHECKLIST.md`.
+
+## v0.5 Real-Literature Tests
+
+v0.5 tests must remain offline and deterministic. They should use mocked sources and fixtures to cover:
+
+- `gapforge source-health` disabled, healthy, degraded, and unavailable states
+- `gapforge real-campaign-dry-run` profile/custom-topic planning
+- `gapforge plan-search-strategy` query families and source-policy targets
+- paper canonicalization and merge reports
+- prior-work recall blocking missing required rounds
+- real-literature human review separating workflow acceptance from research-quality acceptance
+- `gapforge v5-release-gate` failure modes and fixture pass cases
+- dashboard/report quality sections showing fallback counts, missing prior-work rounds, and refusal reasons
+
+Useful commands:
+
+```bash
+gapforge eval --v5 --write-report
+PYTHONPATH=src pytest tests/test_real_literature.py tests/test_source_health.py tests/test_search_strategy.py tests/test_prior_work_recall.py
+PYTHONPATH=src pytest tests/test_release_gate.py tests/test_dashboard.py
+```
+
+Live source and real Codex/GPT-5.4 campaigns are release-validation tasks. Do not add tests that require live network, API keys, or a Codex runner.

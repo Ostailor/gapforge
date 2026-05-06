@@ -72,6 +72,14 @@ class EvalScores:
     review_queue_quality: float | None = None
     experiment_code_task_quality: float | None = None
     rollback_safety: float | None = None
+    live_source_coverage_score: float | None = None
+    search_strategy_completeness: float | None = None
+    prior_work_recall_gate_score: float | None = None
+    canonicalization_quality: float | None = None
+    real_literature_refusal_quality: float | None = None
+    research_direction_quality_proxy: float | None = None
+    quality_review_gate_correctness: float | None = None
+    v5_release_gate_correctness: float | None = None
 
     def overall(self) -> float:
         positive = [
@@ -129,6 +137,22 @@ class EvalScores:
             self.review_queue_quality,
             self.experiment_code_task_quality,
             self.rollback_safety,
+        ]
+        present = [value for value in values if value is not None]
+        if not present:
+            return None
+        return round(sum(present) / len(present), 3)
+
+    def v5_overall(self) -> float | None:
+        values = [
+            self.live_source_coverage_score,
+            self.search_strategy_completeness,
+            self.prior_work_recall_gate_score,
+            self.canonicalization_quality,
+            self.real_literature_refusal_quality,
+            self.research_direction_quality_proxy,
+            self.quality_review_gate_correctness,
+            self.v5_release_gate_correctness,
         ]
         present = [value for value in values if value is not None]
         if not present:
@@ -669,6 +693,139 @@ def rollback_safety(fixture: dict[str, object]) -> float:
         not bool(rollback.get("unsafe_mutation_after_reject")),
     ]
     return round(sum(1 for item in checks if item) / len(checks), 3)
+
+
+def live_source_coverage_score(fixture: dict[str, object]) -> float:
+    checks = _dicts(fixture.get("source_health"))
+    if not checks:
+        return 0.0
+    usable = [item for item in checks if item.get("status") in {"healthy", "degraded"} and _int(item.get("result_count")) > 0]
+    healthy = [item for item in checks if item.get("status") == "healthy"]
+    expected = _dict(fixture.get("expected_release_gate_result"))
+    minimum_met = bool(expected.get("minimum_live_coverage_met", len(usable) >= 1))
+    return round((0.45 * len(usable) / len(checks)) + (0.35 * len(healthy) / len(checks)) + (0.2 * int(minimum_met)), 3)
+
+
+def search_strategy_completeness(fixture: dict[str, object]) -> float:
+    strategy = _dict(fixture.get("search_strategy"))
+    rounds = _dicts(fixture.get("search_rounds"))
+    required_query_fields = [
+        "primary_queries",
+        "survey_queries",
+        "benchmark_queries",
+        "method_queries",
+        "closest_prior_work_queries",
+    ]
+    field_score = sum(1 for field in required_query_fields if _list(strategy.get(field))) / len(required_query_fields)
+    completed_round_types = {str(item.get("round_type")) for item in rounds if item.get("status") == "complete"}
+    required_rounds = {"initial", "survey", "benchmark", "novelty"}
+    round_score = len(completed_round_types & required_rounds) / len(required_rounds)
+    return round((0.55 * field_score) + (0.45 * round_score), 3)
+
+
+def prior_work_recall_gate_score(fixture: dict[str, object]) -> float:
+    recall = _dict(fixture.get("prior_work_recall_assessment"))
+    expected = _dict(fixture.get("expected_release_gate_result"))
+    missing = _list(recall.get("missing_required_searches"))
+    top_prior = _list(recall.get("top_prior_work_ids"))
+    should_duplicate = bool(expected.get("duplicate_prior_work"))
+    checks = [
+        bool(recall.get("required_query_rounds")),
+        bool(recall.get("completed_query_rounds")),
+        bool(top_prior) or should_duplicate,
+        (not missing and bool(recall.get("novelty_allowed"))) or should_duplicate,
+        bool(recall.get("likely_duplicate")) is should_duplicate,
+    ]
+    return round(sum(1 for item in checks if item) / len(checks), 3)
+
+
+def canonicalization_quality(fixture: dict[str, object]) -> float:
+    papers = _dicts(fixture.get("papers"))
+    canonical = _dicts(fixture.get("canonical_papers"))
+    if not papers:
+        return 0.0
+    source_ids = {str(item.get("id")) for item in papers if item.get("id")}
+    canonical_source_ids = {str(source_id) for item in canonical for source_id in _list(item.get("source_paper_ids"))}
+    doi_groups = {str(item.get("doi")).lower() for item in canonical if item.get("doi")}
+    coverage = len(source_ids & canonical_source_ids) / len(source_ids)
+    dedupe_signal = 1.0 if len(canonical) <= len(papers) and (doi_groups or canonical) else 0.0
+    return round((0.75 * coverage) + (0.25 * dedupe_signal), 3)
+
+
+def real_literature_refusal_quality(fixture: dict[str, object]) -> float:
+    expected = _dict(fixture.get("expected_release_gate_result"))
+    if not bool(expected.get("refusal_expected")):
+        return 1.0
+    stop = str(expected.get("stop_reason", "")).lower()
+    review = _dict(fixture.get("human_quality_review"))
+    checks = [
+        "poor" in stop or "undercovered" in stop or "novelty" in stop or "refusal" in stop,
+        bool(review.get("accepted_for_research_quality")),
+        not bool(review.get("overclaimed_novelty")),
+        not bool(_dict(fixture.get("prior_work_recall_assessment")).get("novelty_allowed")),
+    ]
+    return round(sum(1 for item in checks if item) / len(checks), 3)
+
+
+def research_direction_quality_proxy(fixture: dict[str, object]) -> float:
+    expected = _dict(fixture.get("expected_release_gate_result"))
+    if bool(expected.get("refusal_expected")):
+        return 1.0
+    novelty = _dicts(fixture.get("novelty_dossiers"))
+    related = _dicts(fixture.get("related_work_matrix"))
+    review = _dict(fixture.get("human_quality_review"))
+    checks = [
+        bool(novelty),
+        any(_list(item.get("top_prior_work")) for item in novelty),
+        any(_list(item.get("entries")) for item in related),
+        _int(review.get("gap_importance_score")) >= 3,
+        _int(review.get("experiment_feasibility_score")) >= 3,
+    ]
+    return round(sum(1 for item in checks if item) / len(checks), 3)
+
+
+def quality_review_gate_correctness(fixture: dict[str, object]) -> float:
+    review = _dict(fixture.get("human_quality_review"))
+    expected = _dict(fixture.get("expected_release_gate_result"))
+    accepted = bool(review.get("accepted_for_research_quality"))
+    blockers = [
+        bool(review.get("fake_citation_found")),
+        bool(review.get("unsupported_high_confidence_claim_found")),
+        bool(review.get("missed_obvious_prior_work")),
+        bool(review.get("overclaimed_novelty")),
+    ]
+    expected_quality = bool(expected.get("quality_acceptance_expected"))
+    if any(blockers):
+        return 1.0 if not accepted and not expected_quality else 0.0
+    return 1.0 if accepted is expected_quality else 0.0
+
+
+def v5_release_gate_correctness(fixture: dict[str, object]) -> float:
+    expected = _dict(fixture.get("expected_release_gate_result"))
+    expected_pass = bool(expected.get("passed"))
+    refusal_expected = bool(expected.get("refusal_expected"))
+    quality_ok = quality_review_gate_correctness(fixture) == 1.0 and bool(
+        _dict(fixture.get("human_quality_review")).get("accepted_for_research_quality")
+    )
+    artifact_checks = [
+        bool(_dicts(fixture.get("source_health"))),
+        bool(_dict(fixture.get("search_strategy"))),
+        bool(_dicts(fixture.get("search_rounds"))),
+        bool(_dicts(fixture.get("canonical_papers"))),
+        bool(_dict(fixture.get("prior_work_recall_assessment"))),
+        bool(_dicts(fixture.get("novelty_dossiers"))),
+        bool(_dicts(fixture.get("related_work_matrix"))),
+    ]
+    artifact_ok = all(artifact_checks)
+    recall = _dict(fixture.get("prior_work_recall_assessment"))
+    recall_blocks = bool(recall.get("missing_required_searches")) or bool(expected.get("prior_work_recall_should_block"))
+    if refusal_expected and not recall.get("missing_required_searches"):
+        recall_blocks = False
+    computed_pass = bool(quality_ok and artifact_ok and not recall_blocks)
+    if expected_pass:
+        return 1.0 if computed_pass else 0.0
+    expected_blockers = _list(expected.get("expected_blockers"))
+    return round((0.7 * int(computed_pass is False)) + (0.3 * int(bool(expected_blockers))), 3)
 
 
 def _tokens(text: str) -> list[str]:

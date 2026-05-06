@@ -1,0 +1,29 @@
+[
+  {
+    "target_id": "gap-live_like_monitor_evasion",
+    "idea_summary": "lexical substitution attacks against LLM monitor systems",
+    "query_plan": [
+      "lexical substitution attacks against LLM monitor systems closest prior work"
+    ],
+    "candidates_considered": [
+      "live_like_monitor_evasion-paper-1",
+      "live_like_monitor_evasion-paper-2"
+    ],
+    "top_prior_work": [
+      "live_like_monitor_evasion-paper-1"
+    ],
+    "comparison_table": [
+      {
+        "paper_id": "live_like_monitor_evasion-paper-1",
+        "relationship": "partial_prior_work"
+      }
+    ],
+    "decisive_difference_needed": "Show a new setting not covered by closest prior work.",
+    "missing_searches": [],
+    "verdict": "pursue",
+    "novelty_strength": "medium",
+    "confidence": "medium",
+    "reviewer_objection": "Coverage must remain explicit.",
+    "recommended_action": "continue to experiment protocol"
+  }
+]

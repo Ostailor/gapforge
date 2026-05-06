@@ -1,0 +1,71 @@
+[
+  {
+    "id": "round-initial-live_like_undercovered_refusal",
+    "strategy_id": "strategy-live_like_undercovered_refusal",
+    "round_type": "initial",
+    "queries": [
+      "narrow undercovered AI safety monitoring setting"
+    ],
+    "sources": [
+      "arxiv"
+    ],
+    "max_results": 10,
+    "status": "complete",
+    "result_paper_ids": [
+      "live_like_undercovered_refusal-paper-1",
+      "live_like_undercovered_refusal-paper-2"
+    ],
+    "failures": []
+  },
+  {
+    "id": "round-survey-live_like_undercovered_refusal",
+    "strategy_id": "strategy-live_like_undercovered_refusal",
+    "round_type": "survey",
+    "queries": [
+      "narrow undercovered AI safety monitoring setting survey"
+    ],
+    "sources": [
+      "semantic_scholar"
+    ],
+    "max_results": 10,
+    "status": "complete",
+    "result_paper_ids": [
+      "live_like_undercovered_refusal-paper-2"
+    ],
+    "failures": []
+  },
+  {
+    "id": "round-benchmark-live_like_undercovered_refusal",
+    "strategy_id": "strategy-live_like_undercovered_refusal",
+    "round_type": "benchmark",
+    "queries": [
+      "narrow undercovered AI safety monitoring setting benchmark dataset"
+    ],
+    "sources": [
+      "arxiv"
+    ],
+    "max_results": 10,
+    "status": "complete",
+    "result_paper_ids": [
+      "live_like_undercovered_refusal-paper-1"
+    ],
+    "failures": []
+  },
+  {
+    "id": "round-novelty-live_like_undercovered_refusal",
+    "strategy_id": "strategy-live_like_undercovered_refusal",
+    "round_type": "novelty",
+    "queries": [
+      "narrow undercovered AI safety monitoring setting closest prior work"
+    ],
+    "sources": [
+      "semantic_scholar"
+    ],
+    "max_results": 10,
+    "status": "complete",
+    "result_paper_ids": [
+      "live_like_undercovered_refusal-paper-1"
+    ],
+    "failures": []
+  }
+]

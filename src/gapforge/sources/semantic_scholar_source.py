@@ -35,12 +35,15 @@ class SemanticScholarSource(FakeSourceMixin, ResearchSource):
         date_from: str | None = None,
         date_to: str | None = None,
     ) -> list[Paper]:
+        # The search endpoints reject nested reference/citation fields on many
+        # queries. Keep the live search request small and let citation expansion
+        # use dedicated resolvers instead of turning source health into fallback
+        # metadata.
         params = {
             "query": query,
             "fields": (
                 "title,abstract,year,venue,url,authors,citationCount,influentialCitationCount,publicationDate,"
-                "openAccessPdf,externalIds,fieldsOfStudy,references.paperId,references.title,references.externalIds,"
-                "citations.paperId,citations.title,citations.externalIds"
+                "openAccessPdf,externalIds,fieldsOfStudy"
             ),
             "sort": _semantic_sort(sort),
             "year": format_semantic_year_filter(date_from, date_to),
@@ -74,7 +77,7 @@ class SemanticScholarSource(FakeSourceMixin, ResearchSource):
             arxiv_id=arxiv_id,
             semantic_scholar_id=clean_text(item.get("paperId", "")),
             citation_count=int(item.get("citationCount") or 0),
-            keywords=[clean_text(field) for field in item.get("fieldsOfStudy", [])],
+            keywords=[clean_text(field) for field in (item.get("fieldsOfStudy") or [])],
             raw_metadata=item,
             provenance=source_provenance(self.name, [paper_id], "Normalized Semantic Scholar Graph API metadata."),
         )

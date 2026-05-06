@@ -12,6 +12,8 @@ from gapforge.campaigns import CampaignManager
 from gapforge.config import GapForgeConfig
 from gapforge.dashboard import StaticDashboardBuilder
 from gapforge.project_memory import ProjectMemoryManager
+from gapforge.real_literature.review import RealLiteratureReviewManager
+from gapforge.reporting import write_final_report
 from gapforge.state import ResearchStateManager
 
 
@@ -37,6 +39,12 @@ def test_static_run_dashboard_files_generated_and_escaped(tmp_path: Path) -> Non
         "imports.html",
         "human_reviews.html",
         "release_gate.html",
+        "live_sources.html",
+        "search_strategy.html",
+        "search_rounds.html",
+        "prior_work_recall.html",
+        "real_literature_quality.html",
+        "v5_release_gate.html",
     }
     assert {path.name for path in result.pages} == expected
     for filename in expected:
@@ -153,6 +161,56 @@ def test_release_gate_dashboard_cli(tmp_path: Path) -> None:
     assert result.returncode == 0, result.stderr
     assert "release_gate.html" in result.stdout
     assert (config.project_root / project_id / "dashboard" / "release_gate.html").exists()
+
+
+def test_dashboard_renders_real_literature_quality_sections(tmp_path: Path) -> None:
+    config = GapForgeConfig.from_cwd(tmp_path)
+    project_id, campaign_id, _run_id = _real_literature_quality_project(config)
+
+    result = StaticDashboardBuilder(config).build_project(project_id)
+
+    live_sources = (result.root / "live_sources.html").read_text(encoding="utf-8")
+    search_strategy = (result.root / "search_strategy.html").read_text(encoding="utf-8")
+    search_rounds = (result.root / "search_rounds.html").read_text(encoding="utf-8")
+    prior_work = (result.root / "prior_work_recall.html").read_text(encoding="utf-8")
+    quality = (result.root / "real_literature_quality.html").read_text(encoding="utf-8")
+    v5_gate = (result.root / "v5_release_gate.html").read_text(encoding="utf-8")
+    combined = "\n".join(path.read_text(encoding="utf-8") for path in result.pages)
+
+    assert "arxiv" in live_sources
+    assert "low false positive collusion" in search_strategy
+    assert "novelty" in search_rounds
+    assert "missing_required_round" in prior_work
+    assert "prior work blocker" in prior_work
+    assert "rejected/not accepted" in quality
+    assert "Workflow acceptance is separate from research-quality acceptance" in quality
+    assert campaign_id in v5_gate
+    assert "sk-test-transcript-secret" not in combined
+
+
+def test_real_literature_campaign_and_run_reports_render(tmp_path: Path) -> None:
+    config = GapForgeConfig.from_cwd(tmp_path)
+    project_id, campaign_id, run_id = _real_literature_quality_project(config)
+    campaign_manager = CampaignManager(config)
+    state_manager = ResearchStateManager(config)
+    project_manager = ProjectMemoryManager(config)
+
+    campaign_report = campaign_manager.campaign_report(campaign_id)
+    project_report = project_manager.write_project_report(project_manager.load_project(project_id))
+    final_report = write_final_report(state_manager.load_run(run_id))
+
+    campaign_text = campaign_report.read_text(encoding="utf-8")
+    real_campaign_text = (config.project_root / project_id / "campaigns" / campaign_id / "real_literature_campaign_report.md").read_text(
+        encoding="utf-8"
+    )
+    project_text = project_report.read_text(encoding="utf-8")
+    final_text = final_report.read_text(encoding="utf-8")
+    assert "Real-literature quality" in campaign_text
+    assert "Workflow acceptance vs research-quality acceptance" in real_campaign_text
+    assert "Missing prior-work search rounds" in real_campaign_text
+    assert "Real Literature Quality" in project_text
+    assert "Real-Literature Quality" in final_text
+    assert "Recommendation refused because" in final_text
 
 
 def _dashboard_run(config: GapForgeConfig):
@@ -281,3 +339,102 @@ def _actual_run_project(config: GapForgeConfig, *, unsafe: bool = False) -> tupl
     transcript_dir.mkdir(parents=True, exist_ok=True)
     (transcript_dir / "llm_transcript.md").write_text("sk-test-transcript-secret", encoding="utf-8")
     return program.project.id, real.campaign.id, fake.campaign.id
+
+
+def _real_literature_quality_project(config: GapForgeConfig) -> tuple[str, str, str]:
+    project_manager = ProjectMemoryManager(config)
+    state_manager = ResearchStateManager(config)
+    campaign_manager = CampaignManager(config)
+    program = project_manager.create_project("Real Literature Dashboard Project")
+    state = _dashboard_run(config)
+    state.source_coverage.fallback_paper_count = 1
+    state.search_strategies.append(
+        gf_models.SearchStrategy(
+            id="strategy-real-lit",
+            topic=state.topic.text,
+            source_profile="ai_safety",
+            primary_queries=["low false positive collusion"],
+            survey_queries=["survey low false positive AI safety monitors"],
+            benchmark_queries=["benchmark false positive monitor collusion"],
+            closest_prior_work_queries=["closest prior work low false positive collusion"],
+            expected_sources=["arxiv"],
+        )
+    )
+    state.search_rounds.append(
+        gf_models.SearchRound(
+            id="round-novelty",
+            strategy_id="strategy-real-lit",
+            round_type="novelty",
+            sources=["arxiv"],
+            status="complete",
+            result_paper_ids=["paper-1"],
+        )
+    )
+    state.prior_work_recall_assessments.append(
+        gf_models.PriorWorkRecallAssessment(
+            id="recall-gap-1",
+            target_id="gap-1",
+            required_query_rounds=["novelty", "survey", "benchmark", "missing_required_round"],
+            completed_query_rounds=["novelty"],
+            candidate_prior_work_ids=["paper-1"],
+            top_prior_work_ids=["paper-1"],
+            missing_required_searches=["missing_required_round"],
+            recall_confidence="low",
+            novelty_allowed=False,
+            blocking_issues=["prior work blocker"],
+        )
+    )
+    state.gap_evidence_matrices.append(
+        gf_models.GapEvidenceMatrix(
+            gap_id="gap-1",
+            papers_supporting=["paper-1"],
+            papers_countering=["paper-1"],
+            confidence="low",
+        )
+    )
+    state_manager.save_run(state)
+    project_manager.attach_run(program.project.id, state.run_id)
+    campaign = campaign_manager.create_campaign(
+        "real literature quality topic",
+        project_id=program.project.id,
+        mode="codex_task_pack",
+        agent_name="codex",
+        model="gpt-5.4",
+        source_profile="ai_safety",
+    )
+    campaign = campaign_manager.attach_run(campaign.campaign.id, state.run_id)
+    campaign.stop_conditions.append(
+        gf_models.CampaignStopCondition(
+            id="stop-poor-coverage",
+            campaign_id=campaign.campaign.id,
+            reason="not_ready_poor_coverage: recommendation refused because prior work recall is incomplete",
+            triggered=True,
+        )
+    )
+    campaign_manager.save_campaign_state(campaign)
+    campaign_dir = config.project_root / program.project.id / "campaigns" / campaign.campaign.id
+    (campaign_dir / "live_source_diagnostic.json").write_text(
+        """{
+  "id": "diagnostic-real-lit",
+  "topic": "real literature quality topic",
+  "source_profile": "ai_safety",
+  "source_health_checks": [
+    {"source_name": "arxiv", "status": "healthy", "test_query": "low false positive collusion", "result_count": 3}
+  ],
+  "minimum_coverage_met": true
+}
+""",
+        encoding="utf-8",
+    )
+    RealLiteratureReviewManager(config).review(
+        campaign.campaign.id,
+        accept_workflow=True,
+        accept_quality=False,
+        reviewer="quality tester",
+        reason="Workflow ran, but prior-work recall is incomplete.",
+        missed_obvious_prior_work=True,
+    )
+    transcript_dir = campaign_dir / "agent_tasks" / "task-real-lit"
+    transcript_dir.mkdir(parents=True, exist_ok=True)
+    (transcript_dir / "llm_transcript.md").write_text("sk-test-transcript-secret", encoding="utf-8")
+    return program.project.id, campaign.campaign.id, state.run_id

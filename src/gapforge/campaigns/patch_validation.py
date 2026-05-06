@@ -28,6 +28,7 @@ def validate_campaign_patch(
     known_steps = {step.id for step in campaign_state.steps}
     known_tasks = set(campaign_state.campaign.task_ids)
     known_evidence_spans = known_evidence_span_ids(config, campaign_state)
+    prior_work_recall_passed = _prior_work_recall_passed(config, campaign_state)
     issues: list[str] = []
     accepted_objects: list[dict[str, Any]] = []
     rejected_objects: list[dict[str, Any]] = []
@@ -59,12 +60,19 @@ def validate_campaign_patch(
             continue
         for index, item in enumerate(items):
             object_id = _object_id(item, fallback=f"{resolved.name}:{index}")
+            if top_key == "research_directions_patch" and index >= 3:
+                reason = "research synthesis proposed more than 3 directions"
+                rejected_objects.append(_rejected(top_key, object_id, reason, source_path=str(resolved)))
+                issues.append(f"{resolved.name}:{object_id}: {reason}")
+                continue
             object_issues = validate_patch_object(
                 item,
                 known_papers=known_papers,
                 known_evidence_spans=known_evidence_spans,
                 known_steps=known_steps,
                 known_tasks=known_tasks,
+                object_type=top_key,
+                prior_work_recall_passed=prior_work_recall_passed,
             )
             if object_issues:
                 rejected_objects.append(_rejected(top_key, object_id, "; ".join(object_issues), source_path=str(resolved)))
@@ -102,6 +110,8 @@ def validate_patch_object(
     known_evidence_spans: set[str],
     known_steps: set[str],
     known_tasks: set[str],
+    object_type: str = "",
+    prior_work_recall_passed: bool = False,
 ) -> list[str]:
     issues: list[str] = []
     for paper_id in _paper_ids(item):
@@ -130,10 +140,12 @@ def validate_patch_object(
     if confidence == "high" and not _has_evidence(item):
         issues.append("high-confidence claim lacks evidence locator")
     novelty_strength = str(item.get("novelty_strength", "")).lower()
-    if novelty_strength == "strong" and not _strong_novelty_gate_passes(item):
-        issues.append("strong novelty is blocked until closest prior work, coverage, and missing searches gates pass")
+    if novelty_strength == "strong" and not _strong_novelty_gate_passes(item, prior_work_recall_passed=prior_work_recall_passed):
+        issues.append("strong novelty is blocked until closest prior work, coverage, recall gate, and missing searches gates pass")
     if _novelty_without_prior_work(item):
         issues.append("novelty output lacks closest prior work or unknown verdict")
+    if object_type == "research_directions_patch":
+        issues.extend(_research_direction_issues(item))
     return issues
 
 
@@ -158,6 +170,14 @@ def _file_contract_issues(task_type: str, expected: set[str], present: set[str])
         },
         "reviewer_panel": {"review_panel_patch.json", "rebuttal_plan_patch.json", "required_fixes.json"},
         "campaign_stop_decision": {"stop_condition_patch.json", "final_recommendation_patch.json"},
+        "research_synthesis": {
+            "research_directions_patch.json",
+            "gap_evidence_matrices_patch.json",
+            "novelty_dossiers_patch.json",
+            "related_work_matrix_patch.json",
+            "uncertainty_register.json",
+            "search_requests.json",
+        },
     }
     useful = useful_groups.get(task_type, expected)
     if not (useful & present):
@@ -328,10 +348,11 @@ def _is_search_request(item: dict[str, Any]) -> bool:
     return any("search" in key.lower() for key in item)
 
 
-def _strong_novelty_gate_passes(item: dict[str, Any]) -> bool:
+def _strong_novelty_gate_passes(item: dict[str, Any], *, prior_work_recall_passed: bool) -> bool:
     coverage = str(item.get("source_coverage", item.get("coverage", ""))).lower()
     missing = item.get("missing_searches", [])
-    return bool(item.get("closest_prior_work") or item.get("top_prior_work") and coverage in {"medium", "high", "strong"} and not missing)
+    has_prior = bool(item.get("closest_prior_work") or item.get("top_prior_work"))
+    return bool(has_prior and coverage in {"medium", "high", "strong"} and not missing and prior_work_recall_passed)
 
 
 def _novelty_without_prior_work(item: dict[str, Any]) -> bool:
@@ -356,3 +377,33 @@ def _strings(value: Any) -> list[str]:
 
 def _unknown(value: str) -> bool:
     return value.strip().lower() in {"", "unknown", "none", "n/a", "missing"}
+
+
+def _research_direction_issues(item: dict[str, Any]) -> list[str]:
+    issues: list[str] = []
+    if not _has_evidence(item):
+        issues.append("research direction lacks evidence span or locator")
+    if not (item.get("closest_prior_work") or item.get("top_prior_work")):
+        issues.append("research direction lacks closest prior work")
+    if not (
+        item.get("risk_that_gap_is_fake")
+        or item.get("risk_not_novel")
+        or item.get("risk_of_non_novelty")
+        or item.get("risk_of_fake_novelty")
+    ):
+        issues.append("research direction lacks risk that it is not novel")
+    return issues
+
+
+def _prior_work_recall_passed(config: GapForgeConfig, campaign_state: CampaignState) -> bool:
+    from gapforge.state import ResearchStateManager
+
+    manager = ResearchStateManager(config)
+    assessments = []
+    for run_id in campaign_state.campaign.run_ids:
+        try:
+            run = manager.load_run(run_id)
+        except FileNotFoundError:
+            continue
+        assessments.extend(run.prior_work_recall_assessments)
+    return bool(assessments) and all(item.novelty_allowed for item in assessments)

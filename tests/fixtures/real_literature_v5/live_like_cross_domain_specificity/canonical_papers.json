@@ -1,0 +1,22 @@
+[
+  {
+    "canonical_id": "live_like_cross_domain_specificity-paper-1",
+    "title": "Closest prior work for medical screening specificity methods for AI safety false-positive control",
+    "normalized_title": "closest prior work for medical screening specificity methods for ai safety false-positive control",
+    "doi": "10.5555/live_like_cross_domain_specificity.1",
+    "source_paper_ids": [
+      "live_like_cross_domain_specificity-paper-1"
+    ],
+    "confidence": "high"
+  },
+  {
+    "canonical_id": "live_like_cross_domain_specificity-paper-2",
+    "title": "Survey background for medical screening specificity methods for AI safety false-positive control",
+    "normalized_title": "survey background for medical screening specificity methods for ai safety false-positive control",
+    "doi": "10.5555/live_like_cross_domain_specificity.2",
+    "source_paper_ids": [
+      "live_like_cross_domain_specificity-paper-2"
+    ],
+    "confidence": "high"
+  }
+]

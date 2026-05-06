@@ -23,6 +23,14 @@ CAMPAIGN_TASK_OUTPUTS: dict[str, list[str]] = {
     "experiment_architect": ["experiment_protocols_patch.json", "baseline_requests.json", "reproducibility_checklists_patch.json"],
     "reviewer_panel": ["review_panel_patch.json", "rebuttal_plan_patch.json", "required_fixes.json"],
     "campaign_stop_decision": ["stop_condition_patch.json", "final_recommendation_patch.json"],
+    "research_synthesis": [
+        "research_directions_patch.json",
+        "gap_evidence_matrices_patch.json",
+        "novelty_dossiers_patch.json",
+        "related_work_matrix_patch.json",
+        "uncertainty_register.json",
+        "search_requests.json",
+    ],
 }
 
 
@@ -173,6 +181,14 @@ def _input_manifest(config: GapForgeConfig, campaign_state: CampaignState, task_
             project_dir / "research_directions.json",
             project_dir / "review_queue.md",
         ],
+        "research_synthesis": [
+            project_dir / "project_report.md",
+            project_dir / "corpus_papers.json",
+            project_dir / "memory_records.json",
+            project_dir / "research_directions.json",
+            project_dir / "related_work_matrices.json",
+            project_dir / "review_queue.md",
+        ],
     }
     candidate_paths = [
         *common_paths,
@@ -241,6 +257,25 @@ def _schema_examples(task_type: str, filenames: list[str]) -> dict[str, Any]:
                     "confidence": "low",
                     "missing_searches": ["search that still needs to be run"],
                     "public_reasoning_summary": "Novelty remains unknown because closest-prior-work coverage is incomplete.",
+                }
+            ]
+        }
+    if task_type == "research_synthesis" and "research_directions_patch.json" in filenames:
+        examples["files"]["research_directions_patch.json"] = {
+            "research_directions_patch": [
+                {
+                    "id": "direction-id",
+                    "title": "Evidence-grounded direction title",
+                    "summary": "Conservative summary tied to evidence.",
+                    "linked_gap_ids": ["known-gap-id"],
+                    "supporting_paper_ids": ["known-paper-id"],
+                    "evidence_span_ids": ["known-evidence-span-id-or-locator"],
+                    "closest_prior_work": ["known-paper-id"],
+                    "risk_that_gap_is_fake": "Closest prior work may already cover the exact evaluation setting.",
+                    "novelty_strength": "unknown",
+                    "confidence": "low",
+                    "missing_searches": ["search still needed before stronger novelty claims"],
+                    "public_reasoning_summary": "Direction is provisional and cites only known evidence.",
                 }
             ]
         }

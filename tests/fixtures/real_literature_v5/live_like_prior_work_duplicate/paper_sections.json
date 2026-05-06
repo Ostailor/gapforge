@@ -1,0 +1,22 @@
+[
+  {
+    "id": "section-live_like_prior_work_duplicate-1",
+    "paper_id": "live_like_prior_work_duplicate-paper-1",
+    "title": "Evaluation",
+    "section_type": "evaluation",
+    "text": "Fixture excerpt: the closest prior work evaluates the core problem and metric in a limited setting.",
+    "page_start": 1,
+    "page_end": 1,
+    "locator": "live_like_prior_work_duplicate-paper-1:p1"
+  },
+  {
+    "id": "section-live_like_prior_work_duplicate-2",
+    "paper_id": "live_like_prior_work_duplicate-paper-2",
+    "title": "Limitations",
+    "section_type": "limitations",
+    "text": "Fixture excerpt: the survey notes missing robust low false-positive evaluation under deployment shift.",
+    "page_start": 2,
+    "page_end": 2,
+    "locator": "live_like_prior_work_duplicate-paper-2:p2"
+  }
+]

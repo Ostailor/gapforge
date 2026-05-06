@@ -9,10 +9,12 @@ from gapforge.evals.fixtures import (
     V2_FIXTURE_NAMES,
     V3_FIXTURE_NAMES,
     V4_FIXTURE_NAMES,
+    V5_FIXTURE_NAMES,
     EvalFixture,
     load_fixtures,
     load_v3_fixtures,
     load_v4_fixtures,
+    load_v5_fixtures,
 )
 from gapforge.evals.metrics import (
     EvalScores,
@@ -21,6 +23,7 @@ from gapforge.evals.metrics import (
     agent_output_validation_strictness,
     campaign_decision_quality,
     campaign_report_honesty,
+    canonicalization_quality,
     contradiction_detection_score,
     direction_maturity_accuracy,
     direction_maturity_gate_accuracy_from_fixture,
@@ -33,24 +36,31 @@ from gapforge.evals.metrics import (
     gap_evidence_matrix_score,
     gap_specificity_score,
     human_review_respect_score,
+    live_source_coverage_score,
     llm_output_grounding_score,
     manuscript_package_honesty,
     novelty_dossier_completeness_score,
     novelty_gate_accuracy,
     novelty_research_loop_quality,
+    prior_work_recall_gate_score,
     prior_work_recall_proxy,
     protocol_completeness,
+    quality_review_gate_correctness,
+    real_literature_refusal_quality,
     related_work_matrix_quality,
     report_uncertainty_score,
+    research_direction_quality_proxy,
     retrieval_relevance_at_k,
     review_queue_quality,
     reviewer_objection_quality_score,
     rollback_safety,
+    search_strategy_completeness,
     section_grounding_score,
     source_coverage_transparency_score,
     source_policy_compliance,
     stop_reason_correctness,
     unsupported_claim_rate,
+    v5_release_gate_correctness,
 )
 from gapforge.experiments.protocol import build_protocol_from_state
 from gapforge.export.manuscript import render_expected_results
@@ -87,6 +97,7 @@ class EvalReport:
     v2: bool = False
     v3: bool = False
     v4: bool = False
+    v5: bool = False
     report_path: Path | None = None
 
     @property
@@ -110,9 +121,16 @@ def run_evals(
     v2: bool = False,
     v3: bool = False,
     v4: bool = False,
+    v5: bool = False,
 ) -> EvalReport:
-    selected = [fixture] if fixture else (V4_FIXTURE_NAMES if v4 else V3_FIXTURE_NAMES if v3 else V2_FIXTURE_NAMES if v2 else None)
-    if v4:
+    selected = (
+        [fixture]
+        if fixture
+        else (V5_FIXTURE_NAMES if v5 else V4_FIXTURE_NAMES if v4 else V3_FIXTURE_NAMES if v3 else V2_FIXTURE_NAMES if v2 else None)
+    )
+    if v5:
+        fixtures = load_v5_fixtures(selected, fixture_root)
+    elif v4:
         fixtures = load_v4_fixtures(selected, fixture_root)
     elif v3:
         fixtures = load_v3_fixtures(selected, fixture_root)
@@ -124,6 +142,7 @@ def run_evals(
         v2=v2 or any(item.is_v2 for item in fixtures),
         v3=v3 or any(item.is_v3 for item in fixtures),
         v4=v4 or any(item.is_v4 for item in fixtures),
+        v5=v5 or any(item.is_v5 for item in fixtures),
     )
     if write_report:
         path = (output_dir or Path.cwd()) / "eval_report.md"
@@ -146,6 +165,10 @@ def render_eval_report(report: EvalReport) -> str:
         v4_scores = [score for result in report.results if (score := result.scores.v4_overall()) is not None]
         v4_overall = round(sum(v4_scores) / len(v4_scores), 3) if v4_scores else 0.0
         lines.extend([f"v0.4 overall score: **{v4_overall:.3f}**", ""])
+    if report.v5:
+        v5_scores = [score for result in report.results if (score := result.scores.v5_overall()) is not None]
+        v5_overall = round(sum(v5_scores) / len(v5_scores), 3) if v5_scores else 0.0
+        lines.extend([f"v0.5 overall score: **{v5_overall:.3f}**", ""])
     for result in report.results:
         scores = result.scores
         lines.extend(
@@ -218,6 +241,23 @@ def render_eval_report(report: EvalReport) -> str:
                     f"- experiment_code_task_quality: {scores.experiment_code_task_quality:.3f}",
                     f"- rollback_safety: {scores.rollback_safety:.3f}",
                     f"- fixture_v4_overall: {scores.v4_overall():.3f}",
+                    "",
+                ]
+            )
+        if scores.v5_overall() is not None:
+            lines.extend(
+                [
+                    "### v0.5 Scores",
+                    "",
+                    f"- live_source_coverage_score: {scores.live_source_coverage_score:.3f}",
+                    f"- search_strategy_completeness: {scores.search_strategy_completeness:.3f}",
+                    f"- prior_work_recall_gate_score: {scores.prior_work_recall_gate_score:.3f}",
+                    f"- canonicalization_quality: {scores.canonicalization_quality:.3f}",
+                    f"- real_literature_refusal_quality: {scores.real_literature_refusal_quality:.3f}",
+                    f"- research_direction_quality_proxy: {scores.research_direction_quality_proxy:.3f}",
+                    f"- quality_review_gate_correctness: {scores.quality_review_gate_correctness:.3f}",
+                    f"- v5_release_gate_correctness: {scores.v5_release_gate_correctness:.3f}",
+                    f"- fixture_v5_overall: {scores.v5_overall():.3f}",
                     "",
                 ]
             )
@@ -306,6 +346,16 @@ def _evaluate_fixture(fixture: EvalFixture) -> FixtureEvalResult:
         scores.review_queue_quality = review_queue_quality(campaign_fixture)
         scores.experiment_code_task_quality = experiment_code_task_quality(campaign_fixture)
         scores.rollback_safety = rollback_safety(campaign_fixture)
+    if fixture.is_v5:
+        real_fixture = fixture.real_literature_fixture
+        scores.live_source_coverage_score = live_source_coverage_score(real_fixture)
+        scores.search_strategy_completeness = search_strategy_completeness(real_fixture)
+        scores.prior_work_recall_gate_score = prior_work_recall_gate_score(real_fixture)
+        scores.canonicalization_quality = canonicalization_quality(real_fixture)
+        scores.real_literature_refusal_quality = real_literature_refusal_quality(real_fixture)
+        scores.research_direction_quality_proxy = research_direction_quality_proxy(real_fixture)
+        scores.quality_review_gate_correctness = quality_review_gate_correctness(real_fixture)
+        scores.v5_release_gate_correctness = v5_release_gate_correctness(real_fixture)
     unsupported = [
         claim.id
         for claim in state.claims

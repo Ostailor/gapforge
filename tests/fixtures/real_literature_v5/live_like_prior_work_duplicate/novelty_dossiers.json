@@ -1,0 +1,29 @@
+[
+  {
+    "target_id": "gap-live_like_prior_work_duplicate",
+    "idea_summary": "duplicate prior work for low false positive collusion detection",
+    "query_plan": [
+      "duplicate prior work for low false positive collusion detection closest prior work"
+    ],
+    "candidates_considered": [
+      "live_like_prior_work_duplicate-paper-1",
+      "live_like_prior_work_duplicate-paper-2"
+    ],
+    "top_prior_work": [
+      "live_like_prior_work_duplicate-paper-1"
+    ],
+    "comparison_table": [
+      {
+        "paper_id": "live_like_prior_work_duplicate-paper-1",
+        "relationship": "directly_solves"
+      }
+    ],
+    "decisive_difference_needed": "No decisive difference remains in this fixture.",
+    "missing_searches": [],
+    "verdict": "reject",
+    "novelty_strength": "unknown",
+    "confidence": "medium",
+    "reviewer_objection": "Closest prior work may already cover the evaluation.",
+    "recommended_action": "reject"
+  }
+]

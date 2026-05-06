@@ -1,0 +1,22 @@
+[
+  {
+    "canonical_id": "live_like_prior_work_duplicate-paper-1",
+    "title": "Closest prior work for duplicate prior work for low false positive collusion detection",
+    "normalized_title": "closest prior work for duplicate prior work for low false positive collusion detection",
+    "doi": "10.5555/live_like_prior_work_duplicate.1",
+    "source_paper_ids": [
+      "live_like_prior_work_duplicate-paper-1"
+    ],
+    "confidence": "high"
+  },
+  {
+    "canonical_id": "live_like_prior_work_duplicate-paper-2",
+    "title": "Survey background for duplicate prior work for low false positive collusion detection",
+    "normalized_title": "survey background for duplicate prior work for low false positive collusion detection",
+    "doi": "10.5555/live_like_prior_work_duplicate.2",
+    "source_paper_ids": [
+      "live_like_prior_work_duplicate-paper-2"
+    ],
+    "confidence": "high"
+  }
+]

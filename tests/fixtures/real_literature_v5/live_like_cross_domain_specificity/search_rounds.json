@@ -1,0 +1,71 @@
+[
+  {
+    "id": "round-initial-live_like_cross_domain_specificity",
+    "strategy_id": "strategy-live_like_cross_domain_specificity",
+    "round_type": "initial",
+    "queries": [
+      "medical screening specificity methods for AI safety false-positive control"
+    ],
+    "sources": [
+      "arxiv"
+    ],
+    "max_results": 10,
+    "status": "complete",
+    "result_paper_ids": [
+      "live_like_cross_domain_specificity-paper-1",
+      "live_like_cross_domain_specificity-paper-2"
+    ],
+    "failures": []
+  },
+  {
+    "id": "round-survey-live_like_cross_domain_specificity",
+    "strategy_id": "strategy-live_like_cross_domain_specificity",
+    "round_type": "survey",
+    "queries": [
+      "medical screening specificity methods for AI safety false-positive control survey"
+    ],
+    "sources": [
+      "semantic_scholar"
+    ],
+    "max_results": 10,
+    "status": "complete",
+    "result_paper_ids": [
+      "live_like_cross_domain_specificity-paper-2"
+    ],
+    "failures": []
+  },
+  {
+    "id": "round-benchmark-live_like_cross_domain_specificity",
+    "strategy_id": "strategy-live_like_cross_domain_specificity",
+    "round_type": "benchmark",
+    "queries": [
+      "medical screening specificity methods for AI safety false-positive control benchmark dataset"
+    ],
+    "sources": [
+      "arxiv"
+    ],
+    "max_results": 10,
+    "status": "complete",
+    "result_paper_ids": [
+      "live_like_cross_domain_specificity-paper-1"
+    ],
+    "failures": []
+  },
+  {
+    "id": "round-novelty-live_like_cross_domain_specificity",
+    "strategy_id": "strategy-live_like_cross_domain_specificity",
+    "round_type": "novelty",
+    "queries": [
+      "medical screening specificity methods for AI safety false-positive control closest prior work"
+    ],
+    "sources": [
+      "semantic_scholar"
+    ],
+    "max_results": 10,
+    "status": "complete",
+    "result_paper_ids": [
+      "live_like_cross_domain_specificity-paper-1"
+    ],
+    "failures": []
+  }
+]

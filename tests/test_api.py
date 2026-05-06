@@ -4,9 +4,36 @@ from pathlib import Path
 
 from gapforge import api
 from gapforge.config import GapForgeConfig
-from gapforge.models import BaselineCandidate, ExperimentProtocol, PaperNote, ReproducibilityChecklist, ResearchDirection
+from gapforge.models import (
+    BaselineCandidate,
+    ExperimentProtocol,
+    Gap,
+    Paper,
+    PaperNote,
+    ReproducibilityChecklist,
+    ResearchDirection,
+    SearchRound,
+    SourceCoverageReport,
+)
 from gapforge.project_memory import ProjectMemoryManager
 from gapforge.state import ResearchStateManager
+
+
+class HealthyApiSource:
+    name = "Semantic Scholar"
+
+    def search(self, query: str, *, max_results: int, sort: str, date_from: str | None, date_to: str | None):
+        return [
+            Paper(
+                id=f"api-source-{index}",
+                title=f"API source paper {index}",
+                authors=["Ada"],
+                abstract=f"Live-looking result for {query}.",
+                year=2026,
+                source=self.name,
+            )
+            for index in range(min(max_results, 2))
+        ]
 
 
 def test_api_create_project_and_run(tmp_path: Path) -> None:
@@ -180,6 +207,93 @@ def test_api_v4_release_gate(tmp_path: Path) -> None:
     config = GapForgeConfig.from_cwd(tmp_path)
 
     result = api.v4_release_gate(config=config)
+
+    assert result.passed is False
+    assert result.blockers
+
+
+def test_api_source_health_with_mocked_source(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.delenv("GAPFORGE_DISABLE_NETWORK", raising=False)
+    config = GapForgeConfig.from_cwd(tmp_path)
+
+    result = api.source_health("low false positive collusion", profile="generic", sources=[HealthyApiSource()], config=config)
+
+    assert not isinstance(result, list)
+    assert "Semantic Scholar" in result.usable_sources
+    assert result.source_health_checks[0].result_count == 2
+
+
+def test_api_search_strategy(tmp_path: Path) -> None:
+    strategy = api.plan_search_strategy("low false positive collusion detection", "ai_safety", config=GapForgeConfig.from_cwd(tmp_path))
+
+    assert strategy.primary_queries
+    assert strategy.closest_prior_work_queries
+    assert "openreview" in strategy.expected_sources
+
+
+def test_api_prior_work_recall(tmp_path: Path) -> None:
+    config = GapForgeConfig.from_cwd(tmp_path)
+    state = api.create_run("low false positive collusion detection", config=config)
+    state.papers = [
+        Paper(id="support", title="Support paper", authors=["Ada"], abstract="A support paper.", year=2026),
+        Paper(
+            id="candidate",
+            title="Different prior monitoring work",
+            authors=["Grace"],
+            abstract="Studies monitoring, not collusion.",
+            year=2025,
+        ),
+    ]
+    state.gaps = [
+        Gap(
+            id="gap-api",
+            title="Low-FPR collusion detection gap",
+            description="Need low false-positive collusion detection.",
+            supporting_paper_ids=["support"],
+        )
+    ]
+    state.search_rounds = [
+        SearchRound(id="round-initial", strategy_id="strategy-api", round_type="initial", status="complete"),
+        SearchRound(id="round-novelty", strategy_id="strategy-api", round_type="novelty", status="complete"),
+        SearchRound(id="round-benchmark", strategy_id="strategy-api", round_type="benchmark", status="complete"),
+        SearchRound(id="round-survey", strategy_id="strategy-api", round_type="survey", status="complete"),
+    ]
+    state.source_coverage = SourceCoverageReport(run_id=state.run_id, topic=state.topic.text, confidence="medium")
+    ResearchStateManager(config).save_run(state)
+
+    assessment = api.prior_work_recall(run_id=state.run_id, gap_id="gap-api", config=config)
+    reloaded = api.get_state(state.run_id, config=config)
+
+    assert not isinstance(assessment, list)
+    assert assessment.target_id == "gap-api"
+    assert reloaded.prior_work_recall_assessments
+
+
+def test_api_canonicalize_papers(tmp_path: Path) -> None:
+    config = GapForgeConfig.from_cwd(tmp_path)
+    state = api.create_run("canonical API", config=config)
+    state.papers = [
+        Paper(id="paper-a", title="Same Paper", authors=["Ada"], year=2026, doi="10.1000/test", abstract="Short abstract."),
+        Paper(
+            id="paper-b",
+            title="Same Paper",
+            authors=["Ada"],
+            year=2026,
+            doi="https://doi.org/10.1000/test",
+            abstract="Longer richer abstract.",
+        ),
+    ]
+    ResearchStateManager(config).save_run(state)
+
+    identities, decisions = api.canonicalize_papers(run_id=state.run_id, config=config)
+
+    assert identities
+    assert decisions
+    assert len(api.get_state(state.run_id, config=config).papers) == 1
+
+
+def test_api_v5_release_gate(tmp_path: Path) -> None:
+    result = api.v5_release_gate(config=GapForgeConfig.from_cwd(tmp_path))
 
     assert result.passed is False
     assert result.blockers

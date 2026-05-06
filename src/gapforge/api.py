@@ -7,6 +7,7 @@ without asking callers to shell out to ``gapforge`` commands.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -31,21 +32,36 @@ from gapforge.models import (
     CampaignAcceptanceSummary,
     CampaignHumanReview,
     CampaignImportRecord,
+    CanonicalPaperIdentity,
     ExperimentCodeTask,
     IndexManifest,
+    LiveSourceDiagnostic,
     Paper,
     PaperArtifact,
+    PaperMergeDecision,
     PaperPackage,
     PaperSection,
+    PriorWorkRecallAssessment,
+    RealLiteratureCampaignRecord,
+    RealLiteratureHumanReview,
     ResearchDirection,
     ResearchProgramState,
     ResearchRunState,
+    SearchStrategy,
+    SourceHealthCheck,
 )
+from gapforge.novelty.recall_gate import assess_campaign_prior_work_recall, assess_run_prior_work_recall
 from gapforge.orchestrator import Orchestrator
 from gapforge.project_memory import ProjectMemoryManager
-from gapforge.release_gate import V04ReleaseGateEnforcer, V04ReleaseGateResult
+from gapforge.real_literature import RealLiteratureCampaignManager, RealLiteratureReviewManager
+from gapforge.release_gate import V04ReleaseGateEnforcer, V04ReleaseGateResult, V05ReleaseGateEnforcer, V05ReleaseGateResult
 from gapforge.reporting import write_final_report
 from gapforge.retrieval import build_project_index, build_run_index
+from gapforge.search_strategy import plan_search_strategy as plan_search_strategy_skill
+from gapforge.sources.base import ResearchSource
+from gapforge.sources.canonical import canonicalize_project, canonicalize_run
+from gapforge.sources.health import check_sources
+from gapforge.sources.live_diagnostics import run_live_source_diagnostic
 from gapforge.state import ResearchStateManager
 
 
@@ -81,6 +97,12 @@ class CampaignReviewResult:
     summary: CampaignAcceptanceSummary
 
 
+@dataclass(slots=True)
+class RealLiteratureReviewResult:
+    review: RealLiteratureHumanReview
+    summary: dict[str, object]
+
+
 def create_project(
     name: str,
     *,
@@ -108,6 +130,42 @@ def create_run(
         ProjectMemoryManager(cfg).attach_run(project_id, state.run_id)
         state = ResearchStateManager(cfg).load_run(state.run_id)
     return state
+
+
+def source_health(
+    topic: str | None = None,
+    *,
+    profile: str | None = None,
+    sources: Iterable[ResearchSource] | None = None,
+    config: GapForgeConfig | None = None,
+) -> LiveSourceDiagnostic | list[SourceHealthCheck]:
+    """Check live-source readiness without shelling out.
+
+    When ``topic`` or ``profile`` is provided, this returns a policy-aware
+    ``LiveSourceDiagnostic``. With neither, it returns raw source health checks.
+    Tests and notebooks can pass mocked ``sources`` to avoid live network use.
+    """
+
+    cfg = _config(config)
+    if topic or profile:
+        return run_live_source_diagnostic(
+            cfg,
+            topic=topic or "",
+            source_profile=profile or "generic",
+            sources=sources,
+        )
+    return check_sources(cfg, sources=sources)
+
+
+def plan_search_strategy(
+    topic: str,
+    source_profile: str = "generic",
+    *,
+    config: GapForgeConfig | None = None,
+) -> SearchStrategy:
+    """Plan v0.5 multi-round literature searches for a topic."""
+
+    return plan_search_strategy_skill(_config(config), topic, source_profile=source_profile)
 
 
 def search_papers(
@@ -508,6 +566,123 @@ def v4_release_gate(
     return V04ReleaseGateEnforcer(_config(config)).evaluate(project_id=project_id or "")
 
 
+def run_real_literature_campaign(
+    profile_id: str,
+    *,
+    sources: Iterable[ResearchSource] | None = None,
+    run_ids: list[str] | None = None,
+    config: GapForgeConfig | None = None,
+) -> RealLiteratureCampaignRecord:
+    """Create a v0.5 real-literature campaign record from live-source diagnostics."""
+
+    return RealLiteratureCampaignManager(_config(config)).run(profile_id, sources=sources, run_ids=run_ids)
+
+
+def real_literature_status(
+    record_id: str,
+    *,
+    config: GapForgeConfig | None = None,
+) -> RealLiteratureCampaignRecord:
+    """Load a persisted v0.5 real-literature campaign record."""
+
+    return RealLiteratureCampaignManager(_config(config)).load_record(record_id)
+
+
+def canonicalize_papers(
+    *,
+    run_id: str | None = None,
+    project_id: str | None = None,
+    config: GapForgeConfig | None = None,
+) -> tuple[list[CanonicalPaperIdentity], list[PaperMergeDecision]]:
+    """Canonicalize duplicate paper records for exactly one run or project."""
+
+    cfg = _config(config)
+    _require_one_scope(run_id=run_id, project_id=project_id)
+    if run_id:
+        return canonicalize_run(cfg, run_id)
+    return canonicalize_project(cfg, project_id or "")
+
+
+def prior_work_recall(
+    *,
+    campaign_id: str | None = None,
+    run_id: str | None = None,
+    gap_id: str | None = None,
+    config: GapForgeConfig | None = None,
+) -> list[PriorWorkRecallAssessment] | PriorWorkRecallAssessment:
+    """Run the v0.5 closest-prior-work recall gate for a campaign or run gap."""
+
+    cfg = _config(config)
+    if campaign_id:
+        return assess_campaign_prior_work_recall(cfg, campaign_id)
+    if not gap_id:
+        raise ValueError("Provide campaign_id, or provide gap_id with an optional run_id.")
+    resolved_run_id = run_id
+    if resolved_run_id is None:
+        latest = ResearchStateManager(cfg).load_latest()
+        if latest is None:
+            raise FileNotFoundError("No run state found for prior-work recall.")
+        resolved_run_id = latest.run_id
+    return assess_run_prior_work_recall(cfg, resolved_run_id, gap_id=gap_id)
+
+
+def real_literature_review(
+    campaign_id: str,
+    *,
+    reviewer: str = "human",
+    accept_workflow: bool = True,
+    accept_quality: bool = False,
+    reason: str = "",
+    source_quality_score: int = 0,
+    paper_relevance_score: int = 0,
+    prior_work_recall_score: int = 0,
+    evidence_grounding_score: int = 0,
+    novelty_honesty_score: int = 0,
+    gap_importance_score: int = 0,
+    experiment_feasibility_score: int = 0,
+    reviewer_objection_quality_score: int = 0,
+    report_honesty_score: int = 0,
+    missed_obvious_prior_work: bool = False,
+    fake_citation_found: bool = False,
+    unsupported_high_confidence_claim_found: bool = False,
+    overclaimed_novelty: bool = False,
+    config: GapForgeConfig | None = None,
+) -> RealLiteratureReviewResult:
+    """Record v0.5 workflow and research-quality human review."""
+
+    review, summary = RealLiteratureReviewManager(_config(config)).review(
+        campaign_id,
+        reviewer=reviewer,
+        accept_workflow=accept_workflow,
+        accept_quality=accept_quality,
+        reason=reason,
+        source_quality_score=source_quality_score,
+        paper_relevance_score=paper_relevance_score,
+        prior_work_recall_score=prior_work_recall_score,
+        evidence_grounding_score=evidence_grounding_score,
+        novelty_honesty_score=novelty_honesty_score,
+        gap_importance_score=gap_importance_score,
+        experiment_feasibility_score=experiment_feasibility_score,
+        reviewer_objection_quality_score=reviewer_objection_quality_score,
+        report_honesty_score=report_honesty_score,
+        missed_obvious_prior_work=missed_obvious_prior_work,
+        fake_citation_found=fake_citation_found,
+        unsupported_high_confidence_claim_found=unsupported_high_confidence_claim_found,
+        overclaimed_novelty=overclaimed_novelty,
+    )
+    return RealLiteratureReviewResult(review=review, summary=summary)
+
+
+def v5_release_gate(
+    project_id: str | None = None,
+    *,
+    config: GapForgeConfig | None = None,
+) -> V05ReleaseGateResult:
+    """Evaluate the v0.5 real-literature quality release gate."""
+
+    return V05ReleaseGateEnforcer(_config(config)).evaluate(project_id=project_id or "")
+
+
 def generate_code_tasks(
     campaign_id: str,
     direction_id: str,
@@ -617,12 +792,14 @@ __all__ = [
     "CampaignReviewResult",
     "CampaignTaskResult",
     "ParseFullTextResult",
+    "RealLiteratureReviewResult",
     "ReportResult",
     "add_pdf",
     "attest_agent_run",
     "build_index",
     "campaign_acceptance",
     "campaign_next",
+    "canonicalize_papers",
     "create_campaign",
     "create_campaign_task",
     "create_direction",
@@ -638,9 +815,16 @@ __all__ = [
     "mine_gaps",
     "novelty_check",
     "parse_fulltext",
+    "plan_search_strategy",
+    "prior_work_recall",
+    "real_literature_review",
+    "real_literature_status",
     "review_campaign",
+    "run_real_literature_campaign",
     "run_campaign",
     "search_papers",
+    "source_health",
     "v4_release_gate",
+    "v5_release_gate",
     "validate_campaign_output",
 ]

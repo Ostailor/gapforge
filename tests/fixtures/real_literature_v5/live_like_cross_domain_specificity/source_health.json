@@ -1,0 +1,32 @@
+[
+  {
+    "source_name": "arxiv",
+    "status": "healthy",
+    "test_query": "medical screening specificity methods for AI safety false-positive control",
+    "result_count": 8,
+    "latency_ms": 120,
+    "error": "",
+    "warning": "",
+    "checked_at": "2026-05-06T00:00:00Z"
+  },
+  {
+    "source_name": "semantic_scholar",
+    "status": "healthy",
+    "test_query": "medical screening specificity methods for AI safety false-positive control",
+    "result_count": 10,
+    "latency_ms": 180,
+    "error": "",
+    "warning": "",
+    "checked_at": "2026-05-06T00:00:00Z"
+  },
+  {
+    "source_name": "openreview",
+    "status": "healthy",
+    "test_query": "medical screening specificity methods for AI safety false-positive control",
+    "result_count": 3,
+    "latency_ms": 240,
+    "error": "",
+    "warning": "",
+    "checked_at": "2026-05-06T00:00:00Z"
+  }
+]

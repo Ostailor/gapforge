@@ -223,6 +223,20 @@ def _query_for_task(
         pieces.extend(["survey", "systematic review", "benchmark", "related work"])
     elif task_type == "campaign_stop_decision":
         pieces.extend(["source coverage", "novelty unknown", "uncertainty", "stop reason"])
+    elif task_type == "research_synthesis":
+        pieces.extend(
+            [
+                "research direction",
+                "evidence-backed gap",
+                "closest prior work",
+                "counterevidence",
+                "source policy",
+                "missing searches",
+            ]
+        )
+        for run in runs:
+            pieces.extend(gap.title or gap.description for gap in run.gaps[:6])
+            pieces.extend(dossier.idea_summary for dossier in run.novelty_dossiers[:6])
     return " ".join(piece for piece in pieces if piece).strip()
 
 
@@ -254,7 +268,7 @@ def _result_has_task_overlap(result: RetrievalResult) -> bool:
 
 
 def _closest_prior_work_ids(runs: list[ResearchRunState], program: ResearchProgramState, task_type: str) -> list[str]:
-    if task_type != "novelty_reviewer":
+    if task_type not in {"novelty_reviewer", "research_synthesis"}:
         return []
     paper_ids: list[str] = []
     for run in runs:

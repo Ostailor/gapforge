@@ -92,12 +92,15 @@ class NoveltyGate(Skill):
         try:
             _results, paper_ids = retrieval_candidates_for_state(state, summary, top_k=30)
         except (FileNotFoundError, ValueError, OSError, RuntimeError):
-            return list(state.papers)
+            candidates = list(state.papers)
+            live_candidates = [paper for paper in candidates if not _is_fallback_paper(paper)]
+            return live_candidates or candidates
         paper_by_id = {paper.id: paper for paper in state.papers}
         ordered = [paper_by_id[paper_id] for paper_id in paper_ids if paper_id in paper_by_id]
         ordered_ids = {paper.id for paper in ordered}
         ordered.extend(paper for paper in state.papers if paper.id not in ordered_ids)
-        return ordered
+        live_ordered = [paper for paper in ordered if not _is_fallback_paper(paper)]
+        return live_ordered or ordered
 
     def _targets(self, state: ResearchRunState, *, gap_id: str | None) -> list[tuple[str, str, Gap | None]]:
         gaps = [gap for gap in state.gaps if gap_id is None or gap.id == gap_id]
@@ -136,7 +139,8 @@ class NoveltyGate(Skill):
             )
             papers = rank_papers(state.topic.text, papers + found_for_query, newest_first=True)
         state.papers = rank_papers(state.topic.text, state.papers + papers, newest_first=True)
-        return papers
+        live_papers = [paper for paper in papers if not _is_fallback_paper(paper)]
+        return live_papers or papers
 
     def _add_novelty_claims(self, state: ResearchRunState, assessments: list[NoveltyAssessment]) -> ClaimLedger:
         ledger = ClaimLedger(state.claims)
@@ -213,3 +217,7 @@ def _replace_dossiers(existing: list[NoveltyDossier], new_items: list[NoveltyDos
 def _replace_rejections(existing: list[RejectedIdea], new_items: list[RejectedIdea], assessed_ids: list[str]) -> list[RejectedIdea]:
     replacing = {item.id for item in new_items} | {f"rejected-{target_id}" for target_id in assessed_ids}
     return [item for item in existing if item.id not in replacing] + new_items
+
+
+def _is_fallback_paper(paper: Paper) -> bool:
+    return bool(paper.raw_metadata.get("fallback")) or "fallback" in (paper.provenance.reasoning_summary or "").lower()

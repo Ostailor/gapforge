@@ -1,0 +1,71 @@
+[
+  {
+    "id": "round-initial-live_like_low_fpr_collusion",
+    "strategy_id": "strategy-live_like_low_fpr_collusion",
+    "round_type": "initial",
+    "queries": [
+      "low false positive collusion detection in LLM agents"
+    ],
+    "sources": [
+      "arxiv"
+    ],
+    "max_results": 10,
+    "status": "complete",
+    "result_paper_ids": [
+      "live_like_low_fpr_collusion-paper-1",
+      "live_like_low_fpr_collusion-paper-2"
+    ],
+    "failures": []
+  },
+  {
+    "id": "round-survey-live_like_low_fpr_collusion",
+    "strategy_id": "strategy-live_like_low_fpr_collusion",
+    "round_type": "survey",
+    "queries": [
+      "low false positive collusion detection in LLM agents survey"
+    ],
+    "sources": [
+      "semantic_scholar"
+    ],
+    "max_results": 10,
+    "status": "complete",
+    "result_paper_ids": [
+      "live_like_low_fpr_collusion-paper-2"
+    ],
+    "failures": []
+  },
+  {
+    "id": "round-benchmark-live_like_low_fpr_collusion",
+    "strategy_id": "strategy-live_like_low_fpr_collusion",
+    "round_type": "benchmark",
+    "queries": [
+      "low false positive collusion detection in LLM agents benchmark dataset"
+    ],
+    "sources": [
+      "arxiv"
+    ],
+    "max_results": 10,
+    "status": "complete",
+    "result_paper_ids": [
+      "live_like_low_fpr_collusion-paper-1"
+    ],
+    "failures": []
+  },
+  {
+    "id": "round-novelty-live_like_low_fpr_collusion",
+    "strategy_id": "strategy-live_like_low_fpr_collusion",
+    "round_type": "novelty",
+    "queries": [
+      "low false positive collusion detection in LLM agents closest prior work"
+    ],
+    "sources": [
+      "semantic_scholar"
+    ],
+    "max_results": 10,
+    "status": "complete",
+    "result_paper_ids": [
+      "live_like_low_fpr_collusion-paper-1"
+    ],
+    "failures": []
+  }
+]

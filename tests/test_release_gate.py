@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import sys
@@ -9,8 +10,10 @@ import gapforge.models as gf_models
 from gapforge.campaigns import CampaignManager
 from gapforge.config import GapForgeConfig
 from gapforge.project_memory import ProjectMemoryManager
+from gapforge.real_literature.review import RealLiteratureReviewManager
 from gapforge.release_gate import parse_release_gate
 from gapforge.release_gate.v04 import V04ReleaseGateEnforcer
+from gapforge.release_gate.v05 import V05ReleaseGateEnforcer
 from gapforge.state import ResearchStateManager
 
 
@@ -164,6 +167,95 @@ def test_v04_release_gate_explain_and_next_commands_cli(tmp_path: Path) -> None:
     assert "single_task_codex_handoff" in result.stdout
 
 
+def test_v05_release_gate_no_live_campaigns_fails(tmp_path: Path) -> None:
+    config = GapForgeConfig.from_cwd(tmp_path)
+    _write_ci_and_fake_canary(config)
+    _accepted_campaign(config, "experiment ready", ready=True)
+    _accepted_campaign(config, "coverage refusal", refusal=True, stop_reason="not_ready_poor_coverage")
+    _accepted_campaign(config, "manual pdf full text", ready=True, full_text=True)
+
+    result = V05ReleaseGateEnforcer(config).evaluate()
+
+    assert result.passed is False
+    assert result.live_literature_campaign_count == 0
+    assert any("At least 3 live-literature campaigns" in blocker for blocker in result.blockers)
+
+
+def test_v05_release_gate_workflow_only_campaigns_fail_quality_gate(tmp_path: Path) -> None:
+    config = GapForgeConfig.from_cwd(tmp_path)
+    _write_ci_and_fake_canary(config)
+    _quality_campaign(config, "workflow one", ready=True, accept_quality=False)
+    _quality_campaign(config, "workflow refusal", refusal=True, stop_reason="not_ready_poor_coverage", accept_quality=False)
+    _quality_campaign(config, "workflow full text", ready=True, full_text=True, accept_quality=False)
+
+    result = V05ReleaseGateEnforcer(config).evaluate()
+
+    assert result.passed is False
+    assert result.live_literature_campaign_count == 3
+    assert result.quality_accepted_campaign_ids == []
+    assert any("At least 2 campaigns" in blocker for blocker in result.blockers)
+
+
+def test_v05_release_gate_quality_accepted_campaigns_pass_and_report_renders(tmp_path: Path) -> None:
+    config = GapForgeConfig.from_cwd(tmp_path)
+    _write_ci_and_fake_canary(config)
+    ready_id = _quality_campaign(config, "quality ready", ready=True, accept_quality=True)
+    refusal_id = _quality_campaign(
+        config,
+        "quality refusal",
+        refusal=True,
+        stop_reason="not_ready_poor_coverage",
+        accept_quality=True,
+    )
+    _quality_campaign(config, "quality full text", ready=True, full_text=True, accept_quality=False)
+
+    enforcer = V05ReleaseGateEnforcer(config)
+    result = enforcer.evaluate()
+    json_path, md_path = enforcer.write_outputs(result)
+
+    assert result.passed is True
+    assert set(result.quality_accepted_campaign_ids) == {ready_id, refusal_id}
+    assert result.refusal_campaign_present is True
+    assert result.experiment_ready_campaign_present is True
+    assert json_path.exists()
+    assert "Passed: true" in md_path.read_text(encoding="utf-8")
+
+
+def test_v05_release_gate_fake_citation_blocks_quality_campaign(tmp_path: Path) -> None:
+    config = GapForgeConfig.from_cwd(tmp_path)
+    _write_ci_and_fake_canary(config)
+    campaign_id = _quality_campaign(config, "quality fake", ready=True, accept_quality=True, force_fake_citation=True)
+    _quality_campaign(config, "quality refusal", refusal=True, stop_reason="not_ready_poor_coverage", accept_quality=True)
+    _quality_campaign(config, "quality full text", ready=True, full_text=True, accept_quality=False)
+
+    result = V05ReleaseGateEnforcer(config).evaluate()
+
+    assert result.passed is False
+    fake_assessment = next(item for item in result.campaigns if item.campaign_id == campaign_id)
+    assert fake_assessment.fake_citation_found is True
+    assert any("fake citation" in blocker.lower() for blocker in result.blockers)
+
+
+def test_v05_release_gate_refusal_campaign_can_satisfy_refusal_requirement(tmp_path: Path) -> None:
+    config = GapForgeConfig.from_cwd(tmp_path)
+    _write_ci_and_fake_canary(config)
+    _quality_campaign(config, "quality ready", ready=True, accept_quality=True)
+    refusal_id = _quality_campaign(
+        config,
+        "undercovered refusal",
+        refusal=True,
+        stop_reason="not_ready_poor_coverage: correct refusal",
+        accept_quality=True,
+    )
+    _quality_campaign(config, "quality full text", ready=True, full_text=True, accept_quality=False)
+
+    result = V05ReleaseGateEnforcer(config).evaluate()
+
+    assert result.passed is True
+    assert refusal_id in result.quality_accepted_campaign_ids
+    assert result.refusal_campaign_present is True
+
+
 def test_actual_run_status_campaign_and_project_cli(tmp_path: Path) -> None:
     config = GapForgeConfig.from_cwd(tmp_path)
     campaign_id = _accepted_campaign(config, "actual status", ready=True, full_text=True)
@@ -299,3 +391,130 @@ def _accepted_campaign(
     )
     campaign_manager.save_campaign_state(campaign)
     return campaign.campaign.id
+
+
+def _quality_campaign(
+    config: GapForgeConfig,
+    name: str,
+    *,
+    ready: bool = False,
+    refusal: bool = False,
+    full_text: bool = False,
+    accept_quality: bool = True,
+    stop_reason: str = "ready_experiment_protocol",
+    force_fake_citation: bool = False,
+) -> str:
+    campaign_id = _accepted_campaign(
+        config,
+        name,
+        ready=ready,
+        refusal=refusal,
+        full_text=full_text,
+        stop_reason=stop_reason,
+    )
+    campaign_manager = CampaignManager(config)
+    state_manager = ResearchStateManager(config)
+    project_manager = ProjectMemoryManager(config)
+    campaign = campaign_manager.load_campaign_state(campaign_id)
+    program = project_manager.load_project(campaign.campaign.project_id)
+    run = state_manager.load_run(campaign.campaign.run_ids[0])
+    run.search_strategies.append(
+        gf_models.SearchStrategy(
+            id=f"strategy-{name}",
+            topic=run.topic.text,
+            source_profile="ai_safety",
+            primary_queries=["low false positive collusion"],
+            closest_prior_work_queries=["low false positive collusion prior work"],
+        )
+    )
+    run.search_rounds.extend(
+        [
+            gf_models.SearchRound(
+                id=f"round-initial-{name}",
+                strategy_id=f"strategy-{name}",
+                round_type="initial",
+                status="complete",
+                result_paper_ids=[f"paper-{name}"],
+            ),
+            gf_models.SearchRound(
+                id=f"round-novelty-{name}",
+                strategy_id=f"strategy-{name}",
+                round_type="novelty",
+                status="complete",
+                result_paper_ids=[f"paper-{name}"],
+            ),
+        ]
+    )
+    run.prior_work_recall_assessments.append(
+        gf_models.PriorWorkRecallAssessment(
+            id=f"recall-{name}",
+            target_id=f"gap-{name}",
+            completed_query_rounds=["initial", "novelty", "benchmark", "survey"],
+            top_prior_work_ids=[f"paper-{name}"],
+            recall_confidence="medium",
+            novelty_allowed=True,
+        )
+    )
+    state_manager.save_run(run)
+    program.related_work_matrices.append(
+        gf_models.RelatedWorkMatrix(
+            direction_id=f"direction-{name}" if ready else f"gap-{name}",
+            entries=[
+                gf_models.RelatedWorkEntry(
+                    direction_id=f"direction-{name}" if ready else f"gap-{name}",
+                    paper_id=f"paper-{name}",
+                    relationship="closest_prior_work",
+                    relevance_score=0.8,
+                    must_cite=True,
+                )
+            ],
+            coverage_summary="Fixture related-work matrix.",
+        )
+    )
+    project_manager.save_project(program)
+    project_root = Path(program.project.root_dir)
+    (project_root / "canonical_paper_identities.json").write_text(
+        f'[{{"canonical_id": "paper-{name}", "title": "Paper {name}", "source_paper_ids": ["paper-{name}"]}}]\n',
+        encoding="utf-8",
+    )
+    real_literature_root = config.data_dir / "real_literature" / f"record-{name}"
+    real_literature_root.mkdir(parents=True, exist_ok=True)
+    (real_literature_root / "record.json").write_text(
+        f"""{{
+  "id": "real-lit-{name}",
+  "profile_id": "live_low_fpr_collusion",
+  "campaign_id": "{campaign_id}",
+  "project_id": "{program.project.id}",
+  "run_ids": ["{run.run_id}"],
+  "live_source_diagnostic_id": "diagnostic-{name}",
+  "real_paper_count": 3,
+  "fallback_paper_count": 0,
+  "full_text_count": 1,
+  "abstract_only_count": 2,
+  "novelty_dossier_count": 1
+}}
+""",
+        encoding="utf-8",
+    )
+    RealLiteratureReviewManager(config).review(
+        campaign_id,
+        accept_quality=accept_quality,
+        reviewer="quality-tester",
+        source_quality_score=4,
+        paper_relevance_score=4,
+        prior_work_recall_score=4,
+        evidence_grounding_score=4,
+        novelty_honesty_score=4,
+        gap_importance_score=4,
+        experiment_feasibility_score=4,
+        reviewer_objection_quality_score=4,
+        report_honesty_score=4,
+    )
+    if force_fake_citation:
+        review_path = project_root / "campaigns" / campaign_id / "real_literature_reviews.json"
+        reviews = json.loads(review_path.read_text(encoding="utf-8"))
+        reviews[-1]["fake_citation_found"] = True
+        reviews[-1]["accepted_for_workflow"] = True
+        reviews[-1]["accepted_for_research_quality"] = True
+        review_path.write_text(json.dumps(reviews, indent=2) + "\n", encoding="utf-8")
+    return campaign_id

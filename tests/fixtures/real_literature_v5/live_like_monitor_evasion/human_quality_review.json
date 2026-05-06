@@ -1,0 +1,25 @@
+{
+  "id": "review-live_like_monitor_evasion",
+  "campaign_id": "campaign-live_like_monitor_evasion",
+  "reviewer": "fixture-human",
+  "reviewed_at": "2026-05-06T00:00:00Z",
+  "source_quality_score": 4,
+  "paper_relevance_score": 4,
+  "prior_work_recall_score": 4,
+  "evidence_grounding_score": 4,
+  "novelty_honesty_score": 4,
+  "gap_importance_score": 4,
+  "experiment_feasibility_score": 4,
+  "reviewer_objection_quality_score": 4,
+  "report_honesty_score": 4,
+  "missed_obvious_prior_work": false,
+  "fake_citation_found": false,
+  "unsupported_high_confidence_claim_found": false,
+  "overclaimed_novelty": false,
+  "accepted_for_workflow": true,
+  "accepted_for_research_quality": true,
+  "reasons": [
+    "Fixture review separates workflow from research quality."
+  ],
+  "required_fixes": []
+}

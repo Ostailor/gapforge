@@ -83,6 +83,34 @@ See `docs/V0_4_REAL_RUN_ACCEPTANCE.md` for the release gate.
 - counting fake-agent campaigns as actual-run acceptance
 - claiming autonomous exhaustive literature review
 
+## v0.5 Target and Limits
+
+v0.5 is the real literature campaign quality release path. It should validate that GapForge can run useful multi-step campaigns over live literature, not merely that Codex/GPT-5.4 task execution works.
+
+v0.5 must still preserve these limits:
+
+- deterministic and fake-agent CI remain offline-safe
+- live source calls are release-validation tasks, not normal test requirements
+- v0.4.1 workflow canaries do not count as live-literature quality
+- source connectors can miss papers, fail, rate-limit, or return incomplete metadata
+- closest-prior-work recall can be measured and reviewed but not guaranteed exhaustive
+- human expert review is required before treating a direction as credible
+- model-generated novelty remains a hypothesis until closest prior work and counterevidence are visible
+- experiment protocols are plans, not completed experiments or results
+
+v0.5 non-goals:
+
+- exhaustive autonomous literature review
+- requiring live sources in CI
+- weakening validation to make real runs pass
+- counting fixture-only canaries as real literature quality
+- presenting model-generated novelty as fact without closest prior work
+- hiding missed prior work, poor coverage, or uncertainty behind polished reports
+
+v0.5 added diagnostics and gates, not omniscience. The live source health check can show that a connector is reachable, but it cannot prove a source is complete. The prior-work recall gate can force exact/method/benchmark/survey/citation-style searches, but it cannot guarantee no paper was missed. Human quality review remains required before using a direction as a serious research lead.
+
+Workflow canaries, fake-agent campaigns, dry runs, and fixture evals remain separate from live-literature quality. They should be described as implementation validation, not research validation.
+
 ## Operational Guidance
 
 Use strict mode and coverage assessment before interpreting outputs:
@@ -99,6 +127,8 @@ When in doubt, treat GapForge output as a to-do list for search, reading, and re
 ## Latest Verification Limitation
 
 The May 6, 2026 local verification pass succeeded for the v0.4 actual-run release gate. Three real Codex/GPT-5.4 workflow canaries were executed through the direct runner, validated/imported, attested, human-reviewed, and accepted by `gapforge v4-release-gate`. This resolves the v0.4 release-gate blocker for the workflow path, but it does not prove exhaustive literature-review quality or broad field coverage.
+
+The follow-up v0.5 verification pass completed live-literature quality acceptance locally. `gapforge v5-release-gate --write-report --json` passed after two campaigns were accepted for research quality: one experiment-ready live-literature smoke campaign and one conservative refusal campaign. This validates the v0.5 gate and workflow behavior, but it still does not prove exhaustive literature review, broad expert acceptance, or complete field coverage.
 
 ## v0.4.1 Planned Limitation Fix
 

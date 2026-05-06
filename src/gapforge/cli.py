@@ -49,6 +49,7 @@ from gapforge.campaigns.importer import CampaignOutputImporter
 from gapforge.campaigns.novelty_loop import CampaignNoveltyLoop
 from gapforge.campaigns.outputs import import_campaign_outputs, validate_campaign_outputs
 from gapforge.campaigns.reporting import campaign_stop_reason
+from gapforge.campaigns.research_synthesis_task import create_research_synthesis_task
 from gapforge.campaigns.review import CampaignReviewManager
 from gapforge.campaigns.reviewer_loop import CampaignReviewerLoop
 from gapforge.campaigns.rollback import rollback_import
@@ -83,11 +84,26 @@ from gapforge.llm.fake import FakeLLMClient
 from gapforge.llm.providers import ProviderLLMClient, ProviderUnavailableError, llm_status
 from gapforge.llm.transcripts import LLMTranscriptLogger
 from gapforge.models import AgentTaskSpec, IndexManifest, ResearchProgramState, ResearchRunState, RetrievalResult, to_plain
+from gapforge.novelty.recall_gate import (
+    assess_campaign_prior_work_recall,
+    assess_run_prior_work_recall,
+    load_campaign_prior_work_recall_report,
+    render_prior_work_recall_report,
+)
 from gapforge.orchestration.budgets import budget_from_name
 from gapforge.orchestrator import Orchestrator
 from gapforge.project_memory import ProjectMemoryManager
+from gapforge.real_literature import (
+    RealLiteratureCampaignManager,
+    RealLiteratureReviewManager,
+    build_real_campaign_dry_run,
+    default_real_literature_profiles,
+    render_real_campaign_dry_run,
+    write_real_campaign_dry_run,
+)
 from gapforge.related_work.matrix import RelatedWorkMatrixBuilder
-from gapforge.release_gate import V04ReleaseGateEnforcer, render_v04_release_gate_markdown
+from gapforge.release_gate import V04ReleaseGateEnforcer, V05ReleaseGateEnforcer, render_v04_release_gate_markdown
+from gapforge.release_gate.v05 import render_v05_release_gate_markdown
 from gapforge.reporting import write_final_report
 from gapforge.retrieval import build_project_index, build_run_index, search_project_index, search_run_index
 from gapforge.retrieval.index_store import RetrievalIndexStore
@@ -102,8 +118,22 @@ from gapforge.safety import (
     export_safe_project_bundle,
     render_artifact_audit_markdown,
 )
+from gapforge.search_strategy import (
+    execute_search_strategy,
+    plan_search_strategy,
+    render_search_rounds_markdown,
+    render_search_strategy_markdown,
+    save_strategy,
+)
+from gapforge.sources.canonical import canonicalize_project, canonicalize_run, load_merge_report_for_run
 from gapforge.sources.coverage import refresh_source_coverage
+from gapforge.sources.health import check_sources, render_source_health_markdown, write_source_health_artifacts
 from gapforge.sources.http_client import cache_summary
+from gapforge.sources.live_diagnostics import (
+    render_live_source_diagnostic_markdown,
+    run_live_source_diagnostic,
+    write_live_source_diagnostic,
+)
 from gapforge.sources.policies import default_source_policy_profiles, get_source_policy_profile
 from gapforge.sources.stopping import refresh_stopping_assessment, render_stopping_assessment_markdown
 from gapforge.state import ResearchStateManager
@@ -342,11 +372,34 @@ def build_parser() -> argparse.ArgumentParser:
     search_parser.add_argument("--date-from", default=None)
     search_parser.add_argument("--date-to", default=None)
 
+    plan_search_strategy_parser = subparsers.add_parser("plan-search-strategy", help="Plan multi-round live literature searches.")
+    plan_search_strategy_parser.add_argument("topic")
+    plan_search_strategy_parser.add_argument("--source-profile", default="generic")
+
+    execute_search_strategy_parser = subparsers.add_parser("execute-search-strategy", help="Execute planned search rounds for a run.")
+    execute_search_strategy_parser.add_argument("--run-id", required=True)
+    execute_search_strategy_parser.add_argument("--strategy-id", required=True)
+
+    search_rounds_parser = subparsers.add_parser("search-rounds", help="Print planned/executed search rounds for a run.")
+    search_rounds_parser.add_argument("--run-id", required=True)
+
+    prior_work_recall_parser = subparsers.add_parser("prior-work-recall", help="Run the closest-prior-work recall gate.")
+    prior_work_recall_scope = prior_work_recall_parser.add_mutually_exclusive_group(required=True)
+    prior_work_recall_scope.add_argument("--run-id")
+    prior_work_recall_scope.add_argument("--campaign-id")
+    prior_work_recall_parser.add_argument("--gap-id", default="")
+
+    prior_work_recall_report_parser = subparsers.add_parser(
+        "prior-work-recall-report", help="Print a campaign prior-work recall gate report."
+    )
+    prior_work_recall_report_parser.add_argument("--campaign-id", required=True)
+
     eval_parser = subparsers.add_parser("eval", help="Run offline fixture evaluations.")
     eval_parser.add_argument("--fixture", default=None)
     eval_parser.add_argument("--v2", action="store_true", help="Run v0.2 full-text/evidence/dossier evaluation fixtures.")
     eval_parser.add_argument("--v3", action="store_true", help="Run v0.3 curated real-world-style evaluation fixtures.")
     eval_parser.add_argument("--v4", action="store_true", help="Run v0.4 campaign and agent-behavior evaluation fixtures.")
+    eval_parser.add_argument("--v5", action="store_true", help="Run v0.5 real-literature campaign quality evaluation fixtures.")
     eval_parser.add_argument("--write-report", action="store_true")
 
     report_parser = subparsers.add_parser("report", help="Write final_report.md or final_report.json.")
@@ -403,6 +456,26 @@ def build_parser() -> argparse.ArgumentParser:
 
     next_searches_parser = subparsers.add_parser("next-searches", help="Print policy-recommended next source searches.")
     next_searches_parser.add_argument("--run-id", required=True)
+
+    canonicalize_parser = subparsers.add_parser("canonicalize-papers", help="Canonicalize and merge duplicate paper records.")
+    canonicalize_target = canonicalize_parser.add_mutually_exclusive_group(required=True)
+    canonicalize_target.add_argument("--run-id")
+    canonicalize_target.add_argument("--project-id")
+
+    paper_merge_report_parser = subparsers.add_parser("paper-merge-report", help="Print the paper merge report for a run.")
+    paper_merge_report_parser.add_argument("--run-id", required=True)
+
+    source_health_parser = subparsers.add_parser("source-health", help="Check live research source readiness.")
+    source_health_parser.add_argument("--source", default=None, help="Optional source name such as arxiv, openreview, or semantic-scholar.")
+    source_health_parser.add_argument("--topic", default="machine learning survey", help="Tiny query/topic used for the health probe.")
+    source_health_parser.add_argument("--write-report", action="store_true", help="Write ignored data/source_health artifacts.")
+
+    live_source_parser = subparsers.add_parser(
+        "live-source-diagnostic", help="Evaluate live source readiness against a source policy profile."
+    )
+    live_source_parser.add_argument("--topic", required=True)
+    live_source_parser.add_argument("--source-profile", default="generic")
+    live_source_parser.add_argument("--write-report", action="store_true")
 
     graph_parser = subparsers.add_parser("build-citation-graph", help="Build citation graph from available paper metadata.")
     graph_parser.add_argument("--run-id", required=True)
@@ -643,6 +716,55 @@ def build_parser() -> argparse.ArgumentParser:
     )
     campaign_canary_complete_parser.add_argument("--canary-id", required=True)
 
+    subparsers.add_parser("real-literature-profiles", help="List v0.5 real-literature campaign profiles.")
+
+    real_literature_plan_parser = subparsers.add_parser("real-literature-plan", help="Print a v0.5 real-literature campaign plan.")
+    real_literature_plan_parser.add_argument("--profile", required=True)
+
+    real_literature_run_parser = subparsers.add_parser(
+        "real-literature-run", help="Create a v0.5 real-literature campaign record from live source diagnostics."
+    )
+    real_literature_run_parser.add_argument("--profile", required=True)
+
+    real_literature_status_parser = subparsers.add_parser("real-literature-status", help="Print a real-literature campaign record.")
+    real_literature_status_parser.add_argument("--record-id", required=True)
+
+    real_campaign_dry_run_parser = subparsers.add_parser(
+        "real-campaign-dry-run", help="Preview a broad v0.5 real-literature campaign without network or Codex calls."
+    )
+    real_campaign_dry_run_parser.add_argument(
+        "--profile", default="", help="Real-literature profile ID, for example live_low_fpr_collusion."
+    )
+    real_campaign_dry_run_parser.add_argument("--topic", default="", help="Custom topic when no profile is used.")
+    real_campaign_dry_run_parser.add_argument("--source-profile", default="generic", help="Source policy profile for custom topics.")
+    real_campaign_dry_run_parser.add_argument("--write-report", action="store_true", help="Write dry-run JSON/Markdown under data/.")
+
+    real_literature_review_parser = subparsers.add_parser(
+        "real-literature-review", help="Render or record v0.5 real-literature research-quality review."
+    )
+    real_literature_review_parser.add_argument("--campaign-id", required=True)
+    real_literature_review_parser.add_argument("--accept-quality", action="store_true")
+    real_literature_review_parser.add_argument("--reviewer", default="human")
+    real_literature_review_parser.add_argument("--reason", default="")
+    real_literature_review_parser.add_argument("--source-quality-score", type=int, default=0)
+    real_literature_review_parser.add_argument("--paper-relevance-score", type=int, default=0)
+    real_literature_review_parser.add_argument("--prior-work-recall-score", type=int, default=0)
+    real_literature_review_parser.add_argument("--evidence-grounding-score", type=int, default=0)
+    real_literature_review_parser.add_argument("--novelty-honesty-score", type=int, default=0)
+    real_literature_review_parser.add_argument("--gap-importance-score", type=int, default=0)
+    real_literature_review_parser.add_argument("--experiment-feasibility-score", type=int, default=0)
+    real_literature_review_parser.add_argument("--reviewer-objection-quality-score", type=int, default=0)
+    real_literature_review_parser.add_argument("--report-honesty-score", type=int, default=0)
+    real_literature_review_parser.add_argument("--missed-obvious-prior-work", action="store_true")
+    real_literature_review_parser.add_argument("--fake-citation-found", action="store_true")
+    real_literature_review_parser.add_argument("--unsupported-high-confidence-claim-found", action="store_true")
+    real_literature_review_parser.add_argument("--overclaimed-novelty", action="store_true")
+
+    real_literature_acceptance_parser = subparsers.add_parser(
+        "real-literature-acceptance", help="Print v0.5 real-literature workflow and research-quality acceptance."
+    )
+    real_literature_acceptance_parser.add_argument("--campaign-id", required=True)
+
     canary_plan_parser = subparsers.add_parser("canary-plan", help="Print a repeatable canary run plan.")
     canary_plan_parser.add_argument("--profile", required=True)
 
@@ -746,9 +868,19 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
     )
     campaign_run_parser.add_argument("--max-iterations", type=int, default=None)
+    campaign_run_parser.add_argument(
+        "--real-literature",
+        action="store_true",
+        help="Use the v0.5 real-literature quality decision policy.",
+    )
 
     campaign_next_parser = subparsers.add_parser("campaign-next", help="Preview the next v0.4 campaign controller action.")
     campaign_next_parser.add_argument("--campaign-id", required=True)
+    campaign_next_parser.add_argument(
+        "--real-literature",
+        action="store_true",
+        help="Preview the v0.5 real-literature quality decision policy.",
+    )
 
     campaign_stop_parser = subparsers.add_parser("campaign-stop", help="Pause a campaign with an explicit reason.")
     campaign_stop_parser.add_argument("--campaign-id", required=True)
@@ -760,6 +892,11 @@ def build_parser() -> argparse.ArgumentParser:
     campaign_task_parser = subparsers.add_parser("campaign-task", help="Create a campaign-level Codex/GPT-5.4 task pack.")
     campaign_task_parser.add_argument("--campaign-id", required=True)
     campaign_task_parser.add_argument("--type", required=True, choices=sorted(CAMPAIGN_TASK_OUTPUTS))
+
+    research_synthesis_task_parser = subparsers.add_parser(
+        "research-synthesis-task", help="Create a real-literature Codex research synthesis task pack."
+    )
+    research_synthesis_task_parser.add_argument("--campaign-id", required=True)
 
     build_task_context_parser = subparsers.add_parser("build-task-context", help="Build retrieval-selected context for a campaign task.")
     build_task_context_parser.add_argument("--campaign-id", required=True)
@@ -857,6 +994,11 @@ def build_parser() -> argparse.ArgumentParser:
     v4_release_gate_parser.add_argument("--json", action="store_true")
     v4_release_gate_parser.add_argument("--explain", action="store_true")
     v4_release_gate_parser.add_argument("--next-commands", action="store_true")
+
+    v5_release_gate_parser = subparsers.add_parser("v5-release-gate", help="Enforce the v0.5 real-literature quality release gate.")
+    v5_release_gate_parser.add_argument("--project-id", default="")
+    v5_release_gate_parser.add_argument("--write-report", action="store_true")
+    v5_release_gate_parser.add_argument("--json", action="store_true")
 
     rollback_import_parser = subparsers.add_parser("rollback-import", help="Rollback a campaign import by import ID.")
     rollback_import_parser.add_argument("--import-id", required=True)
@@ -1079,6 +1221,34 @@ def _dispatch(
             date_to=args.date_to,
         )
         print(f"Wrote {len(state.papers)} papers to {Path(state.run_dir) / 'papers.json'}")
+        return 0
+    if args.command == "plan-search-strategy":
+        strategy = plan_search_strategy(config, args.topic, source_profile=args.source_profile)
+        json_path, md_path = save_strategy(config, strategy)
+        print(render_search_strategy_markdown(strategy), end="")
+        print(f"\nWrote {json_path}")
+        print(f"Wrote {md_path}")
+        return 0
+    if args.command == "execute-search-strategy":
+        rounds = execute_search_strategy(config, args.run_id, args.strategy_id)
+        print(render_search_rounds_markdown(rounds), end="")
+        return 0
+    if args.command == "search-rounds":
+        state = ResearchStateManager(config).load_run(args.run_id)
+        print(render_search_rounds_markdown(state.search_rounds), end="")
+        return 0
+    if args.command == "prior-work-recall":
+        if args.run_id:
+            if not args.gap_id:
+                parser.error("prior-work-recall with --run-id requires --gap-id")
+            recall_assessment = assess_run_prior_work_recall(config, args.run_id, gap_id=args.gap_id)
+            print(render_prior_work_recall_report([recall_assessment]), end="")
+            return 0
+        assessments = assess_campaign_prior_work_recall(config, args.campaign_id)
+        print(render_prior_work_recall_report(assessments), end="")
+        return 0
+    if args.command == "prior-work-recall-report":
+        print(load_campaign_prior_work_recall_report(config, args.campaign_id), end="")
         return 0
     if args.command == "map":
         if not args.topic and not args.run_id:
@@ -1392,7 +1562,7 @@ def _dispatch(
         print(json.dumps(to_plain(status_result), indent=2))
         return 0
     if args.command == "eval":
-        report = run_evals(fixture=args.fixture, output_dir=config.root, write_report=True, v2=args.v2, v3=args.v3, v4=args.v4)
+        report = run_evals(fixture=args.fixture, output_dir=config.root, write_report=True, v2=args.v2, v3=args.v3, v4=args.v4, v5=args.v5)
         target = report.report_path or (config.root / "eval_report.md")
         print(f"Wrote evaluation report to {target}")
         print(f"Overall score: {report.overall_score:.3f}")
@@ -1494,6 +1664,40 @@ def _dispatch(
             print("No additional searches recommended by the current source policy.")
             return 0
         print("\n".join(next_assessment.recommended_queries))
+        return 0
+    if args.command == "canonicalize-papers":
+        if args.run_id is not None:
+            canonical_identities, canonical_decisions = canonicalize_run(config, args.run_id)
+            print(f"Canonical papers: {len(canonical_identities)}")
+            print(f"Merge decisions: {len(canonical_decisions)}")
+            print(f"Wrote {Path(config.runs_dir) / args.run_id / 'paper_merge_report.md'}")
+            return 0
+        project_identities, project_decisions = canonicalize_project(config, args.project_id)
+        project = ProjectMemoryManager(config).load_project(args.project_id).project
+        print(f"Canonical papers across project runs: {len(project_identities)}")
+        print(f"Merge decisions: {len(project_decisions)}")
+        print(f"Wrote {Path(project.root_dir) / 'paper_merge_report.md'}")
+        return 0
+    if args.command == "paper-merge-report":
+        print(load_merge_report_for_run(config, args.run_id), end="")
+        return 0
+    if args.command == "source-health":
+        checks = check_sources(config, source_name=args.source, test_query=args.topic)
+        if args.write_report:
+            source_health_json_path, source_health_md_path = write_source_health_artifacts(config, checks)
+            print(f"Wrote source health diagnostics to {source_health_json_path} and {source_health_md_path}.")
+            return 0
+        print(render_source_health_markdown(checks), end="")
+        return 0
+    if args.command == "live-source-diagnostic":
+        live_source_diagnostic = run_live_source_diagnostic(config, topic=args.topic, source_profile=args.source_profile)
+        if args.write_report:
+            live_source_json_path, live_source_md_path = write_live_source_diagnostic(config, live_source_diagnostic)
+            print(f"Wrote live source diagnostic to {live_source_json_path} and {live_source_md_path}.")
+            if not live_source_diagnostic.minimum_coverage_met:
+                print("Real-literature campaign validation is blocked until source coverage issues are resolved or recorded as refusal.")
+            return 0
+        print(render_live_source_diagnostic_markdown(live_source_diagnostic), end="")
         return 0
     if args.command == "build-citation-graph":
         state = orchestrator.build_citation_graph(run_id=args.run_id)
@@ -1938,6 +2142,78 @@ def _dispatch(
         campaign_canary_record = CampaignCanaryRunManager(config).complete(args.canary_id)
         print(json.dumps(to_plain(campaign_canary_record), indent=2))
         return 0 if campaign_canary_record.accepted else 1
+    if args.command == "real-literature-profiles":
+        for real_literature_profile in default_real_literature_profiles():
+            print(
+                f"{real_literature_profile.id}\t{real_literature_profile.source_profile}\t"
+                f"min_real={real_literature_profile.min_real_papers}\t{real_literature_profile.title}"
+            )
+        return 0
+    if args.command == "real-literature-plan":
+        print(RealLiteratureCampaignManager(config).plan(args.profile), end="")
+        return 0
+    if args.command == "real-literature-run":
+        real_literature_record = RealLiteratureCampaignManager(config).run(args.profile)
+        print(json.dumps(to_plain(real_literature_record), indent=2))
+        return 0
+    if args.command == "real-literature-status":
+        real_literature_record = RealLiteratureCampaignManager(config).load_record(args.record_id)
+        print(json.dumps(to_plain(real_literature_record), indent=2))
+        return 0
+    if args.command == "real-campaign-dry-run":
+        try:
+            dry_run_plan = build_real_campaign_dry_run(
+                config,
+                profile_id=args.profile,
+                topic=args.topic,
+                source_profile=args.source_profile,
+            )
+        except (KeyError, ValueError) as exc:
+            print(str(exc), file=sys.stderr)
+            return 2
+        rendered = render_real_campaign_dry_run(dry_run_plan)
+        if args.write_report:
+            _json_path, md_path = write_real_campaign_dry_run(config, dry_run_plan)
+            print(f"Wrote dry-run report: {md_path}")
+        print(rendered, end="")
+        return 0
+    if args.command == "real-literature-review":
+        real_literature_review_manager = RealLiteratureReviewManager(config)
+        if not args.accept_quality and not any(
+            [
+                args.missed_obvious_prior_work,
+                args.fake_citation_found,
+                args.unsupported_high_confidence_claim_found,
+                args.overclaimed_novelty,
+            ]
+        ):
+            print(real_literature_review_manager.render_form(args.campaign_id), end="")
+            return 0
+        real_literature_review, real_literature_summary = real_literature_review_manager.review(
+            args.campaign_id,
+            reviewer=args.reviewer,
+            accept_quality=args.accept_quality,
+            reason=args.reason,
+            source_quality_score=args.source_quality_score,
+            paper_relevance_score=args.paper_relevance_score,
+            prior_work_recall_score=args.prior_work_recall_score,
+            evidence_grounding_score=args.evidence_grounding_score,
+            novelty_honesty_score=args.novelty_honesty_score,
+            gap_importance_score=args.gap_importance_score,
+            experiment_feasibility_score=args.experiment_feasibility_score,
+            reviewer_objection_quality_score=args.reviewer_objection_quality_score,
+            report_honesty_score=args.report_honesty_score,
+            missed_obvious_prior_work=args.missed_obvious_prior_work,
+            fake_citation_found=args.fake_citation_found,
+            unsupported_high_confidence_claim_found=args.unsupported_high_confidence_claim_found,
+            overclaimed_novelty=args.overclaimed_novelty,
+        )
+        print(json.dumps({"review": to_plain(real_literature_review), "summary": real_literature_summary}, indent=2))
+        return 0 if real_literature_summary["accepted_for_workflow"] else 1
+    if args.command == "real-literature-acceptance":
+        real_literature_summary = RealLiteratureReviewManager(config).acceptance(args.campaign_id)
+        print(json.dumps(real_literature_summary, indent=2))
+        return 0 if real_literature_summary["accepted_for_research_quality"] else 1
     if args.command == "canary-plan":
         print(CanaryRunManager(config).plan(args.profile), end="")
         return 0
@@ -2080,7 +2356,7 @@ def _dispatch(
         print(_format_campaign_decisions(campaign_state), end="")
         return 0
     if args.command == "campaign-next":
-        action = CampaignController(config).next_action(args.campaign_id)
+        action = CampaignController(config).next_action(args.campaign_id, real_literature=args.real_literature)
         print(json.dumps(to_plain(action), indent=2))
         return 0
     if args.command == "campaign-run":
@@ -2088,6 +2364,7 @@ def _dispatch(
             args.campaign_id,
             mode=args.mode,
             max_iterations=args.max_iterations,
+            real_literature=args.real_literature,
         )
         print(json.dumps(_campaign_status_payload(campaign_state), indent=2))
         return 0 if campaign_state.campaign.status not in {"failed"} else 1
@@ -2102,6 +2379,10 @@ def _dispatch(
     if args.command == "campaign-task":
         pack_dir = create_campaign_task_pack(config, args.campaign_id, args.type)
         print(f"Wrote campaign task pack to {pack_dir}")
+        return 0
+    if args.command == "research-synthesis-task":
+        pack_dir = create_research_synthesis_task(config, args.campaign_id)
+        print(f"Wrote research synthesis task pack to {pack_dir}")
         return 0
     if args.command == "build-task-context":
         path = write_task_context(config, args.campaign_id, args.task_type, budget=args.budget)
@@ -2220,6 +2501,15 @@ def _dispatch(
         else:
             print(render_v04_release_gate_markdown(gate_result), end="")
         return 0 if gate_result.passed else 1
+    if args.command == "v5-release-gate":
+        v5_gate_result = V05ReleaseGateEnforcer(config).evaluate(project_id=args.project_id)
+        if args.write_report:
+            V05ReleaseGateEnforcer(config).write_outputs(v5_gate_result)
+        if args.json:
+            print(json.dumps(v5_gate_result.to_dict(), indent=2))
+        else:
+            print(render_v05_release_gate_markdown(v5_gate_result), end="")
+        return 0 if v5_gate_result.passed else 1
     if args.command == "rollback-import":
         rollback_record = rollback_import(config, args.import_id)
         print(json.dumps(to_plain(rollback_record), indent=2))

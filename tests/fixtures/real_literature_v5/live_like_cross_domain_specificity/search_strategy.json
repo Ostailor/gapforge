@@ -1,0 +1,41 @@
+{
+  "id": "strategy-live_like_cross_domain_specificity",
+  "topic": "medical screening specificity methods for AI safety false-positive control",
+  "source_profile": "medicine+ai_safety",
+  "primary_queries": [
+    "medical screening specificity methods for AI safety false-positive control"
+  ],
+  "recency_queries": [
+    "medical screening specificity methods for AI safety false-positive control 2024 2025"
+  ],
+  "survey_queries": [
+    "medical screening specificity methods for AI safety false-positive control survey"
+  ],
+  "benchmark_queries": [
+    "medical screening specificity methods for AI safety false-positive control benchmark dataset"
+  ],
+  "dataset_queries": [
+    "medical screening specificity methods for AI safety false-positive control dataset"
+  ],
+  "method_queries": [
+    "medical screening specificity methods for AI safety false-positive control method metric"
+  ],
+  "closest_prior_work_queries": [
+    "medical screening specificity methods for AI safety false-positive control closest prior work"
+  ],
+  "adjacent_field_queries": [
+    "medical screening specificity methods for AI safety false-positive control screening specificity"
+  ],
+  "exclusion_queries": [
+    "medical screening specificity methods for AI safety false-positive control limitations"
+  ],
+  "expected_sources": [
+    "arxiv",
+    "semantic_scholar",
+    "openreview"
+  ],
+  "coverage_targets": {
+    "minimum_papers": 5,
+    "minimum_surveys": 1
+  }
+}

@@ -8,6 +8,7 @@ GapForge is a skills-based research ideation OS. It is not a rigid one-pass summ
 - **v0.2 evidence layer**: PDF artifacts, parsed sections, EvidenceSpan locators, source coverage, citation graph, related-work expansion, novelty dossiers, gap evidence matrices, human review, and strict reports.
 - **v0.3 project and retrieval layer**: project memory across runs, hybrid retrieval, source policy profiles, active loop decisions, optional LLM-backed skills, related-work matrices, direction maturation, experiment protocols, review queues, dashboards, and manuscript packages.
 - **v0.4 campaign and actual-run layer**: campaign state, campaign controller decisions, Codex/GPT-5.4 task packs, direct/handoff runner paths, strict output import validation, repair/rollback, novelty re-search loops, campaign reviewer loops, experiment code tasks, campaign canaries, human acceptance gates, and release-gate enforcement.
+- **v0.5 real-literature quality layer**: live source health diagnostics, planned multi-round search strategies, paper canonicalization, prior-work recall gates, real-literature campaign records, human research-quality review, dashboards/reports for quality acceptance, and v5 release-gate enforcement.
 
 ## Core Layers
 
@@ -73,6 +74,14 @@ GapForge is a skills-based research ideation OS. It is not a rigid one-pass summ
    - `src/gapforge/campaigns/reporting.py` renders campaign reports with explicit stop reasons.
    - Reports must show source coverage, evidence locators, unsupported claims, rejected ideas, fake-vs-real agent mode, validation state, and uncertainty.
 
+12. **Real-literature campaign quality**
+   - `src/gapforge/sources/health.py` and `src/gapforge/sources/live_diagnostics.py` check whether source connectors are reachable and returning live-looking results.
+   - `src/gapforge/search_strategy/` plans initial, survey, benchmark, novelty, adjacent-field, and counterevidence rounds before synthesis.
+   - `src/gapforge/sources/canonical.py` deduplicates paper records by DOI, arXiv/OpenReview/Semantic Scholar ID, exact normalized title, and conservative title/author/year similarity.
+   - `src/gapforge/novelty/recall_gate.py` blocks strong novelty until required prior-work searches are complete.
+   - `src/gapforge/real_literature/` defines profiles, dry-run planning, campaign records, and human quality review.
+   - `src/gapforge/release_gate/v05.py` separates workflow acceptance from research-quality acceptance.
+
 ## v0.3 Staged Loop
 
 `gapforge run "topic" --v3` may run:
@@ -125,6 +134,29 @@ Common stop reasons include `ready_experiment_protocol`, `not_ready_poor_coverag
 
 Actual Codex/GPT-5.4 campaign work must enter state only through validated import. A task-pack handoff is not actual-run evidence until real Codex output is imported, attested, and accepted by human review.
 
+## v0.5 Real-Literature Campaign Flow
+
+The v0.5 flow adds research-quality gates before Codex synthesis:
+
+```text
+dry-run broad campaign
+-> live source health diagnostic
+-> source-policy-aware search strategy
+-> execute search rounds and record failures
+-> canonicalize duplicate papers
+-> triage/read priority papers
+-> build retrieval index
+-> mine gaps and counterevidence
+-> run prior-work recall gate
+-> ask Codex for bounded research synthesis only after evidence/search gates
+-> validate/import Codex patches
+-> build related-work matrix and experiment protocol or refusal
+-> human research-quality review
+-> v5 release gate
+```
+
+The controller should refuse recommendations when live coverage is disabled, fallback records dominate, required prior-work rounds are missing, or closest prior work likely solves the gap.
+
 ## v0.3 Active Loop
 
 `gapforge run "topic" --v3 --active --budget small` creates an active-loop run. The active loop evaluates current state, source policy, evidence coverage, novelty dossiers, review queue, and budget before selecting the next action. It can stop because coverage is sufficient, budget is exhausted, no new papers are found, or human review is needed.
@@ -140,3 +172,4 @@ Actual Codex/GPT-5.4 campaign work must enter state only through validated impor
 - Offline/fallback data must be labeled as such.
 - Fake-agent and prompt-pack-only outputs must not be represented as real Codex/GPT-5.4 research.
 - Campaign acceptance requires explicit stop reason, validated imports when agent-backed, and human review.
+- v0.5 research-quality acceptance additionally requires live source diagnostics, search strategy/rounds, canonicalized papers, prior-work recall, closest-prior-work evidence, and human quality review.

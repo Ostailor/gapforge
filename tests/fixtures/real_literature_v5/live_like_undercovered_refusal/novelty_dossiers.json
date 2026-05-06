@@ -1,0 +1,29 @@
+[
+  {
+    "target_id": "gap-live_like_undercovered_refusal",
+    "idea_summary": "narrow undercovered AI safety monitoring setting",
+    "query_plan": [
+      "narrow undercovered AI safety monitoring setting closest prior work"
+    ],
+    "candidates_considered": [
+      "live_like_undercovered_refusal-paper-1",
+      "live_like_undercovered_refusal-paper-2"
+    ],
+    "top_prior_work": [
+      "live_like_undercovered_refusal-paper-1"
+    ],
+    "comparison_table": [
+      {
+        "paper_id": "live_like_undercovered_refusal-paper-1",
+        "relationship": "partial_prior_work"
+      }
+    ],
+    "decisive_difference_needed": "Show a new setting not covered by closest prior work.",
+    "missing_searches": [],
+    "verdict": "unknown",
+    "novelty_strength": "unknown",
+    "confidence": "medium",
+    "reviewer_objection": "Coverage must remain explicit.",
+    "recommended_action": "refuse recommendation"
+  }
+]

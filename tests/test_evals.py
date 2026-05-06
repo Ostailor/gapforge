@@ -11,24 +11,33 @@ from gapforge.evals.fixtures import (
     V2_FIXTURE_NAMES,
     V3_FIXTURE_NAMES,
     V4_FIXTURE_NAMES,
+    V5_FIXTURE_NAMES,
     list_fixtures,
     load_fixture,
     load_v3_fixture,
     load_v4_fixture,
+    load_v5_fixture,
 )
 from gapforge.evals.metrics import (
     actual_run_gate_correctness,
     agent_output_validation_strictness,
+    canonicalization_quality,
     direction_maturity_accuracy,
     direction_maturity_gate_accuracy_from_fixture,
     gap_evidence_matrix_score,
+    live_source_coverage_score,
     manuscript_package_honesty,
     novelty_research_loop_quality,
+    prior_work_recall_gate_score,
+    quality_review_gate_correctness,
+    real_literature_refusal_quality,
     retrieval_relevance_at_k,
     rollback_safety,
+    search_strategy_completeness,
     source_policy_compliance,
     stop_reason_correctness,
     unsupported_claim_rate,
+    v5_release_gate_correctness,
 )
 from gapforge.models import Claim, ResearchRunState, ResearchTopic, SourceCoverageReport
 
@@ -87,6 +96,24 @@ def test_v4_eval_fixtures_are_complete_and_offline() -> None:
         assert fixture.campaign_fixture["decisions"]
         assert fixture.campaign_fixture["stop_reason"]
         assert fixture.campaign_fixture["actual_run_gate"]
+
+
+def test_v5_eval_fixtures_are_complete_and_offline() -> None:
+    for name in V5_FIXTURE_NAMES:
+        fixture = load_v5_fixture(name)
+        payload = fixture.real_literature_fixture
+        assert fixture.is_v5
+        assert fixture.topic
+        assert fixture.papers
+        assert payload["source_health"]
+        assert payload["search_strategy"]
+        assert "papers" in payload
+        assert payload["canonical_papers"]
+        assert payload["prior_work_recall_assessment"]
+        assert payload["novelty_dossiers"]
+        assert payload["related_work_matrix"]
+        assert payload["human_quality_review"]
+        assert payload["expected_release_gate_result"]
 
 
 def test_run_evals_single_fixture_writes_report(tmp_path: Path) -> None:
@@ -233,6 +260,20 @@ def test_run_v4_evals_includes_campaign_metrics_offline(tmp_path: Path, monkeypa
     assert "v0.4 overall score" in text
 
 
+def test_run_v5_evals_includes_real_literature_metrics_offline(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("GAPFORGE_DISABLE_NETWORK", "1")
+
+    report = run_evals(v5=True, output_dir=tmp_path, write_report=True)
+
+    assert len(report.results) == len(V5_FIXTURE_NAMES)
+    assert all(result.scores.live_source_coverage_score is not None for result in report.results)
+    assert all(result.scores.quality_review_gate_correctness is not None for result in report.results)
+    text = (tmp_path / "eval_report.md").read_text(encoding="utf-8")
+    assert "### v0.5 Scores" in text
+    assert "v0.5 overall score" in text
+    assert "quality_review_gate_correctness" in text
+
+
 def test_v2_duplicate_ideas_are_rejected_by_dossier_aware_novelty_gate() -> None:
     report = run_evals(fixture="ai_agent_covert_channels_v2", write_report=False)
     result = report.results[0]
@@ -363,3 +404,39 @@ def test_v4_rollback_safety_metric_works() -> None:
 
     assert rollback_safety(fixture) == 1.0
     assert rollback_safety(unsafe) < 0.6
+
+
+def test_v5_duplicate_prior_work_rejected() -> None:
+    fixture = load_v5_fixture("live_like_prior_work_duplicate").real_literature_fixture
+
+    assert prior_work_recall_gate_score(fixture) == 1.0
+    assert quality_review_gate_correctness(fixture) == 1.0
+    assert v5_release_gate_correctness(fixture) == 1.0
+
+
+def test_v5_undercovered_refusal_accepted() -> None:
+    fixture = load_v5_fixture("live_like_undercovered_refusal").real_literature_fixture
+
+    assert real_literature_refusal_quality(fixture) == 1.0
+    assert quality_review_gate_correctness(fixture) == 1.0
+    assert v5_release_gate_correctness(fixture) == 1.0
+
+
+def test_v5_missing_prior_work_recall_blocks_release_gate() -> None:
+    fixture = load_v5_fixture("live_like_monitor_evasion").real_literature_fixture
+    fixture["prior_work_recall_assessment"]["missing_required_searches"] = ["novelty"]
+    fixture["expected_release_gate_result"]["prior_work_recall_should_block"] = True
+    fixture["expected_release_gate_result"]["passed"] = False
+    fixture["expected_release_gate_result"]["expected_blockers"] = ["missing prior-work recall"]
+
+    assert prior_work_recall_gate_score(fixture) < 1.0
+    assert v5_release_gate_correctness(fixture) == 1.0
+
+
+def test_v5_quality_review_metrics_work() -> None:
+    good = load_v5_fixture("live_like_low_fpr_collusion").real_literature_fixture
+
+    assert live_source_coverage_score(good) > 0.7
+    assert search_strategy_completeness(good) == 1.0
+    assert canonicalization_quality(good) == 1.0
+    assert quality_review_gate_correctness(good) == 1.0

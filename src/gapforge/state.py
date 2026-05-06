@@ -34,11 +34,17 @@ RUN_ARTIFACTS = [
     "config.json",
     "state.json",
     "papers.json",
+    "canonical_paper_identities.json",
+    "paper_merge_decisions.json",
+    "paper_merge_report.md",
     "paper_artifacts.json",
     "paper_sections.json",
     "evidence_spans.json",
     "evidence_spans.md",
     "search_queries.json",
+    "search_strategies.json",
+    "search_rounds.json",
+    "search_rounds.md",
     "source_coverage.json",
     "source_coverage.md",
     "coverage_stopping_assessment.json",
@@ -79,6 +85,8 @@ RUN_ARTIFACTS = [
     "novelty_gate.md",
     "novelty_dossiers.json",
     "novelty_dossiers.md",
+    "prior_work_recall.json",
+    "prior_work_recall.md",
     "related_work_matrix.json",
     "related_work_matrix.md",
     "experiments.json",
@@ -176,10 +184,19 @@ class ResearchStateManager:
         self._write_json(run_dir / "config.json", state.config)
         self._write_json(run_dir / "state.json", state.to_dict())
         self._write_json(run_dir / "papers.json", state.papers)
+        self._write_json_if_missing(run_dir / "canonical_paper_identities.json", [])
+        self._write_json_if_missing(run_dir / "paper_merge_decisions.json", [])
+        self._write_text_if_missing(
+            run_dir / "paper_merge_report.md",
+            "# Paper Merge Report\n\nNo paper canonicalization has been run yet.\n",
+        )
         self._write_json(run_dir / "paper_artifacts.json", state.paper_artifacts)
         self._write_json(run_dir / "paper_sections.json", state.paper_sections)
         self._write_json(run_dir / "evidence_spans.json", state.evidence_spans)
         self._write_json(run_dir / "search_queries.json", state.search_queries)
+        self._write_json(run_dir / "search_strategies.json", state.search_strategies)
+        self._write_json(run_dir / "search_rounds.json", state.search_rounds)
+        self._write_search_rounds_markdown(state)
         self._write_json(run_dir / "source_coverage.json", state.source_coverage)
         self._write_json(run_dir / "coverage_stopping_assessment.json", state.coverage_stopping_assessment)
         self._write_json(run_dir / "citation_graph.json", state.citation_graph)
@@ -200,6 +217,7 @@ class ResearchStateManager:
         self._write_json(run_dir / "cross_domain_transfers.json", state.cross_domain_transfers)
         self._write_json(run_dir / "novelty_gate.json", state.novelty_assessments)
         self._write_json(run_dir / "novelty_dossiers.json", state.novelty_dossiers)
+        self._write_json(run_dir / "prior_work_recall.json", state.prior_work_recall_assessments)
         self._write_json(run_dir / "related_work_matrix.json", state.related_work_matrices)
         self._write_json(run_dir / "experiments.json", state.experiments)
         self._write_json(run_dir / "experiment_protocols.json", state.experiment_protocols)
@@ -239,6 +257,7 @@ class ResearchStateManager:
         self._write_cross_domain_transfers_markdown(state)
         self._write_novelty_gate_markdown(state)
         self._write_novelty_dossiers_markdown(state)
+        self._write_prior_work_recall_markdown(state)
         self._write_related_work_matrix_markdown(state)
         self._write_experiments_markdown(state)
         self._write_experiment_protocols_markdown(state)
@@ -734,6 +753,14 @@ class ResearchStateManager:
     def _write_json(self, path: Path, value: object) -> None:
         path.write_text(json.dumps(to_plain(value), indent=2) + "\n", encoding="utf-8")
 
+    def _write_json_if_missing(self, path: Path, value: object) -> None:
+        if not path.exists():
+            self._write_json(path, value)
+
+    def _write_text_if_missing(self, path: Path, value: str) -> None:
+        if not path.exists():
+            path.write_text(value, encoding="utf-8")
+
     def _write_topic(self, state: ResearchRunState) -> None:
         Path(state.run_dir, "topic.md").write_text(f"# {state.topic.text}\n\nRun: `{state.run_id}`\n", encoding="utf-8")
 
@@ -1131,6 +1158,34 @@ class ResearchStateManager:
             path.write_text("# Coverage Stopping Assessment\n\nNo policy-aware assessment generated yet.\n", encoding="utf-8")
             return
         path.write_text(render_stopping_assessment_markdown(state.coverage_stopping_assessment), encoding="utf-8")
+
+    def _write_search_rounds_markdown(self, state: ResearchRunState) -> None:
+        path = Path(state.run_dir, "search_rounds.md")
+        lines = ["# Search Rounds", ""]
+        if state.search_strategies:
+            lines.extend(["## Strategies", ""])
+            for strategy in state.search_strategies:
+                lines.extend(
+                    [
+                        f"- `{strategy.id}` ({strategy.source_profile})",
+                        f"  - Topic: {strategy.topic}",
+                        f"  - Expected sources: {', '.join(strategy.expected_sources) or 'none'}",
+                    ]
+                )
+        lines.extend(["", "## Rounds", ""])
+        if not state.search_rounds:
+            lines.append("- none")
+        for round_item in state.search_rounds:
+            lines.extend(
+                [
+                    f"- `{round_item.id}` {round_item.round_type}: {round_item.status}",
+                    f"  - Queries: {len(round_item.queries)}",
+                    f"  - Sources: {', '.join(round_item.sources) or 'none'}",
+                    f"  - Results: {len(round_item.result_paper_ids)}",
+                    f"  - Failures: {len(round_item.failures)}",
+                ]
+            )
+        path.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
 
     def _write_evidence_spans_markdown(self, state: ResearchRunState) -> None:
         path = Path(state.run_dir, "evidence_spans.md")
@@ -1775,6 +1830,14 @@ class ResearchStateManager:
             lines.extend([f"- {query}" for query in dossier.missing_searches] or ["- none"])
             lines.append("")
         path.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
+
+    def _write_prior_work_recall_markdown(self, state: ResearchRunState) -> None:
+        from gapforge.novelty.recall_gate import render_prior_work_recall_report
+
+        Path(state.run_dir, "prior_work_recall.md").write_text(
+            render_prior_work_recall_report(state.prior_work_recall_assessments),
+            encoding="utf-8",
+        )
 
     def _write_related_work_matrix_markdown(self, state: ResearchRunState) -> None:
         path = Path(state.run_dir, "related_work_matrix.md")

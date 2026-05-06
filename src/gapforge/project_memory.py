@@ -66,6 +66,9 @@ PROJECT_ARTIFACTS = [
     "claim_graph.json",
     "claim_graph.md",
     "project_report.md",
+    "canonical_paper_identities.json",
+    "paper_merge_decisions.json",
+    "paper_merge_report.md",
 ]
 
 
@@ -198,6 +201,12 @@ class ProjectMemoryManager:
         self._write_json(root_dir / "review_panels.json", program.review_panels)
         self._write_json(root_dir / "review_queue.json", program.review_queue)
         self._write_json(root_dir / "claim_graph.json", program.claim_graph)
+        self._write_json_if_missing(root_dir / "canonical_paper_identities.json", [])
+        self._write_json_if_missing(root_dir / "paper_merge_decisions.json", [])
+        self._write_text_if_missing(
+            root_dir / "paper_merge_report.md",
+            "# Paper Merge Report\n\nNo project paper canonicalization has been run yet.\n",
+        )
         self._write_related_work_matrix_markdown(program, root_dir)
         self._write_experiment_protocols_markdown(program, root_dir)
         self._write_baseline_candidates_markdown(program, root_dir)
@@ -278,6 +287,29 @@ class ProjectMemoryManager:
             ]
             or ["- none"]
         )
+        lines.extend(["", "## Real Literature Quality", ""])
+        for campaign in program.campaigns[:20]:
+            campaign_dir = root_dir / "campaigns" / campaign.id
+            acceptance = _read_json_dict(campaign_dir / "real_literature_acceptance.json")
+            reviews = _read_json_list(campaign_dir / "real_literature_reviews.json")
+            latest = reviews[-1] if reviews else {}
+            if not acceptance and not latest:
+                continue
+            workflow = acceptance.get("accepted_for_workflow", latest.get("accepted_for_workflow", False))
+            quality = acceptance.get("accepted_for_research_quality", latest.get("accepted_for_research_quality", False))
+            blockers = acceptance.get("blocking_failures", [])
+            lines.extend(
+                [
+                    f"- `{campaign.id}` workflow_accepted={str(bool(workflow)).lower()} "
+                    f"research_quality_accepted={str(bool(quality)).lower()} reviewer={latest.get('reviewer', 'none')}",
+                    f"  - Blockers: {'; '.join(map(str, blockers)) or 'none'}",
+                    f"  - Fake citations: {str(bool(latest.get('fake_citation_found', False))).lower()}; "
+                    f"missed prior work: {str(bool(latest.get('missed_obvious_prior_work', False))).lower()}; "
+                    f"overclaimed novelty: {str(bool(latest.get('overclaimed_novelty', False))).lower()}",
+                ]
+            )
+        if not any((root_dir / "campaigns" / campaign.id / "real_literature_acceptance.json").exists() for campaign in program.campaigns):
+            lines.append("- No real-literature quality reviews recorded.")
         lines.extend(["", "## Corpus Summary", ""])
         lines.extend(
             [
@@ -659,6 +691,15 @@ class ProjectMemoryManager:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(to_plain(value), indent=2) + "\n", encoding="utf-8")
 
+    def _write_json_if_missing(self, path: Path, value: object) -> None:
+        if not path.exists():
+            self._write_json(path, value)
+
+    def _write_text_if_missing(self, path: Path, value: str) -> None:
+        if not path.exists():
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(value, encoding="utf-8")
+
 
 def _load_list(path: Path, model: type[Any]) -> list[Any]:
     if not path.exists():
@@ -822,6 +863,26 @@ def _unique(items: list[str]) -> list[str]:
             seen.add(item)
             unique_items.append(item)
     return unique_items
+
+
+def _read_json_dict(path: Path) -> dict[str, Any]:
+    if not path.exists():
+        return {}
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return raw if isinstance(raw, dict) else {}
+
+
+def _read_json_list(path: Path) -> list[dict[str, Any]]:
+    if not path.exists():
+        return []
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return []
+    return raw if isinstance(raw, list) else [raw] if isinstance(raw, dict) else []
 
 
 def _project_provenance(skill: str, source_ids: list[str], summary: str) -> Provenance:

@@ -1,0 +1,41 @@
+[
+  {
+    "direction_id": "gap-live_like_prior_work_duplicate",
+    "entries": [
+      {
+        "direction_id": "gap-live_like_prior_work_duplicate",
+        "paper_id": "live_like_prior_work_duplicate-paper-1",
+        "relationship": "directly_solves",
+        "relevance_score": 0.9,
+        "evidence_span_ids": [
+          "span-live_like_prior_work_duplicate-1"
+        ],
+        "what_it_contributes": "Closest prior-work boundary.",
+        "what_it_does_not_solve": "Nothing material.",
+        "must_cite": true,
+        "baseline_candidate": true,
+        "reviewer_risk_if_omitted": "High"
+      },
+      {
+        "direction_id": "gap-live_like_prior_work_duplicate",
+        "paper_id": "live_like_prior_work_duplicate-paper-2",
+        "relationship": "survey/background",
+        "relevance_score": 0.7,
+        "evidence_span_ids": [
+          "span-live_like_prior_work_duplicate-2"
+        ],
+        "must_cite": true,
+        "baseline_candidate": false
+      }
+    ],
+    "coverage_summary": "Synthetic related-work matrix for v5 eval behavior.",
+    "missing_categories": [],
+    "must_read_paper_ids": [
+      "live_like_prior_work_duplicate-paper-1",
+      "live_like_prior_work_duplicate-paper-2"
+    ],
+    "baseline_paper_ids": [
+      "live_like_prior_work_duplicate-paper-1"
+    ]
+  }
+]

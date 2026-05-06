@@ -1,0 +1,22 @@
+[
+  {
+    "source_name": "arxiv",
+    "status": "degraded",
+    "test_query": "narrow undercovered AI safety monitoring setting",
+    "result_count": 1,
+    "latency_ms": 120,
+    "error": "",
+    "warning": "too few results for coverage",
+    "checked_at": "2026-05-06T00:00:00Z"
+  },
+  {
+    "source_name": "semantic_scholar",
+    "status": "unavailable",
+    "test_query": "narrow undercovered AI safety monitoring setting",
+    "result_count": 0,
+    "latency_ms": 0,
+    "error": "fixture source unavailable",
+    "warning": "",
+    "checked_at": "2026-05-06T00:00:00Z"
+  }
+]

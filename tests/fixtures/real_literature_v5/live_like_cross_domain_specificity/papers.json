@@ -1,0 +1,26 @@
+[
+  {
+    "id": "live_like_cross_domain_specificity-paper-1",
+    "title": "Closest prior work for medical screening specificity methods for AI safety false-positive control",
+    "authors": [
+      "Fixture Author"
+    ],
+    "abstract": "Synthetic short excerpt metadata. This is fixture content, not a real literature conclusion.",
+    "year": 2025,
+    "source": "fixture",
+    "doi": "10.5555/live_like_cross_domain_specificity.1",
+    "url": "https://example.invalid/fixture"
+  },
+  {
+    "id": "live_like_cross_domain_specificity-paper-2",
+    "title": "Survey background for medical screening specificity methods for AI safety false-positive control",
+    "authors": [
+      "Fixture Surveyor"
+    ],
+    "abstract": "Synthetic survey metadata for offline eval behavior.",
+    "year": 2024,
+    "source": "fixture",
+    "doi": "10.5555/live_like_cross_domain_specificity.2",
+    "url": "https://example.invalid/survey"
+  }
+]

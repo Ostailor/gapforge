@@ -17,6 +17,7 @@ from gapforge.models import (
     NoveltyDossier,
     Paper,
     PaperNote,
+    PriorWorkRecallAssessment,
     ResearchRunState,
     ReviewerObjection,
     ReviewerSimulationSummary,
@@ -57,6 +58,7 @@ def build_final_report(state: ResearchRunState, *, strict: bool = False) -> dict
     notes_by_paper = {note.paper_id: note for note in state.paper_notes}
     novelty_by_target = {item.target_gap_or_hypothesis_id: item for item in state.novelty_assessments}
     dossier_by_target = {item.target_id: item for item in state.novelty_dossiers}
+    recall_by_target = {item.target_id: item for item in state.prior_work_recall_assessments}
     matrix_by_gap = {item.gap_id: item for item in state.gap_evidence_matrices}
     transfer_by_id = {item.id: item for item in state.cross_domain_transfers}
     objections_by_experiment = _group_objections(state.reviewer_objections)
@@ -66,15 +68,18 @@ def build_final_report(state: ResearchRunState, *, strict: bool = False) -> dict
     coverage = _search_coverage(state)
     retrieval_coverage = _retrieval_coverage(state)
     evidence_index = _evidence_locator_index(state)
+    recall_required = bool(state.search_strategies or state.prior_work_recall_assessments)
     top_direction = _top_direction_v2(
         top_gap,
         top_experiment,
         novelty_by_target,
         objections_by_experiment,
         dossier_by_target,
+        recall_by_target,
         matrix_by_gap,
         coverage,
         evidence_index,
+        recall_required=recall_required,
         strict=strict,
     )
     supported_claims = [claim for claim in state.claims if claim.status == "supported" and claim.supporting_evidence]
@@ -87,6 +92,7 @@ def build_final_report(state: ResearchRunState, *, strict: bool = False) -> dict
     ]
     deeply_read = _key_papers_read_deeply(state, paper_by_id, notes_by_paper, evidence_index)
     novelty_records = [_novelty_record(item, dossier_by_target.get(item.target_gap_or_hypothesis_id)) for item in state.novelty_assessments]
+    prior_work_recall_records = [_prior_work_recall_record(item) for item in state.prior_work_recall_assessments]
     experiment_records = [
         _experiment_record(experiment, novelty_by_target, objections_by_experiment)
         for experiment in _ranked_experiments(state.experiments, novelty_by_target, objections_by_experiment)
@@ -111,6 +117,8 @@ def build_final_report(state: ResearchRunState, *, strict: bool = False) -> dict
             "strict_mode": strict,
         },
         "what_was_searched": _what_was_searched(coverage),
+        "search_strategy": _search_strategy_summary(state),
+        "real_literature_quality": _real_literature_quality_summary(state, coverage, prior_work_recall_records),
         "source_and_full_text_coverage": coverage,
         "retrieval_coverage": retrieval_coverage,
         "field_map": _literature_map(state, paper_by_id),
@@ -120,6 +128,7 @@ def build_final_report(state: ResearchRunState, *, strict: bool = False) -> dict
         "gap_evidence_matrix_summary": _gap_matrix_summary(state, evidence_index),
         "cross_domain_transfer_candidates": _cross_domain_transfer_candidates(state, transfer_by_id),
         "closest_prior_work_dossiers": novelty_records,
+        "prior_work_recall_gate": prior_work_recall_records,
         "recommended_top_research_direction": top_direction,
         "experiment_plan_for_top_direction": _experiment_for_top_direction(top_experiment, experiment_records),
         "reviewer_simulation_and_blocking_issues": _reviewer_simulation(state),
@@ -163,11 +172,14 @@ def build_final_report(state: ResearchRunState, *, strict: bool = False) -> dict
         "broad_topic_interpretation": _topic_interpretation(state),
         "literature_map": sections["field_map"],
         "search_coverage": coverage,
+        "search_strategy": sections["search_strategy"],
+        "real_literature_quality": sections["real_literature_quality"],
         "top_paper_clusters": sections["important_paper_clusters"],
         "key_papers_read_deeply": deeply_read,
         "strongest_research_gaps": strongest_gaps,
         "cross_domain_connections": sections["cross_domain_transfer_candidates"],
         "novelty_gate_results": novelty_records,
+        "prior_work_recall_gate": prior_work_recall_records,
         "recommended_experiment_plans": experiment_records,
         "reviewer_simulation": sections["reviewer_simulation_and_blocking_issues"],
         "claim_ledger_summary": claim_summary,
@@ -239,6 +251,28 @@ def render_markdown_report(report: dict[str, Any]) -> str:
         lines.append("- No searches are recorded. Treat the report as an offline or manually assembled smoke artifact.")
     lines.append("")
 
+    _section(lines, "2a. Search Strategy And Rounds")
+    strategy = sections.get("search_strategy", {})
+    lines.extend(
+        [
+            f"- Search strategies planned: {strategy.get('strategy_count', 0)}",
+            f"- Search rounds recorded: {strategy.get('round_count', 0)}",
+            f"- Completed rounds: {', '.join(strategy.get('completed_round_types', [])) or 'none'}",
+            f"- Missing prior-work rounds: {', '.join(strategy.get('missing_prior_work_rounds', [])) or 'none'}",
+            f"- Closest-prior-work queries: {strategy.get('closest_prior_work_query_count', 0)}",
+            "",
+        ]
+    )
+    if strategy.get("rounds"):
+        for item in strategy["rounds"][:12]:
+            lines.append(
+                f"- `{item['id']}` {item['round_type']} [{item['status']}], sources={', '.join(item['sources']) or 'none'}, "
+                f"results={len(item['result_paper_ids'])}, failures={len(item['failures'])}"
+            )
+    else:
+        lines.append("- No search rounds are recorded; novelty and coverage should remain conservative.")
+    lines.append("")
+
     _section(lines, "3. Source and Full-Text Coverage")
     lines.extend(
         [
@@ -276,7 +310,35 @@ def render_markdown_report(report: dict[str, Any]) -> str:
         lines.extend([f"- {query}" for query in coverage.get("policy_recommended_queries", [])[:8]])
         lines.append("")
 
-    _section(lines, "3a. Skill Execution Provenance")
+    _section(lines, "3a. Real-Literature Quality")
+    quality = sections.get("real_literature_quality", report.get("real_literature_quality", {}))
+    lines.extend(
+        [
+            f"- Live source health: {quality.get('live_source_health', 'not recorded')}",
+            f"- Search strategy: {quality.get('search_strategy_count', 0)} planned",
+            f"- Search rounds completed: {', '.join(quality.get('completed_search_rounds', [])) or 'none'}",
+            f"- Papers collected and canonicalized: {coverage.get('paper_count', 0)} collected; "
+            f"canonicalization recorded={str(quality.get('canonicalization_recorded', False)).lower()}",
+            f"- Full-text/abstract coverage: {coverage.get('papers_with_full_text', 0)} full-text; "
+            f"{coverage.get('abstract_only_notes', 0)} abstract-only",
+            f"- Fallback/fixture papers: {quality.get('fallback_paper_count', 0)}",
+            f"- Prior-work recall gate: {quality.get('prior_work_recall_count', 0)} assessment(s)",
+            f"- Missing prior-work search rounds: {', '.join(quality.get('missing_prior_work_searches', [])) or 'none'}",
+            f"- Gaps and counterevidence: {quality.get('gap_count', 0)} gaps; "
+            f"{quality.get('counterevidence_gap_count', 0)} with counterevidence",
+            f"- Codex synthesis artifacts: {quality.get('agent_imported_count', 0)} validated/imported agent output(s)",
+            f"- Human quality review: {quality.get('human_quality_review', 'not recorded')}",
+            f"- Workflow acceptance vs research-quality acceptance: {quality.get('acceptance_status', 'not assessed')}",
+            f"- Stop reason: {quality.get('stop_reason', 'run-level report has no campaign stop reason')}",
+            f"- Remaining search gaps: {'; '.join(quality.get('remaining_search_gaps', [])) or 'none recorded'}",
+            f"- Next actions: {'; '.join(quality.get('next_actions', [])) or 'none generated'}",
+        ]
+    )
+    if quality.get("recommendation_refusal_reason"):
+        lines.append(f"- Recommendation refused because: {quality['recommendation_refusal_reason']}")
+    lines.append("")
+
+    _section(lines, "3b. Skill Execution Provenance")
     agent_summary = sections.get("agent_execution_provenance", report.get("agent_execution_provenance", {}))
     lines.extend(
         [
@@ -297,7 +359,7 @@ def render_markdown_report(report: dict[str, Any]) -> str:
         )
     lines.append("")
 
-    _section(lines, "3b. Retrieval Coverage")
+    _section(lines, "3c. Retrieval Coverage")
     retrieval = sections.get("retrieval_coverage", report.get("retrieval_coverage", {}))
     lines.extend(
         [
@@ -428,6 +490,23 @@ def render_markdown_report(report: dict[str, Any]) -> str:
         )
     if not sections.get("closest_prior_work_dossiers"):
         lines.append("- No novelty dossiers are available. Treat novelty as unchecked.")
+    lines.append("")
+
+    _section(lines, "10a. Prior-Work Recall Gate")
+    for item in sections.get("prior_work_recall_gate", []):
+        lines.extend(
+            [
+                f"- `{item['target_id']}` novelty_allowed={str(item['novelty_allowed']).lower()}, "
+                f"confidence={item['recall_confidence']}, likely_duplicate={str(item['likely_duplicate']).lower()}",
+                f"  - Required rounds: {', '.join(item['required_query_rounds']) or 'none'}",
+                f"  - Completed rounds: {', '.join(item['completed_query_rounds']) or 'none'}",
+                f"  - Missing searches: {', '.join(item['missing_required_searches']) or 'none'}",
+                f"  - Top prior work: {_format_ids(item['top_prior_work_ids'])}",
+                f"  - Blocking issues: {'; '.join(item['blocking_issues']) or 'none'}",
+            ]
+        )
+    if not sections.get("prior_work_recall_gate"):
+        lines.append("- No prior-work recall assessments are available. Do not hide missing prior-work searches.")
     lines.append("")
 
     _section(lines, "11. Recommended Top Research Direction")
@@ -641,10 +720,12 @@ def _top_direction_v2(
     novelty_by_target: dict[str, NoveltyAssessment],
     objections_by_experiment: dict[str, list[ReviewerObjection]],
     dossier_by_target: dict[str, NoveltyDossier],
+    recall_by_target: dict[str, PriorWorkRecallAssessment],
     matrix_by_gap: dict[str, GapEvidenceMatrix],
     coverage: dict[str, Any],
     evidence_index: dict[str, list[str]],
     *,
+    recall_required: bool,
     strict: bool,
 ) -> dict[str, Any]:
     if top_gap is None:
@@ -652,6 +733,7 @@ def _top_direction_v2(
 
     novelty = novelty_by_target.get(top_gap.id)
     dossier = dossier_by_target.get(top_gap.id)
+    recall = recall_by_target.get(top_gap.id)
     evidence_locators = _gap_evidence_locators(top_gap, matrix_by_gap.get(top_gap.id), evidence_index)
     objections = objections_by_experiment.get(top_experiment.id, []) if top_experiment is not None else []
     blocking = [item for item in objections if item.blocks_submission]
@@ -673,6 +755,11 @@ def _top_direction_v2(
         blocking_reasons.append(f"Closest-prior-work dossier verdict is {dossier.verdict}, not pursue.")
     if missing_searches:
         blocking_reasons.append(f"{len(missing_searches)} novelty search item(s) are still missing.")
+    if recall is None and top_gap.id and recall_required:
+        blocking_reasons.append("No prior-work recall gate assessment exists for the top gap.")
+    elif recall is not None and not recall.novelty_allowed:
+        blocking_reasons.append("Prior-work recall gate blocks novelty or recommendation.")
+        blocking_reasons.extend(recall.blocking_issues[:4])
     if top_experiment is None:
         blocking_reasons.append("No experiment plan exists for the top gap.")
     if blocking:
@@ -1037,6 +1124,77 @@ def _what_was_searched(coverage: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _search_strategy_summary(state: ResearchRunState) -> dict[str, Any]:
+    completed_rounds = sorted({round_item.round_type for round_item in state.search_rounds if round_item.status == "complete"})
+    prior_work_rounds = {"novelty", "survey", "benchmark", "counterevidence"}
+    return {
+        "strategy_count": len(state.search_strategies),
+        "round_count": len(state.search_rounds),
+        "completed_round_types": completed_rounds,
+        "missing_prior_work_rounds": sorted(prior_work_rounds - set(completed_rounds)) if state.search_strategies else [],
+        "closest_prior_work_query_count": sum(len(strategy.closest_prior_work_queries) for strategy in state.search_strategies),
+        "rounds": [to_plain(round_item) for round_item in state.search_rounds],
+    }
+
+
+def _real_literature_quality_summary(
+    state: ResearchRunState,
+    coverage: dict[str, Any],
+    prior_work_recall_records: list[dict[str, Any]],
+) -> dict[str, Any]:
+    completed_rounds = sorted({round_item.round_type for round_item in state.search_rounds if round_item.status == "complete"})
+    missing_prior_work_searches = _dedupe(
+        [str(item) for record in prior_work_recall_records for item in record.get("missing_required_searches", []) if item]
+    )
+    policy_gaps = (
+        [str(item) for item in state.coverage_stopping_assessment.missing_requirements if item]
+        if state.coverage_stopping_assessment is not None
+        else []
+    )
+    remaining_search_gaps = _dedupe(missing_prior_work_searches + policy_gaps)
+    counterevidence_gap_count = sum(
+        1
+        for matrix in state.gap_evidence_matrices
+        if matrix.papers_countering or any(row.supports_or_counters == "counters" for row in matrix.evidence_rows)
+    )
+    imported = [record for record in state.agent_run_records if record.status == "imported"]
+    refusal_reason = ""
+    if coverage.get("coverage_assessment") == "poor":
+        refusal_reason = "coverage is poor"
+    elif any(record.get("blocking_issues") for record in prior_work_recall_records):
+        refusal_reason = "prior-work recall blockers remain"
+    elif missing_prior_work_searches:
+        refusal_reason = "required prior-work searches are missing"
+    next_actions = []
+    if coverage.get("fallback_paper_count", 0):
+        next_actions.append("Replace fallback or fixture paper records with live-source records before making quality claims.")
+    if missing_prior_work_searches:
+        next_actions.append("Complete the missing prior-work search rounds before strengthening novelty.")
+    if not state.search_strategies:
+        next_actions.append("Plan a live-literature search strategy before synthesis.")
+    if not state.search_rounds:
+        next_actions.append("Execute search rounds and record failures/results.")
+    return {
+        "live_source_health": "recorded through source coverage" if coverage.get("searched_sources") else "not recorded",
+        "search_strategy_count": len(state.search_strategies),
+        "search_round_count": len(state.search_rounds),
+        "completed_search_rounds": completed_rounds,
+        "canonicalization_recorded": bool(state.config.get("canonicalization_recorded")),
+        "fallback_paper_count": coverage.get("fallback_paper_count", 0),
+        "prior_work_recall_count": len(prior_work_recall_records),
+        "missing_prior_work_searches": missing_prior_work_searches,
+        "gap_count": len(state.gaps),
+        "counterevidence_gap_count": counterevidence_gap_count,
+        "agent_imported_count": len(imported),
+        "human_quality_review": "not recorded",
+        "acceptance_status": "workflow and research-quality acceptance are campaign-level and not recorded in run state",
+        "stop_reason": "run-level report has no campaign stop reason",
+        "remaining_search_gaps": remaining_search_gaps,
+        "next_actions": next_actions,
+        "recommendation_refusal_reason": refusal_reason,
+    }
+
+
 def _top_paper_clusters(state: ResearchRunState, paper_by_id: dict[str, Paper]) -> list[dict[str, Any]]:
     if state.field_map is None:
         return []
@@ -1217,6 +1375,10 @@ def _novelty_record(assessment: NoveltyAssessment, dossier: NoveltyDossier | Non
         "novelty_strength": assessment.novelty_strength,
         "confidence": assessment.confidence,
     }
+
+
+def _prior_work_recall_record(assessment: PriorWorkRecallAssessment) -> dict[str, Any]:
+    return to_plain(assessment)
 
 
 def _experiment_record(

@@ -21,6 +21,7 @@ from gapforge.models import (
     CampaignImportRecord,
     CampaignMilestone,
     CampaignStep,
+    CampaignStopCondition,
     EvidenceSpan,
     Gap,
     HumanReviewRecord,
@@ -32,6 +33,7 @@ from gapforge.models import (
     ResearchRunState,
     ReviewPanel,
     ReviewQueue,
+    SearchRound,
     SourceCoverageReport,
     from_dict,
 )
@@ -54,6 +56,12 @@ PAGES = [
     ("imports.html", "Imports"),
     ("human_reviews.html", "Human Reviews"),
     ("release_gate.html", "Release Gate"),
+    ("live_sources.html", "Live Sources"),
+    ("search_strategy.html", "Search Strategy"),
+    ("search_rounds.html", "Search Rounds"),
+    ("prior_work_recall.html", "Prior-Work Recall"),
+    ("real_literature_quality.html", "Real Literature Quality"),
+    ("v5_release_gate.html", "v5 Release Gate"),
 ]
 
 
@@ -110,6 +118,7 @@ class _DashboardContext:
         campaigns: list[ResearchCampaign] | None = None,
         campaign_states: list[CampaignState] | None = None,
         canary_records: list[CampaignCanaryRecord] | None = None,
+        run_states: list[ResearchRunState] | None = None,
     ) -> None:
         self.title = title
         self.subtitle = subtitle
@@ -128,6 +137,7 @@ class _DashboardContext:
         self.campaigns = campaigns or []
         self.campaign_states = campaign_states or []
         self.canary_records = canary_records or []
+        self.run_states = run_states or []
 
     @classmethod
     def from_run(cls, state: ResearchRunState) -> _DashboardContext:
@@ -149,6 +159,7 @@ class _DashboardContext:
             campaigns=[],
             campaign_states=[],
             canary_records=[],
+            run_states=[state],
         )
 
     @classmethod
@@ -184,6 +195,7 @@ class _DashboardContext:
             campaigns=program.campaigns,
             campaign_states=campaign_states,
             canary_records=_load_campaign_canaries(Path(program.project.root_dir).parents[1] / "data", program.project.id),
+            run_states=states,
         )
 
 
@@ -205,6 +217,12 @@ def _write_dashboard(root: Path, context: _DashboardContext) -> DashboardResult:
         "imports.html": _render_imports(context),
         "human_reviews.html": _render_human_reviews(context),
         "release_gate.html": _render_release_gate(context),
+        "live_sources.html": _render_live_sources(context),
+        "search_strategy.html": _render_search_strategy(context),
+        "search_rounds.html": _render_search_rounds(context),
+        "prior_work_recall.html": _render_prior_work_recall(context),
+        "real_literature_quality.html": _render_real_literature_quality(context),
+        "v5_release_gate.html": _render_v5_release_gate(context),
     }
     written = []
     for filename, body in pages.items():
@@ -678,6 +696,242 @@ def _render_release_gate(context: _DashboardContext) -> str:
     )
 
 
+def _render_live_sources(context: _DashboardContext) -> str:
+    rows: list[list[str]] = []
+    for state in context.campaign_states:
+        diagnostic = _campaign_live_source_diagnostic(context, state)
+        checks = diagnostic.get("source_health_checks", diagnostic.get("checks", []))
+        for check in checks if isinstance(checks, list) else []:
+            if not isinstance(check, dict):
+                continue
+            rows.append(
+                [
+                    _code(state.campaign.id),
+                    _e(str(check.get("source_name", ""))),
+                    _e(str(check.get("status", ""))),
+                    _e(str(check.get("test_query", ""))),
+                    _e(str(check.get("result_count", 0))),
+                    _e(str(check.get("latency_ms", ""))),
+                    _e(str(check.get("warning", ""))),
+                    _e(str(check.get("error", ""))),
+                ]
+            )
+    if not rows:
+        for coverage in context.coverage_reports:
+            for source in coverage.searched_sources:
+                rows.append(
+                    ["run coverage", _e(source), _e(coverage.confidence), "", "", "", _e("; ".join(coverage.coverage_warnings)), ""]
+                )
+    return "\n".join(
+        [
+            "<p><strong>Fallback and fixture counts must be treated as quality blockers when they dominate collected papers.</strong></p>",
+            _filter_box(),
+            _table(["Campaign", "Source", "Status", "Test Query", "Results", "Latency", "Warning", "Error"], rows),
+        ]
+    )
+
+
+def _render_search_strategy(context: _DashboardContext) -> str:
+    rows: list[list[str]] = []
+    for run in context.run_states:
+        for strategy in run.search_strategies:
+            rows.append(
+                [
+                    _code(run.run_id),
+                    _code(strategy.id),
+                    _e(strategy.source_profile),
+                    str(len(strategy.primary_queries)),
+                    str(len(strategy.survey_queries)),
+                    str(len(strategy.benchmark_queries)),
+                    str(len(strategy.closest_prior_work_queries)),
+                    _e("; ".join(strategy.primary_queries[:3])),
+                    _e(", ".join(strategy.expected_sources)),
+                ]
+            )
+    for state in context.campaign_states:
+        raw_strategy = _campaign_json(context, state, "search_strategy.json")
+        if raw_strategy:
+            rows.append(
+                [
+                    _code(state.campaign.id),
+                    _code(str(raw_strategy.get("id", ""))),
+                    _e(str(raw_strategy.get("source_profile", ""))),
+                    str(len(_as_list(raw_strategy.get("primary_queries")))),
+                    str(len(_as_list(raw_strategy.get("survey_queries")))),
+                    str(len(_as_list(raw_strategy.get("benchmark_queries")))),
+                    str(len(_as_list(raw_strategy.get("closest_prior_work_queries")))),
+                    _e("; ".join(map(str, _as_list(raw_strategy.get("primary_queries"))[:3]))),
+                    _e(", ".join(map(str, _as_list(raw_strategy.get("expected_sources"))))),
+                ]
+            )
+    return _filter_box() + _table(
+        ["Scope", "Strategy", "Profile", "Primary", "Survey", "Benchmark", "Prior Work", "Example Queries", "Expected Sources"],
+        rows,
+    )
+
+
+def _render_search_rounds(context: _DashboardContext) -> str:
+    rows: list[list[str]] = []
+    for run in context.run_states:
+        for round_item in run.search_rounds:
+            rows.append(_search_round_row(run.run_id, round_item))
+    for state in context.campaign_states:
+        raw_rounds = _campaign_json_list(context, state, "search_rounds.json")
+        for item in raw_rounds:
+            rows.append(
+                [
+                    _code(state.campaign.id),
+                    _code(str(item.get("id", ""))),
+                    _e(str(item.get("round_type", ""))),
+                    _e(str(item.get("status", ""))),
+                    _e(", ".join(map(str, _as_list(item.get("sources"))))),
+                    str(len(_as_list(item.get("result_paper_ids")))),
+                    _e("; ".join(map(str, _as_list(item.get("failures"))))),
+                ]
+            )
+    return _filter_box() + _table(["Scope", "Round", "Type", "Status", "Sources", "Results", "Failures"], rows)
+
+
+def _render_prior_work_recall(context: _DashboardContext) -> str:
+    rows: list[list[str]] = []
+    for run in context.run_states:
+        for assessment in run.prior_work_recall_assessments:
+            rows.append(
+                [
+                    _code(run.run_id),
+                    _code(assessment.target_id),
+                    _e(str(assessment.novelty_allowed)),
+                    _e(str(assessment.likely_duplicate)),
+                    _e(assessment.recall_confidence),
+                    _e(", ".join(assessment.completed_query_rounds)),
+                    _e(", ".join(assessment.missing_required_searches)),
+                    _e(", ".join(assessment.top_prior_work_ids)),
+                    _e("; ".join(assessment.blocking_issues)),
+                ]
+            )
+    for state in context.campaign_states:
+        raw = _campaign_json(context, state, "prior_work_recall.json")
+        items = raw if isinstance(raw, list) else [raw] if raw else []
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            rows.append(
+                [
+                    _code(state.campaign.id),
+                    _code(str(item.get("target_id", ""))),
+                    _e(str(item.get("novelty_allowed", ""))),
+                    _e(str(item.get("likely_duplicate", ""))),
+                    _e(str(item.get("recall_confidence", ""))),
+                    _e(", ".join(map(str, _as_list(item.get("completed_query_rounds"))))),
+                    _e(", ".join(map(str, _as_list(item.get("missing_required_searches"))))),
+                    _e(", ".join(map(str, _as_list(item.get("top_prior_work_ids"))))),
+                    _e("; ".join(map(str, _as_list(item.get("blocking_issues"))))),
+                ]
+            )
+    return (
+        "<p>Missing prior-work search rounds cap novelty and should be visible before any recommendation.</p>"
+        + _filter_box()
+        + _table(
+            [
+                "Scope",
+                "Target",
+                "Novelty Allowed",
+                "Duplicate",
+                "Confidence",
+                "Completed Rounds",
+                "Missing Rounds",
+                "Top Prior Work",
+                "Blockers",
+            ],
+            rows,
+        )
+    )
+
+
+def _render_real_literature_quality(context: _DashboardContext) -> str:
+    rows: list[list[str]] = []
+    for state in context.campaign_states:
+        reviews = _campaign_json_list(context, state, "real_literature_reviews.json")
+        acceptance = _campaign_json(context, state, "real_literature_acceptance.json")
+        latest = reviews[-1] if reviews else {}
+        rows.append(
+            [
+                _code(state.campaign.id),
+                _e(str(latest.get("reviewer", ""))),
+                _e("accepted" if latest.get("accepted_for_workflow") else "not accepted"),
+                _e("accepted" if latest.get("accepted_for_research_quality") else "rejected/not accepted"),
+                _e(str(latest.get("fake_citation_found", False))),
+                _e(str(latest.get("unsupported_high_confidence_claim_found", False))),
+                _e(str(latest.get("missed_obvious_prior_work", False))),
+                _e(str(latest.get("overclaimed_novelty", False))),
+                _e("; ".join(map(str, _as_list(acceptance.get("blocking_failures"))))),
+            ]
+        )
+    return (
+        "<p><strong>Workflow acceptance is separate from research-quality acceptance.</strong> "
+        "A workflow-accepted but quality-rejected campaign is not research validation.</p>"
+        + _filter_box()
+        + _table(
+            [
+                "Campaign",
+                "Reviewer",
+                "Workflow Acceptance",
+                "Research Quality",
+                "Fake Citation",
+                "Unsupported High Confidence",
+                "Missed Prior Work",
+                "Overclaimed Novelty",
+                "Blockers",
+            ],
+            rows,
+        )
+    )
+
+
+def _render_v5_release_gate(context: _DashboardContext) -> str:
+    quality_rows = []
+    quality_accepted = 0
+    refusal_count = 0
+    experiment_ready = 0
+    for state in context.campaign_states:
+        acceptance = _campaign_json(context, state, "real_literature_acceptance.json")
+        accepted_quality = bool(acceptance.get("accepted_for_research_quality"))
+        quality_accepted += int(accepted_quality)
+        is_refusal = bool(acceptance.get("is_refusal_campaign")) or _state_refusal(state)
+        refusal_count += int(accepted_quality and is_refusal)
+        ready = any(direction.get("maturity") in {"experiment_ready", "manuscript_ready"} for direction in context.directions)
+        experiment_ready += int(accepted_quality and ready)
+        quality_rows.append(
+            [
+                _code(state.campaign.id),
+                _e(str(accepted_quality)),
+                _e(str(is_refusal)),
+                _e(str(ready)),
+                _e("; ".join(map(str, _as_list(acceptance.get("blocking_failures"))))),
+            ]
+        )
+    blockers = []
+    if len(context.campaign_states) < 3:
+        blockers.append("Fewer than 3 campaigns are available for v0.5 quality release gating.")
+    if quality_accepted < 2:
+        blockers.append("Fewer than 2 campaigns are accepted for research quality.")
+    if refusal_count < 1:
+        blockers.append("No quality-accepted refusal campaign is visible.")
+    if experiment_ready < 1:
+        blockers.append("No quality-accepted experiment-ready campaign is visible.")
+    status = "PASSED" if not blockers else "NOT PASSED"
+    return "\n".join(
+        [
+            f'<div class="{"card" if not blockers else "card warning"}"><h2>v0.5 Real-Literature Quality Gate: {_e(status)}</h2>'
+            f"<p>Quality accepted: {_e(str(quality_accepted))}</p></div>",
+            "<h2>Blockers</h2>",
+            _list(blockers, css_class="warning"),
+            "<h2>Campaign Quality Summaries</h2>",
+            _table(["Campaign", "Quality Accepted", "Refusal", "Experiment Ready", "Blockers"], quality_rows),
+        ]
+    )
+
+
 def _run_artifact_links(state: ResearchRunState) -> list[tuple[str, str]]:
     names = [
         "run_report.md",
@@ -729,6 +983,7 @@ def _load_campaign_states(program: ResearchProgramState) -> list[CampaignState]:
                 decisions=[from_dict(CampaignDecision, item) for item in _read_list(campaign_dir / "decisions.json")],
                 milestones=[from_dict(CampaignMilestone, item) for item in _read_list(campaign_dir / "milestones.json")],
                 imports=[from_dict(CampaignImportRecord, item) for item in _read_list(campaign_dir / "imports.json")],
+                stop_conditions=[from_dict(CampaignStopCondition, item) for item in _read_list(campaign_dir / "stop_conditions.json")],
                 agent_actual_run_attestations=[
                     from_dict(AgentActualRunAttestation, item) for item in _read_list(campaign_dir / "agent_actual_run_attestations.json")
                 ],
@@ -767,6 +1022,61 @@ def _read_list(path: Path) -> list[dict[str, Any]]:
         return []
     raw = json.loads(path.read_text(encoding="utf-8"))
     return raw if isinstance(raw, list) else []
+
+
+def _campaign_dir_for(context: _DashboardContext, state: CampaignState) -> Path:
+    return context.base_dir / "campaigns" / state.campaign.id
+
+
+def _campaign_json(context: _DashboardContext, state: CampaignState, filename: str) -> dict[str, Any]:
+    path = _campaign_dir_for(context, state) / filename
+    if not path.exists():
+        return {}
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return raw if isinstance(raw, dict) else {}
+
+
+def _campaign_json_list(context: _DashboardContext, state: CampaignState, filename: str) -> list[dict[str, Any]]:
+    path = _campaign_dir_for(context, state) / filename
+    if not path.exists():
+        return []
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return []
+    return raw if isinstance(raw, list) else [raw] if isinstance(raw, dict) else []
+
+
+def _campaign_live_source_diagnostic(context: _DashboardContext, state: CampaignState) -> dict[str, Any]:
+    diagnostic = _campaign_json(context, state, "live_source_diagnostic.json")
+    if diagnostic:
+        return diagnostic
+    health = _campaign_json_list(context, state, "source_health.json")
+    return {"source_health_checks": health}
+
+
+def _as_list(value: object) -> list[object]:
+    return value if isinstance(value, list) else []
+
+
+def _search_round_row(scope: str, round_item: SearchRound) -> list[str]:
+    return [
+        _code(scope),
+        _code(round_item.id),
+        _e(round_item.round_type),
+        _e(round_item.status),
+        _e(", ".join(round_item.sources)),
+        str(len(round_item.result_paper_ids)),
+        _e("; ".join(round_item.failures)),
+    ]
+
+
+def _state_refusal(state: CampaignState) -> bool:
+    text = " ".join(condition.reason for condition in state.stop_conditions).lower()
+    return any(term in text for term in ("refusal", "poor coverage", "not_ready", "not ready", "novelty unknown", "refused"))
 
 
 def _coverage_warnings(reports: list[SourceCoverageReport]) -> list[str]:

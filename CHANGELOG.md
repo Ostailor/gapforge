@@ -2,6 +2,39 @@
 
 All notable project changes should be recorded here.
 
+## 0.5.0
+
+GapForge v0.5 is the real literature campaign quality release. It keeps the deterministic/offline and v4 Codex workflow paths intact while adding live-source diagnostics, planned search rounds, closest-prior-work recall, and human research-quality acceptance gates.
+
+### Live Literature Campaign Quality
+
+- Added live source diagnostics and `live-source-diagnostic` reports that distinguish healthy, degraded, disabled, fallback-heavy, and unavailable source behavior.
+- Added real literature campaign profiles for low-FPR collusion, LLM monitor evasion, multi-agent covert channels, cross-domain specificity, and undercovered-refusal validation.
+- Added the real campaign dry-run planner so users can inspect source checks, search rounds, expected artifacts, budget, blockers, and acceptance criteria before running live campaigns.
+- Added the real-literature campaign controller path so campaigns gather source health, execute planned search rounds, canonicalize papers, build retrieval, mine gap evidence, run prior-work recall, and stop with an explicit conservative reason.
+
+### Search, Canonicalization, and Novelty Safety
+
+- Added the search strategy planner with initial, survey, benchmark/dataset, novelty, counterevidence, and adjacent-field rounds.
+- Added paper canonicalization v2 for DOI, arXiv, OpenReview, normalized-title, and high-confidence title/author/year merge decisions with auditable reports.
+- Added the prior-work recall gate to block strong novelty until exact, method/metric, benchmark/dataset, survey, citation-neighborhood, and adjacent-field searches are complete as required by the source profile.
+- Tightened novelty/prior-work candidate selection so deterministic fallback records remain visible in coverage but do not dominate closest-prior-work decisions when live paper records are available.
+
+### Codex, Review, Reporting, and APIs
+
+- Added the Codex research synthesis task for evidence-gated direction synthesis after live search, retrieval, and prior-work recall gates pass.
+- Added human real-literature quality review with separate workflow acceptance and research-quality acceptance.
+- Added live campaign dashboard/report sections for source health, search strategy, search rounds, canonicalized papers, full-text/abstract coverage, prior-work recall, Codex synthesis artifacts, and quality review.
+- Added the v5 release gate to require deterministic evidence, a passing v4 workflow gate, live-literature campaign records, research-quality accepted campaigns, a conservative refusal campaign, and an experiment-ready campaign.
+- Added v5 eval fixtures and metrics for live-source coverage, search strategy completeness, prior-work recall gates, canonicalization quality, refusal quality, research-direction quality proxy, quality-review gate correctness, and v5 release-gate correctness.
+- Added v5 API functions for source health, search planning, real-literature campaigns, canonicalization, prior-work recall, quality review, and release-gate checks.
+- Added v5 documentation and Codex-readable skills for live literature scouting, search planning, prior-work recall, real-literature review, and research synthesis.
+
+### Validation
+
+- Recorded a local May 6, 2026 v5 release-gate pass with two quality-accepted live-literature campaigns: one experiment-ready campaign and one conservative refusal campaign.
+- `make ci`, `make eval`, v2/v3/v4/v5 eval reports, v2/v3/v4 smokes, and `gapforge v5-release-gate --write-report --json` pass for the release candidate.
+
 ## 0.4.1
 
 GapForge v0.4.1 is a focused Codex workflow usability patch. It does not add new research claims or count fake-agent canaries as real acceptance.

@@ -15,6 +15,7 @@ from gapforge.models import (
     ResearchRunState,
 )
 from gapforge.novelty.comparator import PriorWorkComparator, PriorWorkMatch, comparison_row
+from gapforge.search_strategy.planner import closest_prior_work_round_complete
 from gapforge.sources.stopping import assess_literature_coverage
 
 
@@ -44,6 +45,8 @@ class NoveltyDossierBuilder:
         verdict, strength, confidence = _verdict(matches, coverage_weak)
         top = matches[0] if matches else None
         missing = [] if source_search_ran else [f"source connector search: {query}" for query in query_plan]
+        if state.search_strategies and not closest_prior_work_round_complete(state.search_rounds):
+            missing.append("completed closest-prior-work search round")
         if state.source_coverage is not None and state.source_coverage.confidence == "low":
             missing.append("strong source/full-text coverage")
         stopping = _policy_assessment_for_gate(state)
@@ -115,6 +118,8 @@ def _verdict(matches: list[PriorWorkMatch], coverage_weak: bool) -> tuple[str, s
 
 def _coverage_is_weak(state: ResearchRunState, source_search_ran: bool) -> bool:
     if not state.search_queries and not source_search_ran:
+        return True
+    if state.search_strategies and not closest_prior_work_round_complete(state.search_rounds):
         return True
     if state.source_coverage is not None and state.source_coverage.confidence == "low":
         return True

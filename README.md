@@ -2,7 +2,7 @@
 
 GapForge is a Codex-powered Research Ideation OS. It turns a broad topic into auditable research state: papers, notes, claims, evidence, gaps, novelty dossiers, experiment plans, reviewer objections, and reports.
 
-GapForge v0.4 adds campaign-level Codex/GPT-5.4 actual-run workflows on top of the v0.3 semantic, project-memory-aware, optionally LLM-assisted research system. It is still not an exhaustive autonomous literature reviewer. It is full-text-aware and evidence-located, with hybrid retrieval, conservative novelty checking, manuscript package export, campaign task packs, validated imports, human acceptance review, and a machine-checkable release gate. Deterministic and offline-safe paths remain the default.
+GapForge v0.4 adds campaign-level Codex/GPT-5.4 actual-run workflows on top of the v0.3 semantic, project-memory-aware, optionally LLM-assisted research system. The v0.5 docs and gates extend that path toward live-literature campaign quality: source health, planned search rounds, canonicalization, closest-prior-work recall, human research-quality review, and a v5 release gate. GapForge is still not an exhaustive autonomous literature reviewer. Deterministic and offline-safe paths remain the default.
 
 ## Version Lineage
 
@@ -10,6 +10,7 @@ GapForge v0.4 adds campaign-level Codex/GPT-5.4 actual-run workflows on top of t
 - **v0.2**: full-text evidence and novelty dossier upgrade with PDF artifacts, sections, evidence spans, source coverage, citation graph, gap evidence matrices, human review, and strict reports.
 - **v0.3**: semantic plus LLM-assisted plus multi-run project-memory upgrade with hybrid retrieval, source policy profiles, active loop decisions, related-work matrices, direction maturation, protocols, review queues, dashboard, and paper packages.
 - **v0.4**: actual Codex/GPT-5.4 agentic campaign release path with campaign-level state, task packs, direct/handoff runner support, strict validated import, repair/rollback, campaign dashboards/reports, v4 evals, and release gates. Fake-agent success still does not count as real-run acceptance.
+- **v0.5**: real literature campaign quality layer. v0.5 validates multi-step live-literature campaigns, source coverage quality, closest-prior-work recall, real-paper citation grounding, expert review, experiment protocol quality, and correct rejection behavior when novelty is weak.
 
 ## Why Not Just Summarization?
 
@@ -200,6 +201,90 @@ gapforge campaign-canary-complete --canary-id <canary-id>
 ```
 
 See `docs/CODEX_QUICKSTART.md`, `docs/V0_4_1_CODEX_FIX_PLAN.md`, `docs/V0_4_1_CODEX_ACCEPTANCE.md`, and `docs/V0_4_1_CODEX_TROUBLESHOOTING.md`.
+
+## v0.5 Real Literature Campaign Quality
+
+v0.4.1 proves the actual Codex/GPT-5.4 workflow path. It does not prove broad live-literature research quality. v0.5 is scoped to that next step.
+
+v0.5 acceptance must require live-literature campaigns that:
+
+- search live source connectors and record every query/failure
+- satisfy field-specific source policy or refuse recommendation
+- find and cite closest prior work, or explicitly mark novelty unknown
+- ground real-paper claims in paper IDs and EvidenceSpan locators when full text is available
+- build related-work matrices and experiment protocols for recommended directions
+- undergo human expert review
+- reject or downgrade weak novelty, poor coverage, and unsupported claims
+
+The v0.5 docs are:
+
+- `docs/V0_5_ROADMAP.md`
+- `docs/V0_5_ACCEPTANCE_CRITERIA.md`
+- `docs/V0_5_REAL_LITERATURE_CAMPAIGNS.md`
+- `docs/V0_5_QUALITY_GATES.md`
+- `docs/V0_5_LIVE_SOURCE_POLICY.md`
+
+Normal CI remains deterministic and offline. Fixture-only canaries and fake-agent campaigns do not count as v0.5 live-literature quality.
+
+Latest v0.5 validation status: `gapforge v5-release-gate --write-report --json` passed locally on May 6, 2026. The accepted quality campaigns were one experiment-ready low-FPR collusion campaign and one conservative refusal campaign. This is live-literature release-gate acceptance, not a claim of exhaustive literature review.
+
+### v0.5 Live Literature Campaign Workflow
+
+Use v0.5 when you want GapForge to assess whether a real literature campaign is research-useful, not merely whether the workflow ran.
+
+```bash
+gapforge real-literature-profiles
+gapforge real-campaign-dry-run --profile live_low_fpr_collusion --write-report
+gapforge source-health --topic "low false positive collusion detection" --source arxiv
+gapforge live-source-diagnostic --topic "low false positive collusion detection in LLM agents" --source-profile ai_safety --write-report
+gapforge real-literature-run --profile live_low_fpr_collusion
+gapforge real-literature-status --record-id <record-id>
+```
+
+The dry run does not contact live sources or spend Codex budget. It previews expected source checks, search rounds, Codex tasks, artifacts, likely blockers, commands, and acceptance requirements.
+
+### v0.5 Search and Source Health Workflow
+
+Plan searches before asking Codex to synthesize:
+
+```bash
+gapforge plan-search-strategy "low false positive collusion detection in LLM agents" --source-profile ai_safety
+gapforge execute-search-strategy --run-id <run-id> --strategy-id <strategy-id>
+gapforge search-rounds --run-id <run-id>
+gapforge canonicalize-papers --run-id <run-id>
+gapforge prior-work-recall --run-id <run-id> --gap-id <gap-id>
+```
+
+If `GAPFORGE_DISABLE_NETWORK=1`, source health and execution commands must report disabled/skipped state. That can support offline smoke testing, but not live-literature acceptance.
+
+### v0.5 Quality Review Workflow
+
+Workflow acceptance and research-quality acceptance are separate:
+
+```bash
+gapforge campaign-report --campaign-id <campaign-id>
+gapforge real-literature-review --campaign-id <campaign-id>
+gapforge real-literature-review --campaign-id <campaign-id> --accept-quality --reviewer "<expert>"
+gapforge real-literature-acceptance --campaign-id <campaign-id>
+gapforge v5-release-gate --project-id <project-id> --write-report
+```
+
+Human reviewers should reject campaigns with fake citations, unsupported high-confidence claims, obvious missed prior work, overclaimed novelty, poor source coverage hidden by report language, or experiment protocols lacking baselines/metrics/falsification.
+
+### v0.5 Programmatic API
+
+The same workflow is scriptable without shelling out:
+
+```python
+from gapforge import api
+
+diagnostic = api.source_health("low false positive collusion", profile="ai_safety")
+strategy = api.plan_search_strategy("low false positive collusion", "ai_safety")
+record = api.run_real_literature_campaign("live_low_fpr_collusion")
+gate = api.v5_release_gate()
+```
+
+API calls are thin wrappers over the same managers used by the CLI. Tests can pass mocked sources; live network is never required for CI.
 
 ## Project Memory Workflow
 

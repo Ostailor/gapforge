@@ -1,0 +1,11 @@
+{
+  "topic": "lexical substitution attacks against LLM monitor systems",
+  "passed": true,
+  "quality_acceptance_expected": true,
+  "minimum_live_coverage_met": true,
+  "refusal_expected": false,
+  "duplicate_prior_work": false,
+  "prior_work_recall_should_block": false,
+  "stop_reason": "ready_experiment_protocol",
+  "expected_blockers": []
+}

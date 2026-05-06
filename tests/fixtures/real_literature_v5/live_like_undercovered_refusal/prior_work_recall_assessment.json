@@ -1,0 +1,28 @@
+{
+  "id": "recall-live_like_undercovered_refusal",
+  "target_id": "gap-live_like_undercovered_refusal",
+  "required_query_rounds": [
+    "initial",
+    "survey",
+    "benchmark",
+    "novelty"
+  ],
+  "completed_query_rounds": [
+    "initial",
+    "survey",
+    "benchmark",
+    "novelty"
+  ],
+  "candidate_prior_work_ids": [
+    "live_like_undercovered_refusal-paper-1",
+    "live_like_undercovered_refusal-paper-2"
+  ],
+  "top_prior_work_ids": [
+    "live_like_undercovered_refusal-paper-1"
+  ],
+  "missing_required_searches": [],
+  "likely_duplicate": false,
+  "recall_confidence": "high",
+  "novelty_allowed": false,
+  "blocking_issues": []
+}

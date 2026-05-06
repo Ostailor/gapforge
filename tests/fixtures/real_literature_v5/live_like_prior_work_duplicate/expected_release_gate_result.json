@@ -1,0 +1,13 @@
+{
+  "topic": "duplicate prior work for low false positive collusion detection",
+  "passed": false,
+  "quality_acceptance_expected": false,
+  "minimum_live_coverage_met": true,
+  "refusal_expected": false,
+  "duplicate_prior_work": true,
+  "prior_work_recall_should_block": false,
+  "stop_reason": "rejected_duplicate_prior_work",
+  "expected_blockers": [
+    "duplicate prior work"
+  ]
+}

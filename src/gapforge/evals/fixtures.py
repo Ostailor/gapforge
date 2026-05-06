@@ -15,6 +15,7 @@ from gapforge.models import (
     Paper,
     PaperNote,
     PaperSection,
+    PriorWorkRecallAssessment,
     RelatedWorkMatrix,
     SourceCoverageReport,
     from_dict,
@@ -49,6 +50,13 @@ V4_FIXTURE_NAMES = [
     "experiment_ready_direction",
     "reviewer_fatal_flaw",
 ]
+V5_FIXTURE_NAMES = [
+    "live_like_low_fpr_collusion",
+    "live_like_monitor_evasion",
+    "live_like_prior_work_duplicate",
+    "live_like_undercovered_refusal",
+    "live_like_cross_domain_specificity",
+]
 
 
 @dataclass(slots=True)
@@ -73,7 +81,9 @@ class EvalFixture:
     expected_not_ready_reasons: list[str] = field(default_factory=list)
     is_v3: bool = False
     is_v4: bool = False
+    is_v5: bool = False
     campaign_fixture: dict[str, Any] = field(default_factory=dict)
+    real_literature_fixture: dict[str, Any] = field(default_factory=dict)
 
     @property
     def is_v2(self) -> bool:
@@ -98,6 +108,10 @@ def default_v4_fixture_root() -> Path:
     return Path.cwd() / "tests" / "fixtures" / "campaign_v4"
 
 
+def default_v5_fixture_root() -> Path:
+    return Path.cwd() / "tests" / "fixtures" / "real_literature_v5"
+
+
 def list_fixtures(root: Path | None = None) -> list[str]:
     fixture_root = root or default_fixture_root()
     if not fixture_root.exists():
@@ -112,6 +126,9 @@ def load_fixture(name: str, root: Path | None = None) -> EvalFixture:
         v4_path = default_v4_fixture_root() / name
         if v4_path.exists():
             return load_v4_fixture(name, default_v4_fixture_root())
+        v5_path = default_v5_fixture_root() / name
+        if v5_path.exists():
+            return load_v5_fixture(name, default_v5_fixture_root())
         v3_path = default_v3_fixture_root() / name
         if v3_path.exists():
             return load_v3_fixture(name, default_v3_fixture_root())
@@ -236,6 +253,67 @@ def load_v4_fixture(name: str, root: Path | None = None) -> EvalFixture:
     )
 
 
+def load_v5_fixture(name: str, root: Path | None = None) -> EvalFixture:
+    fixture_root = root or default_v5_fixture_root()
+    path = fixture_root / name
+    if not path.exists():
+        raise FileNotFoundError(f"Unknown v5 eval fixture: {name}")
+    papers = [from_dict(Paper, item) for item in _read_json(path / "papers.json")]
+    sections_path = path / "paper_sections.json"
+    if not sections_path.exists():
+        sections_path = path / "excerpts.json"
+    source_health = _read_json(path / "source_health.json")
+    prior_work = from_dict(PriorWorkRecallAssessment, _read_json(path / "prior_work_recall_assessment.json"))
+    novelty_dossiers = [from_dict(NoveltyDossier, item) for item in _read_json(path / "novelty_dossiers.json")]
+    related_work = [from_dict(RelatedWorkMatrix, item) for item in _read_json(path / "related_work_matrix.json")]
+    human_review = _read_json(path / "human_quality_review.json")
+    expected_gate = _read_json(path / "expected_release_gate_result.json")
+    canonical_papers = _read_json(path / "canonical_papers.json")
+    fixture_payload = {
+        "source_health": source_health,
+        "papers": _read_json(path / "papers.json"),
+        "search_strategy": _read_json(path / "search_strategy.json"),
+        "search_rounds": _read_json(path / "search_rounds.json"),
+        "canonical_papers": canonical_papers,
+        "prior_work_recall_assessment": _read_json(path / "prior_work_recall_assessment.json"),
+        "novelty_dossiers": _read_json(path / "novelty_dossiers.json"),
+        "related_work_matrix": _read_json(path / "related_work_matrix.json"),
+        "human_quality_review": human_review,
+        "expected_release_gate_result": expected_gate,
+    }
+    topic = str(expected_gate.get("topic", name.replace("_", " ")))
+    return EvalFixture(
+        name=name,
+        topic=topic,
+        path=path,
+        papers=papers,
+        paper_notes=[],
+        known_good_gaps=[
+            Gap(
+                id=f"gap-{name}",
+                title=topic,
+                description="Offline v0.5 real-literature behavior fixture.",
+                supporting_paper_ids=[papers[0].id] if papers else [],
+                why_existing_work_does_not_solve_it="Encoded by fixture prior-work and novelty gate artifacts.",
+                minimum_experiment_needed="Use fixture gate expectations.",
+                risk_that_gap_is_fake="This fixture tests behavior only and is not a real literature claim.",
+                confidence="medium",
+            )
+        ],
+        known_bad_gaps=[],
+        duplicate_ideas=[],
+        expected_reviewer_objections=[],
+        paper_sections=[from_dict(PaperSection, item) for item in _read_json_optional(sections_path, [])],
+        evidence_spans=[from_dict(EvidenceSpan, item) for item in _read_json(path / "evidence_spans.json")],
+        expected_novelty_dossiers=novelty_dossiers,
+        expected_source_coverage=None,
+        human_gold_prior_work=[{"paper_id": paper_id} for paper_id in prior_work.top_prior_work_ids or prior_work.candidate_prior_work_ids],
+        human_gold_related_work_matrix=related_work,
+        is_v5=True,
+        real_literature_fixture=fixture_payload,
+    )
+
+
 def load_fixtures(names: list[str] | None = None, root: Path | None = None) -> list[EvalFixture]:
     selected = names or FIXTURE_NAMES
     return [load_fixture(name, root) for name in selected]
@@ -249,6 +327,11 @@ def load_v3_fixtures(names: list[str] | None = None, root: Path | None = None) -
 def load_v4_fixtures(names: list[str] | None = None, root: Path | None = None) -> list[EvalFixture]:
     selected = names or V4_FIXTURE_NAMES
     return [load_v4_fixture(name, root) for name in selected]
+
+
+def load_v5_fixtures(names: list[str] | None = None, root: Path | None = None) -> list[EvalFixture]:
+    selected = names or V5_FIXTURE_NAMES
+    return [load_v5_fixture(name, root) for name in selected]
 
 
 def _topic(path: Path) -> str:

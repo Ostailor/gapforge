@@ -1,0 +1,39 @@
+{
+  "id": "strategy-live_like_monitor_evasion",
+  "topic": "lexical substitution attacks against LLM monitor systems",
+  "source_profile": "ai_safety",
+  "primary_queries": [
+    "lexical substitution attacks against LLM monitor systems"
+  ],
+  "recency_queries": [
+    "lexical substitution attacks against LLM monitor systems 2024 2025"
+  ],
+  "survey_queries": [
+    "lexical substitution attacks against LLM monitor systems survey"
+  ],
+  "benchmark_queries": [
+    "lexical substitution attacks against LLM monitor systems benchmark dataset"
+  ],
+  "dataset_queries": [
+    "lexical substitution attacks against LLM monitor systems dataset"
+  ],
+  "method_queries": [
+    "lexical substitution attacks against LLM monitor systems method metric"
+  ],
+  "closest_prior_work_queries": [
+    "lexical substitution attacks against LLM monitor systems closest prior work"
+  ],
+  "adjacent_field_queries": [],
+  "exclusion_queries": [
+    "lexical substitution attacks against LLM monitor systems limitations"
+  ],
+  "expected_sources": [
+    "arxiv",
+    "semantic_scholar",
+    "openreview"
+  ],
+  "coverage_targets": {
+    "minimum_papers": 5,
+    "minimum_surveys": 1
+  }
+}

@@ -1,0 +1,39 @@
+{
+  "id": "strategy-live_like_prior_work_duplicate",
+  "topic": "duplicate prior work for low false positive collusion detection",
+  "source_profile": "ai_safety",
+  "primary_queries": [
+    "duplicate prior work for low false positive collusion detection"
+  ],
+  "recency_queries": [
+    "duplicate prior work for low false positive collusion detection 2024 2025"
+  ],
+  "survey_queries": [
+    "duplicate prior work for low false positive collusion detection survey"
+  ],
+  "benchmark_queries": [
+    "duplicate prior work for low false positive collusion detection benchmark dataset"
+  ],
+  "dataset_queries": [
+    "duplicate prior work for low false positive collusion detection dataset"
+  ],
+  "method_queries": [
+    "duplicate prior work for low false positive collusion detection method metric"
+  ],
+  "closest_prior_work_queries": [
+    "duplicate prior work for low false positive collusion detection closest prior work"
+  ],
+  "adjacent_field_queries": [],
+  "exclusion_queries": [
+    "duplicate prior work for low false positive collusion detection limitations"
+  ],
+  "expected_sources": [
+    "arxiv",
+    "semantic_scholar",
+    "openreview"
+  ],
+  "coverage_targets": {
+    "minimum_papers": 5,
+    "minimum_surveys": 1
+  }
+}

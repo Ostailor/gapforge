@@ -1,0 +1,71 @@
+[
+  {
+    "id": "round-initial-live_like_monitor_evasion",
+    "strategy_id": "strategy-live_like_monitor_evasion",
+    "round_type": "initial",
+    "queries": [
+      "lexical substitution attacks against LLM monitor systems"
+    ],
+    "sources": [
+      "arxiv"
+    ],
+    "max_results": 10,
+    "status": "complete",
+    "result_paper_ids": [
+      "live_like_monitor_evasion-paper-1",
+      "live_like_monitor_evasion-paper-2"
+    ],
+    "failures": []
+  },
+  {
+    "id": "round-survey-live_like_monitor_evasion",
+    "strategy_id": "strategy-live_like_monitor_evasion",
+    "round_type": "survey",
+    "queries": [
+      "lexical substitution attacks against LLM monitor systems survey"
+    ],
+    "sources": [
+      "semantic_scholar"
+    ],
+    "max_results": 10,
+    "status": "complete",
+    "result_paper_ids": [
+      "live_like_monitor_evasion-paper-2"
+    ],
+    "failures": []
+  },
+  {
+    "id": "round-benchmark-live_like_monitor_evasion",
+    "strategy_id": "strategy-live_like_monitor_evasion",
+    "round_type": "benchmark",
+    "queries": [
+      "lexical substitution attacks against LLM monitor systems benchmark dataset"
+    ],
+    "sources": [
+      "arxiv"
+    ],
+    "max_results": 10,
+    "status": "complete",
+    "result_paper_ids": [
+      "live_like_monitor_evasion-paper-1"
+    ],
+    "failures": []
+  },
+  {
+    "id": "round-novelty-live_like_monitor_evasion",
+    "strategy_id": "strategy-live_like_monitor_evasion",
+    "round_type": "novelty",
+    "queries": [
+      "lexical substitution attacks against LLM monitor systems closest prior work"
+    ],
+    "sources": [
+      "semantic_scholar"
+    ],
+    "max_results": 10,
+    "status": "complete",
+    "result_paper_ids": [
+      "live_like_monitor_evasion-paper-1"
+    ],
+    "failures": []
+  }
+]
