@@ -326,10 +326,17 @@ def _unique_workspace_id(base_dir: Path, direction_id: str) -> str:
     base = f"workspace-{slugify(direction_id)}"
     candidate = base
     suffix = 2
-    while (base_dir / candidate).exists():
+    while _workspace_id_exists(base_dir, candidate):
         candidate = f"{base}-{suffix}"
         suffix += 1
     return candidate
+
+
+def _workspace_id_exists(base_dir: Path, workspace_id: str) -> bool:
+    if (base_dir / workspace_id).exists():
+        return True
+    projects_root = base_dir.parent.parent
+    return any(path.exists() for path in projects_root.glob(f"*/experiment_workspaces/{workspace_id}"))
 
 
 def _replace_workspace(workspaces: list[ExperimentWorkspace], workspace: ExperimentWorkspace) -> list[ExperimentWorkspace]:

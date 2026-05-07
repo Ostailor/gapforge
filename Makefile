@@ -1,4 +1,4 @@
-.PHONY: install test lint typecheck format format-check eval coverage ci example v2-smoke v3-smoke v4-smoke v6-smoke v7-smoke clean-runs clean-cache
+.PHONY: install test lint typecheck format format-check eval coverage ci example v2-smoke v3-smoke v4-smoke v6-smoke v7-smoke v8-smoke clean-runs clean-cache
 
 PYTHON ?= $(shell if [ -x .venv/bin/python ]; then echo .venv/bin/python; else echo python; fi)
 TOPIC ?= low false positive collusion detection
@@ -69,6 +69,9 @@ v6-smoke:
 
 v7-smoke:
 	GAPFORGE_DISABLE_NETWORK=1 $(PYTHON) scripts/v7_smoke.py
+
+v8-smoke:
+	GAPFORGE_DISABLE_NETWORK=1 $(PYTHON) scripts/v8_smoke.py
 
 clean-runs:
 	mkdir -p runs

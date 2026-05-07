@@ -10,6 +10,8 @@ GapForge is a skills-based research ideation OS. It is not a rigid one-pass summ
 - **v0.4 campaign and actual-run layer**: campaign state, campaign controller decisions, Codex/GPT-5.4 task packs, direct/handoff runner paths, strict output import validation, repair/rollback, novelty re-search loops, campaign reviewer loops, experiment code tasks, campaign canaries, human acceptance gates, and release-gate enforcement.
 - **v0.5 real-literature quality layer**: live source health diagnostics, planned multi-round search strategies, paper canonicalization, prior-work recall gates, real-literature campaign records, human research-quality review, dashboards/reports for quality acceptance, and v5 release-gate enforcement.
 - **v0.6 empirical execution layer**: experiment workspaces, dataset/baseline/metric registries, run manifests, execution records, result artifacts, statistical analysis, reproducibility checks, empirical reviewer panels, paper package v2 exports, experiment dashboards, and v6 release-gate enforcement.
+- **v0.7 benchmark and replication layer**: benchmark registries, dataset consent/cache handling, compute/job abstractions, sweeps, result aggregation, error analysis, benchmark comparison, low-FPR power checks, replication packages, reproduction matrices, and v7 release-gate enforcement.
+- **v0.8 manuscript and submission layer**: manuscript projects, section state, bibliography records, claim-use traceability, artifact-backed figures/tables, venue checklists, anonymization reports, artifact evaluation packages, manuscript reviewer panels, rebuttal/revision plans, submission packages, dashboards, Python API wrappers, and v8 release-gate enforcement.
 
 ## Core Layers
 
@@ -91,6 +93,19 @@ GapForge is a skills-based research ideation OS. It is not a rigid one-pass summ
    - `src/gapforge/reviewers/empirical.py` reviews executed artifacts, statistics, reproducibility, missing baselines, and result overclaim.
    - `src/gapforge/export/paper_package.py` v2 exports separate planned protocols, smoke/pilot/main results, failed runs, hypothetical expected results, and limitations.
    - `src/gapforge/release_gate/v06.py` fails closed unless execution, failure/negative path, result parsing, reproducibility, empirical review, and package artifacts exist.
+
+14. **Benchmark execution and replication**
+   - `src/gapforge/benchmarks/` stores benchmark records, cards, comparisons, and leaderboard reports.
+   - `src/gapforge/jobs/` and compute abstractions keep local/job execution metadata explicit.
+   - `src/gapforge/replication/` exports safe replication packages, verifies manifests, and records reproduction attempts.
+   - `src/gapforge/release_gate/v07.py` separates fixture benchmark canaries from real/local public benchmark validation.
+
+15. **Manuscript, artifact evaluation, and rebuttal**
+   - `src/gapforge/manuscript/` owns first-class manuscript state: projects, sections, claim uses, bibliographies, traceability reports, assets, venues, anonymization, reviewer panels, rebuttal/revision plans, and submission packages.
+   - `src/gapforge/artifact_eval/` packages replication/workspace state for artifact review and assesses badges conservatively.
+   - `src/gapforge/dashboard/static_site.py` renders manuscript readiness pages that surface unsupported claims, fake-looking citations, reviewer blockers, submission package status, and v8 release-gate state without embedding raw logs.
+   - `src/gapforge/api.py` exposes v0.8 workflows as Python functions so notebooks and automation can script the same manager paths as the CLI.
+   - `src/gapforge/release_gate/v08.py` fails closed when citations are unknown, claims are unsupported, result claims lack artifacts, artifact packages are missing, reviewer/rebuttal blockers remain, or failed/negative experiments are hidden.
 
 ## v0.3 Staged Loop
 
@@ -190,6 +205,28 @@ experiment-ready direction
 
 Run type matters. `smoke` proves wiring and artifact production only. `pilot` can inform design but should be labeled exploratory. `main`, `ablation`, `negative_control`, and `reproduction` runs may support empirical claims only when execution records and result artifacts exist.
 
+## v0.8 Manuscript Flow
+
+The v0.8 flow starts from existing project, direction, and workspace state:
+
+```text
+create manuscript project
+-> draft section stubs and link claims/papers/results/artifacts
+-> build bibliography from known Paper records only
+-> run traceability and overclaim checks
+-> generate figures/tables from result artifacts
+-> assign venue template and build submission checklist
+-> run anonymization if required
+-> export artifact evaluation package from replication/workspace state
+-> run manuscript reviewer panel
+-> convert objections into rebuttal/revision items
+-> export gated submission package
+-> inspect dashboard
+-> v8 release gate
+```
+
+`manuscript-ready` means the draft is durable and inspectable. `review-ready` means internal checks and reviewer attacks exist. `submission-ready` requires venue-aware checks to pass. `camera-ready` additionally requires reviewer/rebuttal blockers to be addressed and must not be used as a proxy for venue acceptance.
+
 ## v0.3 Active Loop
 
 `gapforge run "topic" --v3 --active --budget small` creates an active-loop run. The active loop evaluates current state, source policy, evidence coverage, novelty dossiers, review queue, and budget before selecting the next action. It can stop because coverage is sufficient, budget is exhausted, no new papers are found, or human review is needed.
@@ -207,5 +244,11 @@ Run type matters. `smoke` proves wiring and artifact production only. `pilot` ca
 - Campaign acceptance requires explicit stop reason, validated imports when agent-backed, and human review.
 - v0.5 research-quality acceptance additionally requires live source diagnostics, search strategy/rounds, canonicalized papers, prior-work recall, closest-prior-work evidence, and human quality review.
 - v0.6 empirical claims additionally require run manifests, execution records, result artifacts, parsed metrics, uncertainty analysis, and reproducibility status.
+- v0.8 manuscript claims additionally require trace links to known papers/evidence, result artifacts, novelty dossiers, limitations, or explicit hypothesis/speculation labels.
+- Citations must resolve to known paper records; fake-looking citation strings block submission readiness.
+- Figures and tables must be generated from artifacts/results or be explicitly marked custom; they must not invent values.
+- Artifact evaluation packages must derive from replication/workspace state and exclude restricted data by default.
+- Anonymous submissions must surface identity leaks; originals are preserved.
+- Rebuttals must propose evidence, citations, experiments, or softened wording; they must not invent reviewer responses.
 - Smoke results, placeholder data, and fixture outputs must be labeled and must not be presented as real empirical success.
 - Failed and negative runs must remain visible in reports, dashboards, reviewer panels, and paper packages.

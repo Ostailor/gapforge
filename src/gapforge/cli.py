@@ -35,6 +35,12 @@ from gapforge.agents.repair import (
 )
 from gapforge.agents.setup import render_real_run_setup
 from gapforge.agents.validation import create_actual_run_attestation as create_run_actual_run_attestation
+from gapforge.artifact_eval import (
+    ArtifactBadgeAssessor,
+    ArtifactEvaluationChecklistManager,
+    ArtifactEvaluationPackageExporter,
+    ArtifactEvaluationSmokeRunner,
+)
 from gapforge.baselines import BaselineRegistry, render_baseline_registry_markdown
 from gapforge.benchmarks import (
     BenchmarkCanaryRunner,
@@ -118,6 +124,18 @@ from gapforge.llm.config import LLMRuntimeConfig
 from gapforge.llm.fake import FakeLLMClient
 from gapforge.llm.providers import ProviderLLMClient, ProviderUnavailableError, llm_status
 from gapforge.llm.transcripts import LLMTranscriptLogger
+from gapforge.manuscript import ManuscriptManager
+from gapforge.manuscript.anonymization import ManuscriptAnonymizer
+from gapforge.manuscript.bibliography import ManuscriptBibliographyManager
+from gapforge.manuscript.figures import ManuscriptFigureGenerator
+from gapforge.manuscript.rebuttal import ManuscriptRebuttalManager
+from gapforge.manuscript.reviewer_panel import ManuscriptReviewPanelBuilder, render_manuscript_review_panel_markdown
+from gapforge.manuscript.revisions import ManuscriptRevisionManager
+from gapforge.manuscript.submission import SubmissionPackageExporter
+from gapforge.manuscript.submission_checklist import SubmissionChecklistManager
+from gapforge.manuscript.tables import ManuscriptTableGenerator
+from gapforge.manuscript.traceability import ManuscriptTraceabilityAuditor
+from gapforge.manuscript.venues import ManuscriptVenueManager, venue_templates_json
 from gapforge.metrics import MetricRegistry, render_metric_registry_markdown, render_statistical_plan_markdown
 from gapforge.metrics.low_fpr_power import (
     LowFPRPowerChecker,
@@ -159,11 +177,13 @@ from gapforge.release_gate import (
     V05ReleaseGateEnforcer,
     V06ReleaseGateEnforcer,
     V07ReleaseGateEnforcer,
+    V08ReleaseGateEnforcer,
     render_v04_release_gate_markdown,
 )
 from gapforge.release_gate.v05 import render_v05_release_gate_markdown
 from gapforge.release_gate.v06 import render_v06_release_gate_markdown
 from gapforge.release_gate.v07 import render_v07_release_gate_markdown
+from gapforge.release_gate.v08 import render_v08_release_gate_markdown
 from gapforge.replication import (
     ReplicationPackageExporter,
     ReplicationPackageVerifier,
@@ -494,6 +514,7 @@ def build_parser() -> argparse.ArgumentParser:
     eval_parser.add_argument("--v5", action="store_true", help="Run v0.5 real-literature campaign quality evaluation fixtures.")
     eval_parser.add_argument("--v6", action="store_true", help="Run v0.6 experiment execution evaluation fixtures.")
     eval_parser.add_argument("--v7", action="store_true", help="Run v0.7 benchmark and replication evaluation fixtures.")
+    eval_parser.add_argument("--v8", action="store_true", help="Run v0.8 manuscript submission evaluation fixtures.")
     eval_parser.add_argument("--write-report", action="store_true")
 
     report_parser = subparsers.add_parser("report", help="Write final_report.md or final_report.json.")
@@ -505,16 +526,21 @@ def build_parser() -> argparse.ArgumentParser:
         help="Refuse to recommend a top direction when coverage/evidence/novelty gates are weak.",
     )
 
-    dashboard_parser = subparsers.add_parser("dashboard", help="Generate a static HTML dashboard for a run or project.")
+    dashboard_parser = subparsers.add_parser(
+        "dashboard",
+        help="Generate a static HTML dashboard for a run, project, workspace, or manuscript.",
+    )
     dashboard_scope = dashboard_parser.add_mutually_exclusive_group(required=True)
     dashboard_scope.add_argument("--run-id")
     dashboard_scope.add_argument("--project-id")
     dashboard_scope.add_argument("--workspace-id")
+    dashboard_scope.add_argument("--manuscript-id")
     dashboard_parser.add_argument("--open", action="store_true", help="Open the dashboard in the default browser.")
     dashboard_parser.add_argument("--include-actual-runs", action="store_true", help="Include v0.4 actual-run acceptance pages.")
     dashboard_parser.add_argument("--include-experiments", action="store_true", help="Include v0.6 experiment execution pages.")
     dashboard_parser.add_argument("--include-benchmarks", action="store_true", help="Include v0.7 benchmark execution pages.")
     dashboard_parser.add_argument("--include-replication", action="store_true", help="Include v0.7 replication pages.")
+    dashboard_parser.add_argument("--include-manuscripts", action="store_true", help="Include v0.8 manuscript readiness pages.")
 
     release_gate_dashboard_parser = subparsers.add_parser(
         "release-gate-dashboard", help="Generate a project dashboard and print the release-gate page path."
@@ -1113,6 +1139,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Require opt-in real/local benchmark validation evidence in addition to the fixture benchmark gate.",
     )
 
+    v8_release_gate_parser = subparsers.add_parser(
+        "v8-release-gate", help="Enforce the v0.8 manuscript, artifact-evaluation, and rebuttal release gate."
+    )
+    v8_release_gate_parser.add_argument("--write-report", action="store_true")
+    v8_release_gate_parser.add_argument("--json", action="store_true")
+
     rollback_import_parser = subparsers.add_parser("rollback-import", help="Rollback a campaign import by import ID.")
     rollback_import_parser.add_argument("--import-id", required=True)
 
@@ -1560,9 +1592,13 @@ def build_parser() -> argparse.ArgumentParser:
     review_panel_parser.add_argument("--project-id", required=True)
     review_panel_parser.add_argument("--direction-id", required=True)
 
-    rebuttal_plan_parser = subparsers.add_parser("rebuttal-plan", help="Print the rebuttal plan for a project direction.")
-    rebuttal_plan_parser.add_argument("--project-id", required=True)
-    rebuttal_plan_parser.add_argument("--direction-id", required=True)
+    rebuttal_plan_parser = subparsers.add_parser(
+        "rebuttal-plan",
+        help="Print the rebuttal plan for a project direction or convert manuscript reviewer objections into action items.",
+    )
+    rebuttal_plan_parser.add_argument("--project-id")
+    rebuttal_plan_parser.add_argument("--direction-id")
+    rebuttal_plan_parser.add_argument("--manuscript-id")
 
     meta_review_parser = subparsers.add_parser("meta-review", help="Print the meta-review for a project direction.")
     meta_review_parser.add_argument("--project-id", required=True)
@@ -1579,6 +1615,124 @@ def build_parser() -> argparse.ArgumentParser:
     export_package_v2_scope = export_package_v2_parser.add_mutually_exclusive_group(required=True)
     export_package_v2_scope.add_argument("--workspace-id")
     export_package_v2_scope.add_argument("--direction-id")
+
+    manuscript_create_parser = subparsers.add_parser("manuscript-create", help="Create first-class manuscript project state.")
+    manuscript_create_parser.add_argument("--project-id", required=True)
+    manuscript_create_parser.add_argument("--direction-id", required=True)
+    manuscript_create_parser.add_argument("--workspace-id", required=True)
+    manuscript_create_parser.add_argument("--title", required=True)
+    manuscript_create_parser.add_argument("--campaign-id", default="")
+    manuscript_create_parser.add_argument("--short-title", default="")
+    manuscript_create_parser.add_argument("--target-venue", default="")
+
+    manuscript_status_parser = subparsers.add_parser("manuscript-status", help="Print manuscript project status.")
+    manuscript_status_parser.add_argument("--manuscript-id", required=True)
+
+    manuscript_sections_parser = subparsers.add_parser("manuscript-sections", help="List manuscript sections as JSON.")
+    manuscript_sections_parser.add_argument("--manuscript-id", required=True)
+
+    manuscript_report_parser = subparsers.add_parser("manuscript-report", help="Write and print the manuscript traceability report.")
+    manuscript_report_parser.add_argument("--manuscript-id", required=True)
+
+    bibliography_build_parser = subparsers.add_parser(
+        "bibliography-build", help="Build a manuscript bibliography from known paper records."
+    )
+    bibliography_build_parser.add_argument("--manuscript-id", required=True)
+
+    bibliography_export_parser = subparsers.add_parser("bibliography-export", help="Export a manuscript bibliography.")
+    bibliography_export_parser.add_argument("--manuscript-id", required=True)
+    bibliography_export_parser.add_argument("--format", choices=["bibtex"], default="bibtex")
+
+    citation_check_parser = subparsers.add_parser("citation-check", help="Check manuscript citations for unresolved or fake entries.")
+    citation_check_parser.add_argument("--manuscript-id", required=True)
+
+    citation_list_parser = subparsers.add_parser("citation-list", help="List manuscript bibliography entries as JSON.")
+    citation_list_parser.add_argument("--manuscript-id", required=True)
+
+    manuscript_traceability_parser = subparsers.add_parser("manuscript-traceability", help="Audit manuscript claim traceability.")
+    manuscript_traceability_parser.add_argument("--manuscript-id", required=True)
+
+    manuscript_overclaims_parser = subparsers.add_parser("manuscript-overclaims", help="List manuscript overclaim warnings as JSON.")
+    manuscript_overclaims_parser.add_argument("--manuscript-id", required=True)
+
+    manuscript_soften_parser = subparsers.add_parser("manuscript-soften-claims", help="Suggest softer wording for unsupported claims.")
+    manuscript_soften_parser.add_argument("--manuscript-id", required=True)
+    manuscript_soften_parser.add_argument("--dry-run", action="store_true")
+
+    manuscript_table_parser = subparsers.add_parser("manuscript-table", help="Generate an artifact-backed manuscript table.")
+    manuscript_table_parser.add_argument("--manuscript-id", required=True)
+    manuscript_table_parser.add_argument(
+        "--type",
+        required=True,
+        choices=["result_table", "baseline_comparison", "ablation", "dataset_summary", "reproducibility", "custom"],
+    )
+
+    manuscript_figure_parser = subparsers.add_parser("manuscript-figure", help="Generate an artifact-backed manuscript figure.")
+    manuscript_figure_parser.add_argument("--manuscript-id", required=True)
+    manuscript_figure_parser.add_argument(
+        "--type",
+        required=True,
+        choices=["metric_plot", "error_analysis", "comparison", "power_curve", "custom"],
+    )
+
+    manuscript_assets_parser = subparsers.add_parser("manuscript-assets", help="List manuscript figures and tables.")
+    manuscript_assets_parser.add_argument("--manuscript-id", required=True)
+
+    subparsers.add_parser("venue-list", help="List built-in manuscript venue templates.")
+
+    manuscript_set_venue_parser = subparsers.add_parser("manuscript-set-venue", help="Assign a venue template to a manuscript.")
+    manuscript_set_venue_parser.add_argument("--manuscript-id", required=True)
+    manuscript_set_venue_parser.add_argument("--venue", required=True)
+
+    submission_checklist_parser = subparsers.add_parser("submission-checklist", help="Build a venue-aware submission checklist.")
+    submission_checklist_parser.add_argument("--manuscript-id", required=True)
+
+    anonymize_manuscript_parser = subparsers.add_parser("anonymize-manuscript", help="Write an anonymized manuscript submission copy.")
+    anonymize_manuscript_parser.add_argument("--manuscript-id", required=True)
+
+    anonymization_check_parser = subparsers.add_parser("anonymization-check", help="Scan a manuscript for blind-review identity leaks.")
+    anonymization_check_parser.add_argument("--manuscript-id", required=True)
+
+    deanonymize_package_parser = subparsers.add_parser("deanonymize-package", help="Write a non-anonymous manuscript package copy.")
+    deanonymize_package_parser.add_argument("--manuscript-id", required=True)
+
+    artifact_eval_package_parser = subparsers.add_parser("artifact-eval-package", help="Export a review-ready artifact evaluation package.")
+    artifact_eval_package_parser.add_argument("--manuscript-id", required=True)
+
+    artifact_eval_check_parser = subparsers.add_parser("artifact-eval-check", help="Check an artifact evaluation package.")
+    artifact_eval_check_parser.add_argument("--package-id", required=True)
+
+    artifact_badges_parser = subparsers.add_parser("artifact-badges", help="Assess artifact badge eligibility conservatively.")
+    artifact_badges_parser.add_argument("--package-id", required=True)
+
+    artifact_eval_smoke_parser = subparsers.add_parser("artifact-eval-smoke", help="Dry-run artifact evaluation package commands.")
+    artifact_eval_smoke_parser.add_argument("--package-id", required=True)
+
+    manuscript_review_parser = subparsers.add_parser("manuscript-review", help="Run a full-manuscript reviewer panel.")
+    manuscript_review_parser.add_argument("--manuscript-id", required=True)
+
+    manuscript_meta_review_parser = subparsers.add_parser("manuscript-meta-review", help="Print manuscript area-chair meta-review.")
+    manuscript_meta_review_parser.add_argument("--manuscript-id", required=True)
+
+    manuscript_fix_list_parser = subparsers.add_parser("manuscript-fix-list", help="Print manuscript reviewer required fixes.")
+    manuscript_fix_list_parser.add_argument("--manuscript-id", required=True)
+
+    revision_plan_parser = subparsers.add_parser("revision-plan", help="Create a manuscript revision plan from rebuttal items.")
+    revision_plan_parser.add_argument("--manuscript-id", required=True)
+
+    mark_rebuttal_parser = subparsers.add_parser("mark-rebuttal-item", help="Mark a manuscript rebuttal item status.")
+    mark_rebuttal_parser.add_argument("--item-id", required=True)
+    mark_rebuttal_parser.add_argument("--status", required=True, choices=["open", "addressed", "rejected", "deferred"])
+
+    revision_status_parser = subparsers.add_parser("revision-status", help="Print manuscript revision status.")
+    revision_status_parser.add_argument("--manuscript-id", required=True)
+
+    submission_package_parser = subparsers.add_parser("submission-package", help="Export a gated manuscript submission package.")
+    submission_package_parser.add_argument("--manuscript-id", required=True)
+    submission_package_parser.add_argument("--type", required=True, choices=["review", "camera_ready", "arxiv", "internal"])
+
+    submission_package_status_parser = subparsers.add_parser("submission-package-status", help="Print submission package status.")
+    submission_package_status_parser.add_argument("--package-id", required=True)
 
     export_manuscript_parser = subparsers.add_parser("export-manuscript", help="Export a run-level manuscript starter kit for a gap.")
     export_manuscript_parser.add_argument("--run-id", required=True)
@@ -2052,6 +2206,7 @@ def _dispatch(
             v5=args.v5,
             v6=args.v6,
             v7=args.v7,
+            v8=args.v8,
         )
         target = report.report_path or (config.root / "eval_report.md")
         print(f"Wrote evaluation report to {target}")
@@ -2066,8 +2221,10 @@ def _dispatch(
         dashboard = StaticDashboardBuilder(config)
         if args.workspace_id:
             result = dashboard.build_workspace(args.workspace_id)
+        elif args.manuscript_id:
+            result = dashboard.build_manuscript(args.manuscript_id)
         elif args.project_id:
-            result = dashboard.build_project(args.project_id)
+            result = dashboard.build_project(args.project_id, include_manuscripts=args.include_manuscripts)
         else:
             result = dashboard.build_run(args.run_id)
         if args.open:
@@ -3024,6 +3181,16 @@ def _dispatch(
         else:
             print(render_v07_release_gate_markdown(v7_gate_result), end="")
         return 0 if v7_gate_result.passed else 1
+    if args.command == "v8-release-gate":
+        v8_enforcer = V08ReleaseGateEnforcer(config)
+        v8_gate_result = v8_enforcer.evaluate()
+        if args.write_report:
+            v8_enforcer.write_outputs(v8_gate_result)
+        if args.json:
+            print(json.dumps(v8_gate_result.to_dict(), indent=2))
+        else:
+            print(render_v08_release_gate_markdown(v8_gate_result), end="")
+        return 0 if v8_gate_result.passed else 1
     if args.command == "rollback-import":
         rollback_record = rollback_import(config, args.import_id)
         print(json.dumps(to_plain(rollback_record), indent=2))
@@ -3569,6 +3736,14 @@ def _dispatch(
         print(render_review_panel_markdown(panel), end="")
         return 0
     if args.command == "rebuttal-plan":
+        if args.manuscript_id:
+            rebuttal_manager = ManuscriptRebuttalManager(config)
+            revision = rebuttal_manager.build(args.manuscript_id)
+            print(rebuttal_manager.render_markdown(revision), end="")
+            return 0
+        if not args.project_id or not args.direction_id:
+            print("rebuttal-plan requires --manuscript-id or both --project-id and --direction-id", file=sys.stderr)
+            return 2
         review_panel_builder = ReviewPanelBuilder(config)
         review_panel_builder.rebuttal_plan_for_project(args.project_id, args.direction_id)
         program = ProjectMemoryManager(config).load_project(args.project_id)
@@ -3603,6 +3778,140 @@ def _dispatch(
             f"Exported v0.6 paper package {package.id} with {len(package.files)} files "
             f"(readiness={package.readiness}, missing={len(package.missing_requirements)})."
         )
+        return 0
+    if args.command == "manuscript-create":
+        manuscript_state = ManuscriptManager(config).create_manuscript(
+            project_id=args.project_id,
+            direction_id=args.direction_id,
+            workspace_id=args.workspace_id,
+            title=args.title,
+            campaign_id=args.campaign_id,
+            short_title=args.short_title,
+            target_venue=args.target_venue,
+        )
+        print(json.dumps(to_plain(manuscript_state), indent=2))
+        return 0
+    if args.command == "manuscript-status":
+        print(ManuscriptManager(config).status_markdown(args.manuscript_id), end="")
+        return 0
+    if args.command == "manuscript-sections":
+        print(ManuscriptManager(config).sections_json(args.manuscript_id), end="")
+        return 0
+    if args.command == "manuscript-report":
+        print(ManuscriptManager(config).write_report(args.manuscript_id), end="")
+        return 0
+    if args.command == "bibliography-build":
+        bibliography = ManuscriptBibliographyManager(config).build(args.manuscript_id)
+        print(json.dumps(to_plain(bibliography), indent=2))
+        return 0
+    if args.command == "bibliography-export":
+        print(ManuscriptBibliographyManager(config).export(args.manuscript_id, export_format=args.format), end="")
+        return 0
+    if args.command == "citation-check":
+        print(ManuscriptBibliographyManager(config).check_markdown(args.manuscript_id), end="")
+        return 0
+    if args.command == "citation-list":
+        print(ManuscriptBibliographyManager(config).citation_list_json(args.manuscript_id), end="")
+        return 0
+    if args.command == "manuscript-traceability":
+        auditor = ManuscriptTraceabilityAuditor(config)
+        traceability_report = auditor.audit(args.manuscript_id)
+        print(auditor.render_markdown(traceability_report), end="")
+        return 0
+    if args.command == "manuscript-overclaims":
+        print(ManuscriptTraceabilityAuditor(config).overclaims_json(args.manuscript_id), end="")
+        return 0
+    if args.command == "manuscript-soften-claims":
+        print(ManuscriptTraceabilityAuditor(config).soften_claims(args.manuscript_id, dry_run=args.dry_run), end="")
+        return 0
+    if args.command == "manuscript-table":
+        table = ManuscriptTableGenerator(config).generate(args.manuscript_id, args.type)
+        print(json.dumps(to_plain(table), indent=2))
+        return 0
+    if args.command == "manuscript-figure":
+        figure = ManuscriptFigureGenerator(config).generate(args.manuscript_id, args.type)
+        print(json.dumps(to_plain(figure), indent=2))
+        return 0
+    if args.command == "manuscript-assets":
+        figures = ManuscriptFigureGenerator(config).list_figures(args.manuscript_id)
+        tables = ManuscriptTableGenerator(config).list_tables(args.manuscript_id)
+        print(json.dumps({"figures": to_plain(figures), "tables": to_plain(tables)}, indent=2))
+        return 0
+    if args.command == "venue-list":
+        print(venue_templates_json(), end="")
+        return 0
+    if args.command == "manuscript-set-venue":
+        manuscript_state = ManuscriptVenueManager(config).set_venue(args.manuscript_id, args.venue)
+        print(json.dumps(to_plain(manuscript_state.manuscript), indent=2))
+        return 0
+    if args.command == "submission-checklist":
+        checklist_manager = SubmissionChecklistManager(config)
+        submission_checklist = checklist_manager.build(args.manuscript_id)
+        print(checklist_manager.render_markdown(submission_checklist), end="")
+        return 0
+    if args.command == "anonymize-manuscript":
+        anonymizer = ManuscriptAnonymizer(config)
+        anonymization_report = anonymizer.anonymize(args.manuscript_id)
+        print(anonymizer.render_markdown(anonymization_report), end="")
+        return 0
+    if args.command == "anonymization-check":
+        anonymizer = ManuscriptAnonymizer(config)
+        anonymization_report = anonymizer.check(args.manuscript_id)
+        print(anonymizer.render_markdown(anonymization_report), end="")
+        return 0
+    if args.command == "deanonymize-package":
+        anonymizer = ManuscriptAnonymizer(config)
+        anonymization_report = anonymizer.deanonymize_package(args.manuscript_id)
+        print(anonymizer.render_markdown(anonymization_report), end="")
+        return 0
+    if args.command == "artifact-eval-package":
+        artifact_package = ArtifactEvaluationPackageExporter(config).export(args.manuscript_id)
+        print(json.dumps(to_plain(artifact_package), indent=2))
+        return 0
+    if args.command == "artifact-eval-check":
+        artifact_checklist_manager = ArtifactEvaluationChecklistManager(config)
+        artifact_checklist = artifact_checklist_manager.check(args.package_id)
+        print(artifact_checklist_manager.render_markdown(artifact_checklist), end="")
+        return 0
+    if args.command == "artifact-badges":
+        badge_assessor = ArtifactBadgeAssessor(config)
+        badge_assessments = badge_assessor.assess(args.package_id)
+        print(badge_assessor.render_markdown(badge_assessments), end="")
+        return 0
+    if args.command == "artifact-eval-smoke":
+        smoke_runner = ArtifactEvaluationSmokeRunner(config)
+        smoke_record = smoke_runner.dry_run(args.package_id)
+        print(smoke_runner.render_markdown(smoke_record), end="")
+        return 0
+    if args.command == "manuscript-review":
+        reviewer_builder = ManuscriptReviewPanelBuilder(config)
+        manuscript_panel = reviewer_builder.review(args.manuscript_id)
+        print(render_manuscript_review_panel_markdown(manuscript_panel), end="")
+        return 0
+    if args.command == "manuscript-meta-review":
+        print(ManuscriptReviewPanelBuilder(config).meta_review(args.manuscript_id), end="")
+        return 0
+    if args.command == "manuscript-fix-list":
+        print(ManuscriptReviewPanelBuilder(config).fix_list(args.manuscript_id), end="")
+        return 0
+    if args.command == "revision-plan":
+        revision_manager = ManuscriptRevisionManager(config)
+        revision = revision_manager.build(args.manuscript_id)
+        print(revision_manager.render_markdown(revision), end="")
+        return 0
+    if args.command == "mark-rebuttal-item":
+        rebuttal_item = ManuscriptRebuttalManager(config).mark_item(args.item_id, args.status)
+        print(json.dumps(to_plain(rebuttal_item), indent=2))
+        return 0
+    if args.command == "revision-status":
+        print(ManuscriptRevisionManager(config).status(args.manuscript_id), end="")
+        return 0
+    if args.command == "submission-package":
+        submission_package = SubmissionPackageExporter(config).export(args.manuscript_id, args.type)
+        print(json.dumps(to_plain(submission_package), indent=2))
+        return 0
+    if args.command == "submission-package-status":
+        print(SubmissionPackageExporter(config).status_markdown(args.package_id), end="")
         return 0
     if args.command == "export-manuscript":
         package = PaperPackageExporter(config).export_run_gap(args.run_id, args.gap_id, allow_rejected=args.allow_rejected)

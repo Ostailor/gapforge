@@ -32,6 +32,7 @@ class V04CampaignGateAssessment:
     experiment_ready: bool = False
     refusal: bool = False
     full_text_or_manual_pdf: bool = False
+    release_gate_candidate: bool = False
     blockers: list[str] = field(default_factory=list)
     blocker_categories: dict[str, list[str]] = field(default_factory=dict)
     next_commands: list[str] = field(default_factory=list)
@@ -175,13 +176,14 @@ class V04ReleaseGateEnforcer:
             experiment_ready=ready,
             refusal=refusal,
             full_text_or_manual_pdf=_has_full_text_or_pdf(runs),
+            release_gate_candidate=bool((state.acceptance_summary and state.acceptance_summary.release_gate_eligible) or refusal),
             fake_vs_real_explanation=FAKE_VS_REAL_EXPLANATION,
             task_pack_actual_run_explanation=TASK_PACK_ACTUAL_RUN_EXPLANATION,
         )
         assessment.blockers = _campaign_blockers(state, runs, assessment)
         assessment.blocker_categories = _categorize_blockers(assessment.blockers)
         assessment.next_commands = _next_commands_for_campaign(state, assessment)
-        assessment.accepted_real_campaign = not assessment.blockers
+        assessment.accepted_real_campaign = assessment.release_gate_candidate and not assessment.blockers
         return assessment
 
     def _programs(self, project_id: str) -> list[ResearchProgramState]:
@@ -452,7 +454,24 @@ def _campaign_has_release_blocking_failures(assessment: V04CampaignGateAssessmen
     should not keep the gate failing after the required real Codex campaigns pass.
     """
 
-    return assessment.mode in {"codex_task_pack", "codex_direct", "manual_handoff"}
+    if assessment.mode not in {"codex_task_pack", "codex_direct", "manual_handoff"}:
+        return False
+    if assessment.release_gate_candidate:
+        return True
+    return any(_is_evidence_integrity_blocker(blocker) for blocker in assessment.blockers)
+
+
+def _is_evidence_integrity_blocker(blocker: str) -> bool:
+    text = blocker.lower()
+    return any(
+        phrase in text
+        for phrase in [
+            "fake citation",
+            "unsupported high-confidence",
+            "overclaim",
+            "strong novelty appears without closest prior work",
+        ]
+    )
 
 
 def _dedupe(values: list[str]) -> list[str]:

@@ -262,3 +262,45 @@ For v0.7 task packs, prompts should include:
 - replication package requirements
 
 Any Codex-generated benchmark code or analysis must be validated by execution records, result artifacts, and benchmark review before supporting benchmark claims.
+
+## v0.8 Manuscript, Artifact Evaluation, and Rebuttal Role
+
+For v0.8, Codex/GPT-5.4 may help draft manuscript sections, organize related work, build citation audits, summarize artifact evaluation packages, simulate reviewer objections, and draft rebuttal plans. Codex remains a writing and review assistant, not a source of paper truth.
+
+Codex may help:
+
+- draft sections from allowed claim IDs, evidence locators, result artifacts, and known citation keys
+- identify unsupported claims in manuscript text
+- organize related work from known paper records and related-work matrices
+- propose figure and table captions for existing result artifacts
+- summarize artifact evaluation package contents from replication and workspace state
+- simulate reviewer objections against the manuscript, evidence, citations, and artifacts
+- map objections to evidence, manuscript edits, additional experiments, or honest concessions
+- prepare blinding and anonymization review notes
+- maintain public reasoning summaries for auditability
+
+Codex must not:
+
+- invent citations, BibTeX, DOIs, arXiv IDs, venues, reviewer quotes, results, figures, tables, artifact contents, or acceptance status
+- turn a hypothesis, expected result, smoke run, failed run, or underpowered run into a supported paper claim
+- mark a manuscript submission-ready when novelty, result, reproducibility, artifact, citation, blinding, or human-review gates fail
+- claim camera-ready status without explicit acceptance metadata
+- hide negative results, failed jobs, missing baselines, missed prior work, unresolved citations, or artifact gaps
+- answer reviewer objections with unsupported assertions
+- request or persist hidden chain-of-thought
+
+For v0.8 task packs, prompts should include:
+
+- manuscript project ID and venue profile
+- anonymity/blinding mode
+- allowed claim IDs and their support status
+- allowed paper IDs, EvidenceSpan locators, and citation keys
+- result artifact IDs, execution records, statistical summaries, and reproducibility status
+- benchmark records, comparison/error-analysis reports, and replication package status
+- section-level output contracts
+- citation/BibTeX validation rules
+- artifact evaluation package requirements
+- reviewer objections and blocking status
+- explicit instruction that missing evidence requires a blocker, concession, or search request
+
+Any Codex-generated manuscript text, artifact-evaluation summary, or rebuttal draft must pass schema validation, citation audit, traceability audit, and human review before supporting submission-ready status.

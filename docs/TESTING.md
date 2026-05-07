@@ -202,3 +202,41 @@ PYTHONPATH=src pytest tests/test_paper_package_export_v2.py tests/test_release_g
 ```
 
 Smoke, fixture, and generated placeholder outputs must be labeled. Tests must reject fake result artifacts and must not assert empirical success from scaffolds or smoke commands alone.
+
+## v0.8 Manuscript Workflow Tests
+
+v0.8 tests must remain offline and deterministic. They should use fixture manuscript projects, known `Paper` records, small local result artifacts, fixture venue templates, and local replication packages. They must not require live source APIs, LaTeX, provider LLM calls, GPUs, clusters, or large data downloads.
+
+Tests should cover:
+
+- manuscript project creation and durable state load
+- section drafting and links to claims, papers, results, and artifacts
+- bibliography building from known papers only
+- fake-looking citation and unresolved key rejection
+- traceability reports for supported and unsupported claims
+- result claim honesty: no artifact means no supported result claim
+- smoke/pilot result overclaim warnings
+- artifact-backed figure/table generation and conservative captions
+- venue checklist blockers and arXiv-versus-conference strictness
+- anonymization copy generation and identity leak detection
+- artifact evaluation package export, checklist, badges, and smoke dry-run
+- manuscript reviewer panel fatal/major issues
+- rebuttal/revision plans that create search/experiment/softening requests
+- submission package gating
+- dashboard blocker visibility and HTML escaping
+- Python API wrappers for the same workflow
+- `gapforge eval --v8`
+- `gapforge v8-release-gate`
+
+Useful commands:
+
+```bash
+gapforge eval --v8 --write-report
+PYTHONPATH=src pytest tests/test_manuscripts.py tests/test_manuscript_bibliography.py tests/test_manuscript_traceability.py
+PYTHONPATH=src pytest tests/test_manuscript_assets.py tests/test_submission_checklist.py tests/test_artifact_eval.py
+PYTHONPATH=src pytest tests/test_manuscript_reviewer_panel.py tests/test_manuscript_rebuttal_revision.py
+PYTHONPATH=src pytest tests/test_manuscript_submission_package.py tests/test_release_gate_v08.py
+PYTHONPATH=src pytest tests/test_dashboard.py tests/test_api.py
+```
+
+Fixture success proves v0.8 workflow behavior, not venue acceptance. Tests must keep failed/negative experiments, missing citations, unsupported claims, anonymization leaks, and reviewer blockers visible.

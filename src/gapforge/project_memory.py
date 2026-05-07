@@ -35,6 +35,7 @@ from gapforge.models import (
     ReviewerObjection,
     ReviewPanel,
     ReviewQueue,
+    SearchQueryRecord,
     from_dict,
     to_plain,
 )
@@ -65,6 +66,7 @@ PROJECT_ARTIFACTS = [
     "benchmark_suites.json",
     "benchmark_suites.md",
     "benchmark_suites/",
+    "revision_search_requests.json",
     "review_panels.json",
     "review_panel.md",
     "rebuttal_plan.md",
@@ -158,6 +160,7 @@ class ProjectMemoryManager:
         experiment_repo_scaffolds = _load_list(root_dir / "experiment_repo_scaffolds.json", ExperimentRepoScaffold)
         experiment_workspaces = _load_list(root_dir / "experiment_workspaces.json", ExperimentWorkspace)
         benchmark_suites = _load_list(root_dir / "benchmark_suites.json", BenchmarkSuite)
+        revision_search_requests = _load_list(root_dir / "revision_search_requests.json", SearchQueryRecord)
         review_panels = _load_list(root_dir / "review_panels.json", ReviewPanel)
         review_queue = None
         review_queue_path = root_dir / "review_queue.json"
@@ -184,6 +187,7 @@ class ProjectMemoryManager:
             experiment_repo_scaffolds=experiment_repo_scaffolds,
             experiment_workspaces=experiment_workspaces,
             benchmark_suites=benchmark_suites,
+            revision_search_requests=revision_search_requests,
             review_panels=review_panels,
             review_queue=review_queue,
             claim_graph=claim_graph,
@@ -215,6 +219,7 @@ class ProjectMemoryManager:
         self._write_json(root_dir / "experiment_repo_scaffolds.json", program.experiment_repo_scaffolds)
         self._write_json(root_dir / "experiment_workspaces.json", program.experiment_workspaces)
         self._write_json(root_dir / "benchmark_suites.json", program.benchmark_suites)
+        self._write_json(root_dir / "revision_search_requests.json", program.revision_search_requests)
         self._write_json(root_dir / "review_panels.json", program.review_panels)
         self._write_json(root_dir / "review_queue.json", program.review_queue)
         self._write_json(root_dir / "claim_graph.json", program.claim_graph)

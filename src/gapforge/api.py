@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from gapforge.agents.validation import create_actual_run_attestation as create_run_actual_run_attestation
+from gapforge.artifact_eval import ArtifactEvaluationPackageExporter
 from gapforge.baselines.registry import BaselineRegistry
 from gapforge.benchmarks.comparison import BenchmarkComparisonBuilder
 from gapforge.benchmarks.registry import BenchmarkRegistry
@@ -38,11 +39,35 @@ from gapforge.export.paper_package import PaperPackageExporter
 from gapforge.fulltext.pdf_parser import FullTextParser
 from gapforge.ingest import ManualIngestor
 from gapforge.jobs import JobScheduler
+from gapforge.manuscript import (
+    AnonymizationReport,
+    BibliographyRecord,
+    ManuscriptFigure,
+    ManuscriptManager,
+    ManuscriptReviewPanel,
+    ManuscriptState,
+    ManuscriptTable,
+    ManuscriptTraceabilityReport,
+    ManuscriptVenueManager,
+    RevisionPlan,
+    SubmissionChecklist,
+    SubmissionChecklistManager,
+    SubmissionPackage,
+)
+from gapforge.manuscript.anonymization import ManuscriptAnonymizer
+from gapforge.manuscript.bibliography import ManuscriptBibliographyManager
+from gapforge.manuscript.figures import ManuscriptFigureGenerator
+from gapforge.manuscript.rebuttal import ManuscriptRebuttalManager
+from gapforge.manuscript.reviewer_panel import ManuscriptReviewPanelBuilder
+from gapforge.manuscript.submission import SubmissionPackageExporter
+from gapforge.manuscript.tables import ManuscriptTableGenerator
+from gapforge.manuscript.traceability import ManuscriptTraceabilityAuditor
 from gapforge.metrics.registry import MetricRegistry
 from gapforge.models import (
     AgentActualRunAttestation,
     AgentTaskSpec,
     AggregateResult,
+    ArtifactEvaluationPackage,
     BaselineRecord,
     BenchmarkComparison,
     BenchmarkRecord,
@@ -96,6 +121,7 @@ from gapforge.release_gate import (
     V06ReleaseGateResult,
 )
 from gapforge.release_gate.v07 import V07ReleaseGateEnforcer, V07ReleaseGateResult
+from gapforge.release_gate.v08 import V08ReleaseGateEnforcer, V08ReleaseGateResult
 from gapforge.replication import ReplicationPackageExporter, ReplicationPackageVerifier, ReproductionRunner
 from gapforge.reporting import write_final_report
 from gapforge.results import ErrorAnalysisBuilder, ResultAggregator, ResultParser, ResultStatisticsAnalyzer
@@ -146,6 +172,12 @@ class CampaignReviewResult:
 class RealLiteratureReviewResult:
     review: RealLiteratureHumanReview
     summary: dict[str, object]
+
+
+@dataclass(slots=True)
+class ManuscriptAssetsResult:
+    figures: list[ManuscriptFigure]
+    tables: list[ManuscriptTable]
 
 
 def create_project(
@@ -990,6 +1022,232 @@ def export_paper_package_v2(
     return exporter.export_direction_v2(direction_id or "")
 
 
+def create_manuscript(
+    project_id: str,
+    direction_id: str,
+    workspace_id: str,
+    title: str,
+    *,
+    campaign_id: str = "",
+    short_title: str = "",
+    target_venue: str = "",
+    config: GapForgeConfig | None = None,
+) -> ManuscriptState:
+    """Create durable v0.8 manuscript project state."""
+
+    return ManuscriptManager(_config(config)).create_manuscript(
+        project_id=project_id,
+        direction_id=direction_id,
+        workspace_id=workspace_id,
+        title=title,
+        campaign_id=campaign_id,
+        short_title=short_title,
+        target_venue=target_venue,
+    )
+
+
+def build_bibliography(
+    manuscript_id: str,
+    *,
+    config: GapForgeConfig | None = None,
+) -> BibliographyRecord:
+    """Build a reproducible manuscript bibliography from known paper records."""
+
+    return ManuscriptBibliographyManager(_config(config)).build(manuscript_id)
+
+
+def draft_manuscript(
+    manuscript_id: str,
+    *,
+    sections: list[str] | None = None,
+    section_links: dict[str, dict[str, list[str]]] | None = None,
+    claim_uses: list[dict[str, object]] | None = None,
+    status: str = "drafted",
+    config: GapForgeConfig | None = None,
+) -> ManuscriptState:
+    """Create or update manuscript section stubs and optional claim-use links.
+
+    ``section_links`` is keyed by section type and may contain
+    ``source_claim_ids``, ``source_paper_ids``, ``source_result_ids``,
+    ``source_artifact_ids``, and ``warnings``. ``claim_uses`` items should
+    include at least ``section_type`` or ``section_id``, ``claim_id``,
+    ``claim_text``, ``use_type``, and ``support_status``.
+    """
+
+    cfg = _config(config)
+    manager = ManuscriptManager(cfg)
+    state = manager.load_state(manuscript_id)
+    requested_sections = sections or _default_manuscript_sections()
+    section_by_type = {section.section_type: section for section in state.sections}
+    links = section_links or {}
+    for section_type in requested_sections:
+        section_link = links.get(section_type, {})
+        if section_type in section_by_type:
+            manager.update_section_links(
+                manuscript_id=manuscript_id,
+                section_id=section_by_type[section_type].id,
+                source_claim_ids=_string_list(section_link.get("source_claim_ids")),
+                source_paper_ids=_string_list(section_link.get("source_paper_ids")),
+                source_result_ids=_string_list(section_link.get("source_result_ids")),
+                source_artifact_ids=_string_list(section_link.get("source_artifact_ids")),
+                status=status,
+                warnings=_string_list(section_link.get("warnings")),
+            )
+        else:
+            section = manager.create_section(
+                manuscript_id=manuscript_id,
+                section_type=section_type,
+                title=section_type.replace("_", " ").title(),
+                source_claim_ids=_string_list(section_link.get("source_claim_ids")),
+                source_paper_ids=_string_list(section_link.get("source_paper_ids")),
+                source_result_ids=_string_list(section_link.get("source_result_ids")),
+                source_artifact_ids=_string_list(section_link.get("source_artifact_ids")),
+                status=status,
+                warnings=_string_list(section_link.get("warnings")),
+            )
+            section_by_type[section_type] = section
+    state = manager.load_state(manuscript_id)
+    section_by_id = {section.id: section for section in state.sections}
+    section_by_type = {section.section_type: section for section in state.sections}
+    for claim in claim_uses or []:
+        section_id = str(claim.get("section_id") or "")
+        if not section_id:
+            section_type = str(claim.get("section_type") or "")
+            if section_type not in section_by_type:
+                raise ValueError(f"Unknown claim section_type `{section_type}` for manuscript `{manuscript_id}`.")
+            section_id = section_by_type[section_type].id
+        if section_id not in section_by_id:
+            raise ValueError(f"Unknown claim section_id `{section_id}` for manuscript `{manuscript_id}`.")
+        manager.link_claim_use(
+            manuscript_id=manuscript_id,
+            section_id=section_id,
+            claim_id=str(claim.get("claim_id") or ""),
+            claim_text=str(claim.get("claim_text") or ""),
+            use_type=str(claim.get("use_type") or "background"),
+            support_status=str(claim.get("support_status") or "unsupported"),
+            evidence_locators=_string_list(claim.get("evidence_locators")),
+            citation_keys=_string_list(claim.get("citation_keys")),
+            requires_softening=bool(claim.get("requires_softening", False)),
+        )
+    return manager.load_state(manuscript_id)
+
+
+def render_manuscript(
+    manuscript_id: str,
+    *,
+    output_path: str | Path | None = None,
+    config: GapForgeConfig | None = None,
+) -> str:
+    """Render the current manuscript draft by concatenating section files."""
+
+    cfg = _config(config)
+    manager = ManuscriptManager(cfg)
+    state = manager.load_state(manuscript_id)
+    markdown = _render_manuscript_draft(manager.manuscript_root(manuscript_id), state)
+    if output_path is not None:
+        Path(output_path).write_text(markdown, encoding="utf-8")
+    return markdown
+
+
+def generate_manuscript_assets(
+    manuscript_id: str,
+    *,
+    table_types: list[str] | None = None,
+    figure_types: list[str] | None = None,
+    config: GapForgeConfig | None = None,
+) -> ManuscriptAssetsResult:
+    """Generate artifact-backed manuscript figures and tables."""
+
+    cfg = _config(config)
+    table_generator = ManuscriptTableGenerator(cfg)
+    figure_generator = ManuscriptFigureGenerator(cfg)
+    tables = [table_generator.generate(manuscript_id, table_type) for table_type in (table_types or ["result_table"])]
+    figures = [figure_generator.generate(manuscript_id, figure_type) for figure_type in (figure_types or ["metric_plot"])]
+    return ManuscriptAssetsResult(figures=figures, tables=tables)
+
+
+def run_traceability_check(
+    manuscript_id: str,
+    *,
+    config: GapForgeConfig | None = None,
+) -> ManuscriptTraceabilityReport:
+    """Audit manuscript claim uses against evidence, citations, and result artifacts."""
+
+    return ManuscriptTraceabilityAuditor(_config(config)).audit(manuscript_id)
+
+
+def set_venue(
+    manuscript_id: str,
+    venue_id: str,
+    *,
+    config: GapForgeConfig | None = None,
+) -> ManuscriptState:
+    """Assign a built-in venue template to a manuscript."""
+
+    return ManuscriptVenueManager(_config(config)).set_venue(manuscript_id, venue_id)
+
+
+def submission_checklist(
+    manuscript_id: str,
+    *,
+    config: GapForgeConfig | None = None,
+) -> SubmissionChecklist:
+    """Build a venue-aware manuscript submission checklist."""
+
+    return SubmissionChecklistManager(_config(config)).build(manuscript_id)
+
+
+def anonymize_manuscript(
+    manuscript_id: str,
+    *,
+    config: GapForgeConfig | None = None,
+) -> AnonymizationReport:
+    """Generate an anonymized submission copy and identity-leak report."""
+
+    return ManuscriptAnonymizer(_config(config)).anonymize(manuscript_id)
+
+
+def create_artifact_eval_package(
+    manuscript_id: str,
+    *,
+    config: GapForgeConfig | None = None,
+) -> ArtifactEvaluationPackage:
+    """Export a review-ready artifact evaluation package from manuscript and replication state."""
+
+    return ArtifactEvaluationPackageExporter(_config(config)).export(manuscript_id)
+
+
+def manuscript_review(
+    manuscript_id: str,
+    *,
+    config: GapForgeConfig | None = None,
+) -> ManuscriptReviewPanel:
+    """Run the deterministic full-manuscript reviewer panel."""
+
+    return ManuscriptReviewPanelBuilder(_config(config)).review(manuscript_id)
+
+
+def rebuttal_plan(
+    manuscript_id: str,
+    *,
+    config: GapForgeConfig | None = None,
+) -> RevisionPlan:
+    """Convert manuscript reviewer objections into actionable rebuttal items."""
+
+    return ManuscriptRebuttalManager(_config(config)).build(manuscript_id)
+
+
+def submission_package(
+    manuscript_id: str,
+    package_type: str = "review",
+    *,
+    config: GapForgeConfig | None = None,
+) -> SubmissionPackage:
+    """Export a gated manuscript submission package."""
+
+    return SubmissionPackageExporter(_config(config)).export(manuscript_id, package_type)
+
+
 def v6_release_gate(
     *,
     config: GapForgeConfig | None = None,
@@ -1193,6 +1451,20 @@ def v7_release_gate(
     return V07ReleaseGateEnforcer(_config(config)).evaluate(claim_real_benchmark_validation=claim_real_benchmark_validation)
 
 
+def v8_release_gate(
+    *,
+    write_report: bool = False,
+    config: GapForgeConfig | None = None,
+) -> V08ReleaseGateResult:
+    """Evaluate the v0.8 manuscript, artifact-evaluation, and rebuttal release gate."""
+
+    enforcer = V08ReleaseGateEnforcer(_config(config))
+    result = enforcer.evaluate()
+    if write_report:
+        enforcer.write_outputs(result)
+    return result
+
+
 def get_state(run_id: str, *, config: GapForgeConfig | None = None) -> ResearchRunState:
     """Load a persisted run state."""
 
@@ -1221,6 +1493,35 @@ def _require_one_identifier(first_name: str, first: str | None, second_name: str
 
 def _paths(paths: list[str | Path] | None) -> list[Path]:
     return [Path(path) for path in paths or []]
+
+
+def _default_manuscript_sections() -> list[str]:
+    return [
+        "abstract",
+        "introduction",
+        "related_work",
+        "method",
+        "experiments",
+        "results",
+        "limitations",
+        "conclusion",
+    ]
+
+
+def _string_list(value: object) -> list[str]:
+    return [str(item) for item in value] if isinstance(value, list) else []
+
+
+def _render_manuscript_draft(root: Path, state: ManuscriptState) -> str:
+    lines = [f"# {state.manuscript.title}", ""]
+    for section in state.sections:
+        section_path = root / section.content_path
+        if section_path.exists():
+            lines.append(section_path.read_text(encoding="utf-8").rstrip())
+        else:
+            lines.extend([f"## {section.title}", "", "_Section file missing in manuscript workspace._"])
+        lines.append("")
+    return "\n".join(lines).rstrip() + "\n"
 
 
 def _attest_run_task(
@@ -1290,6 +1591,7 @@ __all__ = [
     "AddPdfResult",
     "CampaignReviewResult",
     "CampaignTaskResult",
+    "ManuscriptAssetsResult",
     "ParseFullTextResult",
     "RealLiteratureReviewResult",
     "ReportResult",
@@ -1297,7 +1599,9 @@ __all__ = [
     "aggregate_results",
     "benchmark_compare",
     "attest_agent_run",
+    "anonymize_manuscript",
     "build_index",
+    "build_bibliography",
     "campaign_acceptance",
     "campaign_next",
     "canonicalize_papers",
@@ -1308,16 +1612,20 @@ __all__ = [
     "create_direction",
     "create_experiment_manifest",
     "create_experiment_workspace",
+    "create_artifact_eval_package",
     "create_project",
+    "create_manuscript",
     "create_run",
     "create_sweep",
     "download_dataset",
+    "draft_manuscript",
     "empirical_review",
     "export_paper_package",
     "export_paper_package_v2",
     "export_replication_package",
     "export_report",
     "generate_code_tasks",
+    "generate_manuscript_assets",
     "get_project",
     "get_state",
     "import_campaign_output",
@@ -1334,21 +1642,28 @@ __all__ = [
     "register_benchmark",
     "register_dataset",
     "register_metric",
+    "render_manuscript",
     "reproducibility_check",
     "reproduce_package",
     "review_campaign",
+    "rebuttal_plan",
     "run_error_analysis",
+    "run_traceability_check",
     "run_real_literature_campaign",
     "run_campaign",
     "run_experiment",
     "search_papers",
     "scaffold_experiment_code",
+    "set_venue",
     "submit_job",
+    "submission_checklist",
+    "submission_package",
     "source_health",
     "v4_release_gate",
     "v5_release_gate",
     "v6_release_gate",
     "v7_release_gate",
+    "v8_release_gate",
     "validate_campaign_output",
     "verify_replication_package",
 ]

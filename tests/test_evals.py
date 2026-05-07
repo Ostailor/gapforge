@@ -14,6 +14,7 @@ from gapforge.evals.fixtures import (
     V5_FIXTURE_NAMES,
     V6_FIXTURE_NAMES,
     V7_FIXTURE_NAMES,
+    V8_FIXTURE_NAMES,
     list_fixtures,
     load_fixture,
     load_v3_fixture,
@@ -21,13 +22,17 @@ from gapforge.evals.fixtures import (
     load_v5_fixture,
     load_v6_fixture,
     load_v7_fixture,
+    load_v8_fixture,
 )
 from gapforge.evals.metrics import (
     actual_run_gate_correctness,
     agent_output_validation_strictness,
+    anonymization_safety,
+    artifact_eval_package_score,
     benchmark_execution_integrity,
     benchmark_failure_path_preservation,
     canonicalization_quality,
+    citation_validity_score,
     direction_maturity_accuracy,
     direction_maturity_gate_accuracy_from_fixture,
     empirical_claim_validity,
@@ -38,24 +43,31 @@ from gapforge.evals.metrics import (
     live_source_coverage_score,
     low_fpr_underpowered_warning_score,
     manuscript_package_honesty,
+    manuscript_traceability_score,
     novelty_research_loop_quality,
     paper_package_honesty,
     prior_work_recall_gate_score,
     quality_review_gate_correctness,
     real_literature_refusal_quality,
+    rebuttal_actionability,
     replication_package_quality,
     reproduction_verification_quality,
     result_aggregation_quality,
+    result_claim_honesty_score,
     retrieval_relevance_at_k,
+    reviewer_panel_quality,
     rollback_safety,
     search_strategy_completeness,
     source_policy_compliance,
     statistical_caution_score,
     stop_reason_correctness,
+    submission_package_completeness,
     unsupported_claim_rate,
     v5_release_gate_correctness,
     v6_release_gate_correctness,
     v7_release_gate_correctness,
+    v8_release_gate_correctness,
+    venue_checklist_score,
 )
 from gapforge.models import Claim, ResearchRunState, ResearchTopic, SourceCoverageReport
 
@@ -165,6 +177,25 @@ def test_v7_eval_fixtures_are_complete_and_offline() -> None:
         assert payload["replication"]
         assert payload["reproduction"]
         assert payload["v7_release_gate"]
+
+
+def test_v8_eval_fixtures_are_complete_and_offline() -> None:
+    for name in V8_FIXTURE_NAMES:
+        fixture = load_v8_fixture(name)
+        payload = fixture.manuscript_fixture
+        assert fixture.is_v8
+        assert fixture.topic
+        assert fixture.papers
+        assert payload["traceability"]
+        assert payload["citations"]
+        assert payload["results"]
+        assert payload["venue_checklist"]
+        assert payload["artifact_evaluation"]
+        assert payload["reviewer_panel"]
+        assert payload["rebuttal"]
+        assert payload["anonymization"]
+        assert payload["submission_package"]
+        assert payload["v8_release_gate"]
 
 
 def test_run_evals_single_fixture_writes_report(tmp_path: Path) -> None:
@@ -304,6 +335,28 @@ def test_eval_cli_v7_writes_report(tmp_path: Path) -> None:
     report_path.unlink()
 
 
+def test_eval_cli_v8_writes_report(tmp_path: Path) -> None:
+    env = {**os.environ, "GAPFORGE_DISABLE_NETWORK": "1"}
+    env["PYTHONPATH"] = str(Path.cwd() / "src")
+    result = subprocess.run(
+        [sys.executable, "-m", "gapforge.cli", "eval", "--fixture", "complete_submission_package", "--v8", "--write-report"],
+        cwd=Path.cwd(),
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "eval_report.md" in result.stdout
+    report_path = Path.cwd() / "eval_report.md"
+    assert report_path.exists()
+    text = report_path.read_text(encoding="utf-8")
+    assert "### v0.8 Scores" in text
+    assert "submission_package_completeness" in text
+    report_path.unlink()
+
+
 def test_fixture_duplicate_ideas_are_intentionally_rejected() -> None:
     report = run_evals(fixture="quantum_portfolio_optimization", write_report=False)
     result = report.results[0]
@@ -395,6 +448,20 @@ def test_run_v7_evals_includes_benchmark_metrics_offline(tmp_path: Path, monkeyp
     assert "### v0.7 Scores" in text
     assert "v0.7 overall score" in text
     assert "replication_package_quality" in text
+
+
+def test_run_v8_evals_includes_manuscript_metrics_offline(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("GAPFORGE_DISABLE_NETWORK", "1")
+
+    report = run_evals(v8=True, output_dir=tmp_path, write_report=True)
+
+    assert len(report.results) == len(V8_FIXTURE_NAMES)
+    assert all(result.scores.manuscript_traceability_score is not None for result in report.results)
+    assert all(result.scores.v8_release_gate_correctness is not None for result in report.results)
+    text = (tmp_path / "eval_report.md").read_text(encoding="utf-8")
+    assert "### v0.8 Scores" in text
+    assert "v0.8 overall score" in text
+    assert "submission_package_completeness" in text
 
 
 def test_v2_duplicate_ideas_are_rejected_by_dossier_aware_novelty_gate() -> None:
@@ -616,3 +683,54 @@ def test_v7_low_fpr_warning_and_replication_metrics_work() -> None:
     assert low_fpr_underpowered_warning_score(low_fpr) == 1.0
     assert replication_package_quality(replication) == 1.0
     assert reproduction_verification_quality(replication) == 1.0
+
+
+def test_v8_complete_submission_package_passes() -> None:
+    fixture = load_v8_fixture("complete_submission_package").manuscript_fixture
+
+    assert manuscript_traceability_score(fixture) == 1.0
+    assert citation_validity_score(fixture) == 1.0
+    assert submission_package_completeness(fixture) == 1.0
+    assert v8_release_gate_correctness(fixture) == 1.0
+
+
+def test_v8_unsupported_claim_blocks() -> None:
+    fixture = load_v8_fixture("unsupported_claim_blocked").manuscript_fixture
+
+    assert manuscript_traceability_score(fixture) == 1.0
+    assert venue_checklist_score(fixture) == 1.0
+    assert v8_release_gate_correctness(fixture) == 1.0
+
+
+def test_v8_fake_citation_blocks() -> None:
+    fixture = load_v8_fixture("fake_citation_blocked").manuscript_fixture
+
+    assert citation_validity_score(fixture) == 1.0
+    assert v8_release_gate_correctness(fixture) == 1.0
+
+
+def test_v8_smoke_result_overclaim_blocks() -> None:
+    fixture = load_v8_fixture("smoke_result_overclaim").manuscript_fixture
+
+    assert result_claim_honesty_score(fixture) == 1.0
+    assert v8_release_gate_correctness(fixture) == 1.0
+
+
+def test_v8_anonymization_leak_detected() -> None:
+    fixture = load_v8_fixture("anonymous_submission_leak").manuscript_fixture
+
+    assert anonymization_safety(fixture) == 1.0
+    assert v8_release_gate_correctness(fixture) == 1.0
+
+
+def test_v8_release_gate_covered_by_reviewer_and_artifact_fixtures() -> None:
+    reviewer = load_v8_fixture("reviewer_rebuttal_required").manuscript_fixture
+    missing_artifact = load_v8_fixture("missing_artifact_package").manuscript_fixture
+    camera_ready = load_v8_fixture("camera_ready_blocked").manuscript_fixture
+
+    assert reviewer_panel_quality(reviewer) == 1.0
+    assert rebuttal_actionability(reviewer) == 1.0
+    assert artifact_eval_package_score(missing_artifact) == 1.0
+    assert v8_release_gate_correctness(missing_artifact) == 1.0
+    assert rebuttal_actionability(camera_ready) == 1.0
+    assert v8_release_gate_correctness(camera_ready) == 1.0

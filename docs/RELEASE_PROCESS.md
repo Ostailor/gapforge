@@ -251,6 +251,74 @@ Release notes must distinguish:
 
 If external downloads, GPU, cluster execution, or independent replication are unavailable, record those as not-run or incomplete. Do not fake a benchmark pass.
 
+## v0.8 Manuscript and Artifact-Evaluation Gate
+
+v0.8 must not claim submission-readiness based only on a polished draft, generated prose, reviewer simulation, or paper package export. It must require claim traceability, citation validity, artifact-backed results, artifact evaluation package state, blinding checks when applicable, reviewer-objection handling, and human review.
+
+Before tagging v0.8, the release process should require:
+
+```bash
+make ci
+make eval
+gapforge eval --v2 --write-report
+gapforge eval --v3 --write-report
+gapforge eval --v4 --write-report
+gapforge eval --v5 --write-report
+gapforge eval --v6 --write-report
+gapforge eval --v7 --write-report
+gapforge eval --v8 --write-report
+gapforge v7-release-gate --write-report --json
+gapforge manuscript-create --project-id <project-id> --direction-id <direction-id> --workspace-id <workspace-id> --title "..."
+gapforge bibliography-build --manuscript-id <manuscript-id>
+gapforge citation-check --manuscript-id <manuscript-id>
+gapforge manuscript-traceability --manuscript-id <manuscript-id>
+gapforge manuscript-table --manuscript-id <manuscript-id> --type result_table
+gapforge manuscript-figure --manuscript-id <manuscript-id> --type metric_plot
+gapforge manuscript-set-venue --manuscript-id <manuscript-id> --venue generic_conference
+gapforge submission-checklist --manuscript-id <manuscript-id>
+gapforge anonymize-manuscript --manuscript-id <manuscript-id>
+gapforge artifact-eval-package --manuscript-id <manuscript-id>
+gapforge manuscript-review --manuscript-id <manuscript-id>
+gapforge rebuttal-plan --manuscript-id <manuscript-id>
+gapforge submission-package --manuscript-id <manuscript-id> --type review
+gapforge dashboard --manuscript-id <manuscript-id>
+gapforge v8-release-gate --write-report --json
+```
+
+The v0.8 release gate should require:
+
+- deterministic CI remains passing
+- v5 literature gates, v6 empirical gates, and v7 benchmark/replication gates remain passing or limitations are explicitly documented
+- manuscript-ready, submission-ready, and camera-ready are documented as separate states
+- a manuscript project links sections, claims, evidence, citations, figures, tables, artifacts, reviewer objections, and human decisions
+- every manuscript claim is linked to evidence or explicitly labeled as hypothesis, limitation, future work, or unsupported
+- novelty claims link to closest prior work and source-coverage context
+- result claims link to execution records, result artifacts, statistical analysis, and reproducibility status
+- benchmark claims link to benchmark records, compute logs, comparisons, error/slice analysis, and replication package state
+- citations and BibTeX keys resolve to known paper metadata or user-supplied bibliographic records
+- figures and tables are generated from recorded result artifacts or labeled conceptual placeholders
+- artifact evaluation package is generated from replication and workspace state
+- reviewer objections and rebuttal plans are evidence-backed and do not invent responses
+- anonymization/blinding checks run when the venue profile requires them
+- human review accepts any remaining submission risk or records blockers
+- no unsupported result, citation, novelty, or artifact claim passes the gate
+
+Release notes must distinguish:
+
+- manuscript-ready versus review-ready versus submission-ready versus camera-ready
+- manuscript-ready
+- submission-ready
+- camera-ready
+- artifact evaluation package status
+- citation and BibTeX audit status
+- claim traceability status
+- anonymization/blinding status
+- open reviewer objections and rebuttal risks
+
+If the manuscript cannot pass novelty, result, reproducibility, artifact, citation, blinding, or human-review gates, record it as manuscript-ready with blockers or submission not ready. Do not claim venue acceptance, and do not claim camera-ready status without explicit acceptance metadata.
+
+The Python API mirrors this release path with `gapforge.api.create_manuscript`, `build_bibliography`, `draft_manuscript`, `render_manuscript`, `generate_manuscript_assets`, `run_traceability_check`, `set_venue`, `submission_checklist`, `anonymize_manuscript`, `create_artifact_eval_package`, `manuscript_review`, `rebuttal_plan`, `submission_package`, and `v8_release_gate`.
+
 ## Tagging
 
 Use semantic version tags:
@@ -283,4 +351,6 @@ Release notes should include:
 - For v0.5, do not claim live-literature quality unless accepted live-source campaigns and expert reviews prove it.
 - For v0.6, do not claim empirical validation unless executed experiment artifacts, failed/negative path artifacts, statistical analysis, reproducibility checks, and result-claim links prove it.
 - For v0.7, do not claim real benchmark execution or replication unless a real or benchmark-like non-fixture run, compute logs, benchmark artifacts, comparison/error analysis, and replication package prove it.
+- For v0.8, do not claim submission-readiness unless claim traceability, citation/BibTeX audit, artifact-backed results, artifact evaluation package state, blinding checks when applicable, reviewer-objection handling, and human review prove it.
+- Do not claim camera-ready status without explicit acceptance metadata and a completed camera-ready checklist.
 - Do not publish generated `runs/`, caches, or local environment artifacts as source.

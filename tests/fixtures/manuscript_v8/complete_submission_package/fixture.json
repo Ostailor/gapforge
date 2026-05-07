@@ -1,0 +1,98 @@
+{
+  "topic": "complete v0.8 manuscript submission package",
+  "traceability": {
+    "report_generated": true,
+    "unsupported_claim_present": false,
+    "unsupported_claims_blocked": true,
+    "claims": [
+      {"id": "claim-background", "supported": true, "source": "paper-1"},
+      {"id": "claim-result", "supported": true, "source": "artifact-1"}
+    ],
+    "blocking_issues": []
+  },
+  "citations": {
+    "bibliography_built": true,
+    "known_paper_records": true,
+    "unresolved_known_citations": false,
+    "fake_citation_present": false,
+    "fake_citation_rejected": false,
+    "submission_blocked": false
+  },
+  "results": {
+    "result_claims_artifact_backed": true,
+    "run_type_labels_visible": true,
+    "claims_results_without_artifacts": false,
+    "smoke_overclaim_present": false,
+    "smoke_as_main_result": false,
+    "fake_result_present": false,
+    "fake_result_accepted": false
+  },
+  "venue_checklist": {
+    "generated": true,
+    "status": "submission_ready",
+    "required_sections_checked": true,
+    "bibliography_checked": true,
+    "traceability_checked": true,
+    "artifact_package_checked": true,
+    "limitations_checked": true,
+    "blocking_issues": []
+  },
+  "artifact_evaluation": {
+    "generated": true,
+    "replication_package_included": true,
+    "install_instructions": true,
+    "run_instructions": true,
+    "expected_outputs_hashes": true,
+    "restricted_data_included": false,
+    "missing_expected": false
+  },
+  "reviewer_panel": {
+    "generated": true,
+    "roles": ["novelty", "empirical", "clarity", "related-work", "artifact", "ethics", "area chair"],
+    "evidence_linked": true,
+    "required_fixes": ["tighten related work"],
+    "fatal_expected": false,
+    "fatal_flaws": [],
+    "invented_experiments": false
+  },
+  "rebuttal": {
+    "plan_generated": true,
+    "items": ["item-related-work"],
+    "evidence_needed_listed": true,
+    "experiments_or_searches_created": true,
+    "fake_responses": false,
+    "open_blockers_expected": false,
+    "camera_ready_blocked": false
+  },
+  "anonymization": {
+    "checked": true,
+    "status": "pass",
+    "original_preserved": true,
+    "leak_expected": false,
+    "leak_detected": false,
+    "submission_blocked": false
+  },
+  "submission_package": {
+    "exported": true,
+    "status": "review_ready",
+    "anonymous_required": true,
+    "expected_block": false,
+    "auditable": true,
+    "unsupported_claims_allowed": false,
+    "files": [
+      "manuscript",
+      "bibliography",
+      "figures_or_tables",
+      "appendix",
+      "artifact_eval_readme",
+      "replication_instructions",
+      "limitations",
+      "checklist_report",
+      "anonymization_report"
+    ]
+  },
+  "v8_release_gate": {
+    "expected_pass": true,
+    "expected_blockers": []
+  }
+}

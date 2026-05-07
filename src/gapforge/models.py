@@ -1231,6 +1231,43 @@ class ReproductionRecord:
 
 
 @dataclass(slots=True)
+class ArtifactEvaluationPackage:
+    id: str
+    manuscript_id: str
+    workspace_id: str
+    replication_package_id: str = ""
+    files: list[str] = field(default_factory=list)
+    expected_badges: list[str] = field(default_factory=list)
+    install_instructions: list[str] = field(default_factory=list)
+    run_instructions: list[str] = field(default_factory=list)
+    expected_outputs: list[str] = field(default_factory=list)
+    hardware_requirements: list[str] = field(default_factory=list)
+    time_estimates: list[str] = field(default_factory=list)
+    status: str = "draft"
+    provenance: Provenance = field(default_factory=lambda: Provenance(created_by_skill="artifact-evaluation-package"))
+
+
+@dataclass(slots=True)
+class ArtifactEvaluationChecklist:
+    package_id: str
+    checks: dict[str, str] = field(default_factory=dict)
+    blockers: list[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
+    status: str = "not_ready"
+    provenance: Provenance = field(default_factory=lambda: Provenance(created_by_skill="artifact-evaluation-checklist"))
+
+
+@dataclass(slots=True)
+class BadgeAssessment:
+    package_id: str
+    badge_type: str
+    eligible: bool = False
+    evidence: list[str] = field(default_factory=list)
+    blockers: list[str] = field(default_factory=list)
+    provenance: Provenance = field(default_factory=lambda: Provenance(created_by_skill="artifact-badge-assessment"))
+
+
+@dataclass(slots=True)
 class ReproducibilityMatrix:
     workspace_id: str
     package_id: str
@@ -1927,6 +1964,7 @@ class ResearchProgramState:
     experiment_repo_scaffolds: list[ExperimentRepoScaffold] = field(default_factory=list)
     experiment_workspaces: list[ExperimentWorkspace] = field(default_factory=list)
     benchmark_suites: list[BenchmarkSuite] = field(default_factory=list)
+    revision_search_requests: list[SearchQueryRecord] = field(default_factory=list)
     review_panels: list[ReviewPanel] = field(default_factory=list)
     review_queue: ReviewQueue | None = None
     claim_graph: ClaimGraph | None = None

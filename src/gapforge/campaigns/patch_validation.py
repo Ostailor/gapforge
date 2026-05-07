@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from gapforge.campaigns import CampaignState
-from gapforge.campaigns.task_packs import CAMPAIGN_TASK_OUTPUTS, campaign_task_pack_dir
+from gapforge.campaigns.task_packs import CAMPAIGN_OUTPUT_TOP_KEYS, CAMPAIGN_TASK_OUTPUTS, campaign_task_pack_dir
 from gapforge.config import GapForgeConfig
 from gapforge.models import CampaignImportRecord, Provenance
 from gapforge.state import utc_now_compact, utc_now_iso
@@ -47,7 +47,7 @@ def validate_campaign_patch(
             rejected_objects.append(_rejected("file", str(resolved), f"invalid JSON: {exc}"))
             issues.append(f"{resolved.name}: invalid JSON: {exc}")
             continue
-        top_key = resolved.name.removesuffix(".json")
+        top_key = _payload_top_key(resolved.name, payload)
         if top_key not in payload:
             reason = f"missing required field `{top_key}`"
             issues.append(f"{resolved.name}: {reason}")
@@ -190,6 +190,16 @@ def task_type_from_id(task_id: str) -> str:
         if task_id.endswith(task_type):
             return task_type
     return task_id.rsplit("-", 1)[-1]
+
+
+def _payload_top_key(filename: str, payload: dict[str, Any]) -> str:
+    canonical = CAMPAIGN_OUTPUT_TOP_KEYS.get(filename, filename.removesuffix(".json"))
+    legacy = filename.removesuffix(".json")
+    if canonical in payload or legacy == canonical:
+        return canonical
+    if legacy in payload:
+        return legacy
+    return canonical
 
 
 def known_paper_ids(config: GapForgeConfig, project_id: str) -> set[str]:

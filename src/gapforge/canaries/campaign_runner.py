@@ -461,7 +461,7 @@ def _write_single_task_novelty_output(pack_dir: Path, *, verdict: str) -> None:
     (outputs_dir / "novelty_dossiers_patch.json").write_text(
         json.dumps(
             {
-                "novelty_dossiers_patch": [
+                "novelty_dossiers": [
                     {
                         "target_id": "gap-1",
                         "idea_summary": "Fixture novelty handoff output for single-task canary.",

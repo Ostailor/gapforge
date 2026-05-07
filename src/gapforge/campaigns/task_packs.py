@@ -33,6 +33,11 @@ CAMPAIGN_TASK_OUTPUTS: dict[str, list[str]] = {
     ],
 }
 
+CAMPAIGN_OUTPUT_TOP_KEYS: dict[str, str] = {
+    "novelty_dossiers_patch.json": "novelty_dossiers",
+    "rejected_ideas_patch.json": "rejected_ideas",
+}
+
 
 def create_campaign_task_pack(config: GapForgeConfig, campaign_id: str, task_type: str) -> Path:
     manager = CampaignManager(config)
@@ -374,7 +379,7 @@ def _normalize_task_type(task_type: str) -> str:
 
 
 def _top_key_for_file(filename: str) -> str:
-    return filename.removesuffix(".json")
+    return CAMPAIGN_OUTPUT_TOP_KEYS.get(filename, filename.removesuffix(".json"))
 
 
 def _step_type_for_task(task_type: str) -> str:

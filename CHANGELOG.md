@@ -2,6 +2,46 @@
 
 All notable project changes should be recorded here.
 
+## 0.8.0
+
+GapForge v0.8 is the manuscript, artifact evaluation, and reviewer-rebuttal release. It keeps the v5 literature, v6 empirical, and v7 benchmark/replication gates intact while adding durable manuscript project state, citation discipline, claim-to-paper/result/artifact traceability, venue-aware submission checks, anonymized review packages, artifact-evaluation packaging, reviewer simulation, rebuttal planning, and a v8 release gate that blocks unsupported claims, fake citations, fake results, and premature submission/camera-ready status.
+
+### Manuscript Project and Citation Workflow
+
+- Added first-class manuscript project state with durable `manuscripts/{manuscript_id}/` directories, manuscript metadata, section records, claim-use records, and persisted manuscript state.
+- Added section-level manuscript drafting and rendering that keeps sections traceable to source claims, papers, result artifacts, and supporting artifacts.
+- Added bibliography and citation management with stable citation keys, DOI/arXiv/title deduplication, BibTeX export, missing-metadata warnings, citation-use records, and rejection of fake or unknown citation strings.
+- Added claim-to-manuscript traceability reports that separate background, novelty, method, result, limitation, and future-work uses while requiring support from papers/evidence, empirical artifacts, novelty dossiers, limitation statements, or explicit hypothesis/speculation labels.
+- Added overclaim checks for unsupported claims, overstrong novelty, SOTA claims without verified support, result claims without artifacts, smoke/pilot results phrased as main results, missing citations, and hidden limitations.
+
+### Assets, Venue Checks, and Submission Packages
+
+- Added artifact-backed manuscript figure and table generation for result tables, baseline comparisons, metric plots, failure tables, and conservative captions with run-type and limitation labels.
+- Added venue templates for generic conferences, workshops, arXiv-style preprints, ML-conference-like submissions, and artifact-evaluation-like packages.
+- Added venue-aware submission checklists covering required sections, bibliography/citations, traceability, result artifacts, artifact packages, ethics/limitations, and anonymization requirements.
+- Added anonymization/blinding support that writes anonymized copies without deleting originals and detects obvious author, affiliation, repository URL, local path, metadata, and self-citation leaks.
+- Added submission package export for review, camera-ready, arXiv, and internal package types with gated status, bibliography/assets, appendix content, artifact-evaluation README material, checklist reports, and anonymization reports when required.
+
+### Artifact Evaluation, Reviewer Panel, and Rebuttal
+
+- Upgraded artifact evaluation packaging with replication-package inclusion, install/run instructions, expected outputs and hashes, hardware/time estimates, restricted-data exclusion by default, checklist validation, conservative badge assessment, and dry-run smoke support.
+- Added full-manuscript reviewer panels with novelty, empirical, clarity, related-work, reproducibility/artifact, ethics/limitations, and area-chair roles that cite manuscript sections and underlying evidence.
+- Added rebuttal and revision workflows that convert reviewer objections into actionable fixes, required experiments, citation/search requests, and claim-softening suggestions without inventing missing results or responses.
+- Added camera-ready gating so open fatal review/rebuttal blockers prevent camera-ready status.
+
+### Evals, Dashboard, API, Docs, and Skills
+
+- Added v8 eval fixtures and metrics for traceability, citation validity, result-claim honesty, venue checklists, artifact-evaluation packages, reviewer quality, rebuttal actionability, anonymization safety, submission completeness, and v8 release-gate correctness.
+- Added manuscript dashboard pages for manuscripts, sections, bibliography, traceability, figures/tables, submission checklists, artifact evaluation, reviewer panels, rebuttals, submission packages, and the v8 release gate.
+- Exposed v8 workflows through the Python API so manuscript creation, bibliography building, drafting, rendering, assets, traceability, venues, anonymization, artifact evaluation, review, rebuttal, submission packages, and release gates are scriptable.
+- Added v0.8 roadmap, acceptance criteria, manuscript workflow, artifact evaluation, rebuttal workflow, testing/eval documentation, and Codex-readable skills for manuscript planning, bibliography management, traceability, drafting, asset generation, venue checklists, artifact evaluation, manuscript review, rebuttal planning, and submission packaging.
+
+### Validation
+
+- Manuscript smoke validation passed locally with manuscript creation, bibliography building, draft generation, result-table generation, traceability, venue setting, submission checklist, artifact-evaluation package creation, reviewer panel, rebuttal plan, review submission package export, and v8 release-gate execution.
+- `gapforge v8-release-gate --write-report --json` passed locally for the release fixture with a generated review-ready submission package, artifact-evaluation package, traceability report, bibliography, reviewer panel, rebuttal/revision plan, and blocked unsupported/fake citation fixture paths.
+- No real venue submission happened. No venue acceptance, SOTA claim, broad benchmark claim, real manuscript peer review, or third-party artifact evaluation is claimed.
+
 ## 0.7.0
 
 GapForge v0.7 is the real benchmark execution and replication upgrade. It keeps the v5 literature gates and v6 empirical-claim gates intact while adding first-class benchmark artifacts, explicit dataset consent and cache handling, compute/job abstractions, benchmark canaries, replication packages, and a v7 release gate that separates fixture validation from opt-in real/local public benchmark validation.

@@ -16,6 +16,7 @@ from gapforge.dashboard import StaticDashboardBuilder
 from gapforge.datasets import DatasetRegistry
 from gapforge.experiments.workspace import ExperimentWorkspaceManager
 from gapforge.export.paper_package import PaperPackageExporter
+from gapforge.manuscript import ManuscriptManager
 from gapforge.metrics import MetricRegistry
 from gapforge.project_memory import ProjectMemoryManager
 from gapforge.real_literature.review import RealLiteratureReviewManager
@@ -73,6 +74,17 @@ def test_static_run_dashboard_files_generated_and_escaped(tmp_path: Path) -> Non
         "replication_packages.html",
         "reproduction_matrix.html",
         "v7_release_gate.html",
+        "manuscripts.html",
+        "manuscript_sections.html",
+        "bibliography.html",
+        "traceability.html",
+        "figures_tables.html",
+        "submission_checklist.html",
+        "artifact_evaluation.html",
+        "reviewer_panel.html",
+        "rebuttal.html",
+        "submission_packages.html",
+        "v8_release_gate.html",
     }
     assert {path.name for path in result.pages} == expected
     for filename in expected:
@@ -332,6 +344,76 @@ def test_dashboard_renders_v7_benchmark_and_replication_pages(tmp_path: Path) ->
     assert "Fixture gate passed" in v7_gate
     assert "sk-test-dashboard-secret" not in combined
     assert "<script>benchmark</script>" not in combined
+
+
+def test_manuscript_dashboard_pages_show_blockers_and_escape_content(tmp_path: Path) -> None:
+    config = GapForgeConfig.from_cwd(tmp_path)
+    project_id, manuscript_id = _manuscript_dashboard_project(config)
+
+    result = StaticDashboardBuilder(config).build_manuscript(manuscript_id)
+
+    expected = {
+        "manuscripts.html",
+        "manuscript_sections.html",
+        "bibliography.html",
+        "traceability.html",
+        "figures_tables.html",
+        "submission_checklist.html",
+        "artifact_evaluation.html",
+        "reviewer_panel.html",
+        "rebuttal.html",
+        "submission_packages.html",
+        "v8_release_gate.html",
+    }
+    for filename in expected:
+        assert (result.root / filename).exists()
+
+    traceability = (result.root / "traceability.html").read_text(encoding="utf-8")
+    bibliography = (result.root / "bibliography.html").read_text(encoding="utf-8")
+    reviewer_panel = (result.root / "reviewer_panel.html").read_text(encoding="utf-8")
+    combined = "\n".join(path.read_text(encoding="utf-8") for path in result.pages)
+
+    assert "claim-unsupported-dashboard" in traceability
+    assert "unsupported dashboard claim" in traceability
+    assert "Imaginary Paper 2026" in bibliography
+    assert "fake-looking" in bibliography
+    assert "fatal reviewer blocker" in reviewer_panel
+    assert "<script>alert(8)</script>" not in combined
+    assert "&lt;script&gt;alert(8)&lt;/script&gt;" in combined
+    assert "sk-test-manuscript-dashboard-secret" not in combined
+
+    project_result = StaticDashboardBuilder(config).build_project(project_id, include_manuscripts=True)
+    assert manuscript_id in (project_result.root / "manuscripts.html").read_text(encoding="utf-8")
+
+
+def test_dashboard_cli_accepts_manuscript_flags(tmp_path: Path) -> None:
+    config = GapForgeConfig.from_cwd(tmp_path)
+    project_id, manuscript_id = _manuscript_dashboard_project(config)
+    env = {**os.environ, "PYTHONPATH": str(Path(__file__).resolve().parents[1] / "src")}
+
+    manuscript = subprocess.run(
+        [sys.executable, "-m", "gapforge.cli", "dashboard", "--manuscript-id", manuscript_id],
+        cwd=tmp_path,
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    project = subprocess.run(
+        [sys.executable, "-m", "gapforge.cli", "dashboard", "--project-id", project_id, "--include-manuscripts"],
+        cwd=tmp_path,
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert manuscript.returncode == 0, manuscript.stderr
+    assert project.returncode == 0, project.stderr
+    assert "index.html" in manuscript.stdout
+    assert "index.html" in project.stdout
+    assert (ManuscriptManager(config).manuscript_root(manuscript_id) / "dashboard" / "manuscripts.html").exists()
+    assert (config.project_root / project_id / "dashboard" / "manuscripts.html").exists()
 
 
 def test_dashboard_cli_accepts_v7_include_flags(tmp_path: Path) -> None:
@@ -881,6 +963,225 @@ def _v7_dashboard_artifacts(config: GapForgeConfig, workspace_id: str) -> str:
     (release_dir / "v0.6_latest.json").write_text('{"passed": true, "status": "pass"}\n', encoding="utf-8")
     V07ReleaseGateEnforcer(config).write_outputs(V07ReleaseGateEnforcer(config).evaluate())
     return benchmark.id
+
+
+def _manuscript_dashboard_project(config: GapForgeConfig) -> tuple[str, str]:
+    project_manager = ProjectMemoryManager(config)
+    program = project_manager.create_project("Manuscript Dashboard Project")
+    project_manager.save_project(program)
+    manager = ManuscriptManager(config)
+    state = manager.create_manuscript(
+        project_id=program.project.id,
+        direction_id="direction-manuscript-dashboard",
+        workspace_id="workspace-manuscript-dashboard",
+        title="Manuscript Dashboard <script>alert(8)</script>",
+        target_venue="generic_conference",
+    )
+    section = manager.create_section(
+        manuscript_id=state.manuscript.id,
+        section_type="results",
+        title="Results",
+        source_result_ids=["result-dashboard"],
+        status="needs_review",
+    )
+    manager.link_claim_use(
+        manuscript_id=state.manuscript.id,
+        section_id=section.id,
+        claim_id="claim-unsupported-dashboard",
+        claim_text="unsupported dashboard claim <script>alert(8)</script>",
+        use_type="result",
+        support_status="unsupported",
+        citation_keys=["Imaginary Paper 2026"],
+    )
+    root = manager.manuscript_root(state.manuscript.id)
+    (root / "reviews").mkdir(parents=True, exist_ok=True)
+    (root / "figures").mkdir(parents=True, exist_ok=True)
+    (root / "tables").mkdir(parents=True, exist_ok=True)
+    (root / "bibliography").mkdir(parents=True, exist_ok=True)
+    (root / "artifact_evaluation" / "artifact-eval-dashboard").mkdir(parents=True, exist_ok=True)
+    (root / "submission" / "packages" / "package-dashboard").mkdir(parents=True, exist_ok=True)
+    (root / "logs").mkdir(parents=True, exist_ok=True)
+    (root / "logs" / "raw.log").write_text("sk-test-manuscript-dashboard-secret\n", encoding="utf-8")
+    (root / "bibliography" / "bibliography.json").write_text(
+        json_dumps(
+            {
+                "id": "bib-dashboard",
+                "manuscript_id": state.manuscript.id,
+                "entries": [],
+                "missing_metadata": {},
+                "duplicate_entries": {},
+                "generated_at": "",
+            }
+        ),
+        encoding="utf-8",
+    )
+    (root / "submission" / "traceability_report.json").write_text(
+        json_dumps(
+            {
+                "manuscript_id": state.manuscript.id,
+                "claim_count": 1,
+                "supported_claim_count": 0,
+                "unsupported_claim_count": 1,
+                "empirical_claim_count": 1,
+                "novelty_claim_count": 0,
+                "limitation_claim_count": 0,
+                "unsupported_claims": ["claim-unsupported-dashboard"],
+                "overclaim_warnings": [
+                    {
+                        "id": "warning-dashboard",
+                        "manuscript_id": state.manuscript.id,
+                        "section_id": section.id,
+                        "text": "unsupported dashboard claim <script>alert(8)</script>",
+                        "warning_type": "unsupported",
+                        "suggested_fix": "Add evidence or soften the claim.",
+                        "severity": "blocking",
+                    }
+                ],
+                "blocking_issues": ["unsupported dashboard claim remains"],
+            }
+        ),
+        encoding="utf-8",
+    )
+    (root / "figures" / "figure-dashboard.json").write_text(
+        json_dumps(
+            {
+                "id": "figure-dashboard",
+                "manuscript_id": state.manuscript.id,
+                "title": "Metric Figure",
+                "caption": "main run, limitations visible",
+                "source_artifact_ids": ["artifact-dashboard"],
+                "path": "figures/figure-dashboard.svg",
+                "figure_type": "metric_plot",
+                "status": "generated",
+            }
+        ),
+        encoding="utf-8",
+    )
+    (root / "tables" / "table-dashboard.json").write_text(
+        json_dumps(
+            {
+                "id": "table-dashboard",
+                "manuscript_id": state.manuscript.id,
+                "title": "Result Table",
+                "caption": "main run, limitations visible",
+                "source_result_ids": ["result-dashboard"],
+                "source_artifact_ids": ["artifact-dashboard"],
+                "path": "tables/table-dashboard.md",
+                "table_type": "result_table",
+                "status": "generated",
+            }
+        ),
+        encoding="utf-8",
+    )
+    (root / "submission" / "submission_checklist.json").write_text(
+        json_dumps(
+            {
+                "manuscript_id": state.manuscript.id,
+                "venue_template_id": "generic_conference",
+                "checks": {"claim_traceability": "fail"},
+                "blocking_issues": ["unsupported dashboard claim remains"],
+                "warnings": ["review uncertainty remains"],
+                "status": "not_ready",
+            }
+        ),
+        encoding="utf-8",
+    )
+    (root / "artifact_evaluation" / "artifact-eval-dashboard" / "artifact_evaluation_package.json").write_text(
+        json_dumps(
+            {
+                "id": "artifact-eval-dashboard",
+                "manuscript_id": state.manuscript.id,
+                "workspace_id": "workspace-manuscript-dashboard",
+                "replication_package_id": "",
+                "files": ["README.md"],
+                "expected_badges": [],
+                "install_instructions": ["offline"],
+                "run_instructions": ["dry run"],
+                "expected_outputs": ["none"],
+                "hardware_requirements": ["cpu"],
+                "time_estimates": ["1m"],
+                "status": "blocked",
+            }
+        ),
+        encoding="utf-8",
+    )
+    (root / "reviews" / "manuscript_review_panel.json").write_text(
+        json_dumps(
+            {
+                "manuscript_id": state.manuscript.id,
+                "reviewer_reports": [
+                    {
+                        "reviewer_id": "reviewer-dashboard",
+                        "role": "empirical reviewer",
+                        "score": 1.0,
+                        "strengths": [],
+                        "weaknesses": ["unsupported claim"],
+                        "fatal_flaws": ["fatal reviewer blocker"],
+                        "required_fixes": ["add artifact evidence"],
+                        "evidence_or_prior_work": ["claim-unsupported-dashboard"],
+                    }
+                ],
+                "area_chair_summary": "fatal reviewer blocker",
+                "meta_review": "not ready",
+                "decision_risk": "high",
+                "required_fixes": ["add artifact evidence"],
+                "fatal_flaws": ["fatal reviewer blocker"],
+                "rebuttal_plan": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+    (root / "reviews" / "rebuttal_items.json").write_text(
+        json_dumps(
+            [
+                {
+                    "id": "rebuttal-dashboard",
+                    "manuscript_id": state.manuscript.id,
+                    "reviewer_id": "reviewer-dashboard",
+                    "objection": "fatal reviewer blocker",
+                    "response_strategy": "add evidence, not invented answers",
+                    "evidence_needed": ["artifact evidence"],
+                    "experiments_needed": [],
+                    "citations_needed": ["known paper"],
+                    "claim_softening_needed": ["claim-unsupported-dashboard"],
+                    "status": "open",
+                }
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (root / "reviews" / "revision_plan.json").write_text(
+        json_dumps(
+            {
+                "id": "revision-dashboard",
+                "manuscript_id": state.manuscript.id,
+                "rebuttal_items": [],
+                "section_edits": ["soften claim"],
+                "required_experiments": [],
+                "required_searches": ["known paper search"],
+                "required_citations": ["known paper"],
+                "status": "open",
+            }
+        ),
+        encoding="utf-8",
+    )
+    (root / "submission" / "packages" / "package-dashboard" / "submission_package.json").write_text(
+        json_dumps(
+            {
+                "id": "package-dashboard",
+                "manuscript_id": state.manuscript.id,
+                "venue_template_id": "generic_conference",
+                "package_type": "review",
+                "files": ["manuscript.md", "bibliography/references.bib"],
+                "checklist_id": "generic_conference",
+                "anonymization_report_id": "",
+                "artifact_package_id": "artifact-eval-dashboard",
+                "status": "blocked",
+            }
+        ),
+        encoding="utf-8",
+    )
+    return program.project.id, state.manuscript.id
 
 
 def json_dumps(payload) -> str:

@@ -98,6 +98,16 @@ class EvalScores:
     reproduction_verification_quality: float | None = None
     low_fpr_underpowered_warning_score: float | None = None
     v7_release_gate_correctness: float | None = None
+    manuscript_traceability_score: float | None = None
+    citation_validity_score: float | None = None
+    result_claim_honesty_score: float | None = None
+    venue_checklist_score: float | None = None
+    artifact_eval_package_score: float | None = None
+    reviewer_panel_quality: float | None = None
+    rebuttal_actionability: float | None = None
+    anonymization_safety: float | None = None
+    submission_package_completeness: float | None = None
+    v8_release_gate_correctness: float | None = None
 
     def overall(self) -> float:
         positive = [
@@ -205,6 +215,24 @@ class EvalScores:
             self.reproduction_verification_quality,
             self.low_fpr_underpowered_warning_score,
             self.v7_release_gate_correctness,
+        ]
+        present = [value for value in values if value is not None]
+        if not present:
+            return None
+        return round(sum(present) / len(present), 3)
+
+    def v8_overall(self) -> float | None:
+        values = [
+            self.manuscript_traceability_score,
+            self.citation_validity_score,
+            self.result_claim_honesty_score,
+            self.venue_checklist_score,
+            self.artifact_eval_package_score,
+            self.reviewer_panel_quality,
+            self.rebuttal_actionability,
+            self.anonymization_safety,
+            self.submission_package_completeness,
+            self.v8_release_gate_correctness,
         ]
         present = [value for value in values if value is not None]
         if not present:
@@ -1143,6 +1171,173 @@ def v7_release_gate_correctness(fixture: dict[str, object]) -> float:
     return round((0.7 * int(computed_pass is False)) + (0.3 * int(bool(expected_blockers))), 3)
 
 
+def manuscript_traceability_score(fixture: dict[str, object]) -> float:
+    traceability = _dict(fixture.get("traceability"))
+    claims = _dicts(traceability.get("claims"))
+    if not traceability:
+        return 0.0
+    unsupported = [claim for claim in claims if not bool(claim.get("supported")) and not bool(claim.get("hypothesis_labeled"))]
+    blockers = _list(traceability.get("blocking_issues"))
+    checks = [
+        bool(traceability.get("report_generated")),
+        bool(claims),
+        all(bool(claim.get("source")) or not bool(claim.get("supported")) for claim in claims),
+    ]
+    if unsupported:
+        checks.extend([bool(traceability.get("unsupported_claims_blocked")), bool(blockers)])
+    else:
+        checks.append(not blockers)
+    return round(sum(1 for item in checks if item) / len(checks), 3)
+
+
+def citation_validity_score(fixture: dict[str, object]) -> float:
+    citations = _dict(fixture.get("citations"))
+    fake_present = bool(citations.get("fake_citation_present"))
+    checks = [
+        bool(citations.get("bibliography_built")),
+        bool(citations.get("known_paper_records")),
+        not bool(citations.get("unresolved_known_citations")),
+    ]
+    if fake_present:
+        checks.extend([bool(citations.get("fake_citation_rejected")), bool(citations.get("submission_blocked"))])
+    else:
+        checks.append(not bool(citations.get("fake_citation_rejected_required", False)))
+    return round(sum(1 for item in checks if item) / len(checks), 3)
+
+
+def result_claim_honesty_score(fixture: dict[str, object]) -> float:
+    results = _dict(fixture.get("results"))
+    overclaim = bool(results.get("smoke_overclaim_present"))
+    fake = bool(results.get("fake_result_present"))
+    checks = [
+        bool(results.get("result_claims_artifact_backed")),
+        bool(results.get("run_type_labels_visible")),
+        not bool(results.get("claims_results_without_artifacts")),
+    ]
+    if overclaim:
+        checks.extend([bool(results.get("smoke_overclaim_blocked")), bool(results.get("softening_suggested"))])
+    else:
+        checks.append(not bool(results.get("smoke_as_main_result")))
+    if fake:
+        checks.extend([bool(results.get("fake_result_rejected")), not bool(results.get("fake_result_accepted"))])
+    return round(sum(1 for item in checks if item) / len(checks), 3)
+
+
+def venue_checklist_score(fixture: dict[str, object]) -> float:
+    checklist = _dict(fixture.get("venue_checklist"))
+    checks = [
+        bool(checklist.get("generated")),
+        bool(checklist.get("required_sections_checked")),
+        bool(checklist.get("bibliography_checked")),
+        bool(checklist.get("traceability_checked")),
+        bool(checklist.get("artifact_package_checked")),
+        bool(checklist.get("limitations_checked")),
+    ]
+    if bool(checklist.get("expected_block")):
+        checks.append(bool(_list(checklist.get("blocking_issues"))))
+    else:
+        checks.append(str(checklist.get("status")) in {"review_ready", "submission_ready"})
+    return round(sum(1 for item in checks if item) / len(checks), 3)
+
+
+def artifact_eval_package_score(fixture: dict[str, object]) -> float:
+    package = _dict(fixture.get("artifact_evaluation"))
+    missing_expected = bool(package.get("missing_expected"))
+    checks = [
+        bool(package.get("generated")),
+        bool(package.get("replication_package_included")),
+        bool(package.get("install_instructions")),
+        bool(package.get("run_instructions")),
+        bool(package.get("expected_outputs_hashes")),
+        not bool(package.get("restricted_data_included")),
+    ]
+    if missing_expected:
+        checks = [not bool(package.get("generated")), bool(package.get("release_gate_blocked"))]
+    return round(sum(1 for item in checks if item) / len(checks), 3)
+
+
+def reviewer_panel_quality(fixture: dict[str, object]) -> float:
+    panel = _dict(fixture.get("reviewer_panel"))
+    fatal_expected = bool(panel.get("fatal_expected"))
+    checks = [
+        bool(panel.get("generated")),
+        len(_list(panel.get("roles"))) >= 6,
+        bool(panel.get("evidence_linked")),
+        bool(panel.get("required_fixes")),
+        not bool(panel.get("invented_experiments")),
+    ]
+    if fatal_expected:
+        checks.append(bool(_list(panel.get("fatal_flaws"))))
+    return round(sum(1 for item in checks if item) / len(checks), 3)
+
+
+def rebuttal_actionability(fixture: dict[str, object]) -> float:
+    rebuttal = _dict(fixture.get("rebuttal"))
+    checks = [
+        bool(rebuttal.get("plan_generated")),
+        bool(_list(rebuttal.get("items"))),
+        bool(rebuttal.get("evidence_needed_listed")),
+        bool(rebuttal.get("experiments_or_searches_created")),
+        not bool(rebuttal.get("fake_responses")),
+    ]
+    if bool(rebuttal.get("open_blockers_expected")):
+        checks.append(bool(rebuttal.get("camera_ready_blocked")))
+    return round(sum(1 for item in checks if item) / len(checks), 3)
+
+
+def anonymization_safety(fixture: dict[str, object]) -> float:
+    anonymization = _dict(fixture.get("anonymization"))
+    leak_expected = bool(anonymization.get("leak_expected"))
+    checks = [
+        bool(anonymization.get("checked")),
+        bool(anonymization.get("original_preserved", True)),
+    ]
+    if leak_expected:
+        checks.extend([bool(anonymization.get("leak_detected")), bool(anonymization.get("submission_blocked"))])
+    else:
+        checks.extend([not bool(anonymization.get("leak_detected")), str(anonymization.get("status")) in {"pass", "warning"}])
+    return round(sum(1 for item in checks if item) / len(checks), 3)
+
+
+def submission_package_completeness(fixture: dict[str, object]) -> float:
+    package = _dict(fixture.get("submission_package"))
+    files = {str(item) for item in _list(package.get("files"))}
+    required = {
+        "manuscript",
+        "bibliography",
+        "figures_or_tables",
+        "appendix",
+        "artifact_eval_readme",
+        "replication_instructions",
+        "limitations",
+        "checklist_report",
+    }
+    present = {item for item in required if item in files}
+    checks = [
+        bool(package.get("exported")),
+        required <= present,
+        bool(package.get("auditable")),
+        not bool(package.get("unsupported_claims_allowed")),
+    ]
+    if bool(package.get("anonymous_required")):
+        checks.append("anonymization_report" in files)
+    if bool(package.get("expected_block")):
+        checks.append(str(package.get("status")) == "blocked")
+    else:
+        checks.append(str(package.get("status")) in {"review_ready", "submission_ready", "camera_ready"})
+    return round(sum(1 for item in checks if item) / len(checks), 3)
+
+
+def v8_release_gate_correctness(fixture: dict[str, object]) -> float:
+    expected = _dict(fixture.get("v8_release_gate"))
+    expected_pass = bool(expected.get("expected_pass"))
+    computed_pass = _computed_v8_release_gate(fixture)
+    if expected_pass:
+        return 1.0 if computed_pass else 0.0
+    expected_blockers = _list(expected.get("expected_blockers"))
+    return round((0.7 * int(computed_pass is False)) + (0.3 * int(bool(expected_blockers))), 3)
+
+
 def _tokens(text: str) -> list[str]:
     return re.findall(r"[a-z0-9-]+", text.lower())
 
@@ -1236,5 +1431,28 @@ def _computed_v7_fixture_gate(fixture: dict[str, object]) -> bool:
             reproduction_verification_quality(fixture) >= 0.75,
             low_fpr_underpowered_warning_score(fixture) >= 0.85,
             not bool(_dict(fixture.get("fake_result")).get("accepted")),
+        ]
+    )
+
+
+def _computed_v8_release_gate(fixture: dict[str, object]) -> bool:
+    return all(
+        [
+            manuscript_traceability_score(fixture) >= 0.9,
+            citation_validity_score(fixture) >= 0.9,
+            result_claim_honesty_score(fixture) >= 0.9,
+            venue_checklist_score(fixture) >= 0.85,
+            artifact_eval_package_score(fixture) >= 0.85,
+            reviewer_panel_quality(fixture) >= 0.8,
+            rebuttal_actionability(fixture) >= 0.8,
+            anonymization_safety(fixture) >= 0.9,
+            submission_package_completeness(fixture) >= 0.9,
+            not bool(_dict(fixture.get("traceability")).get("unsupported_claim_present")),
+            not bool(_dict(fixture.get("traceability")).get("unsupported_claims_unblocked")),
+            not bool(_dict(fixture.get("citations")).get("fake_citation_present")),
+            not bool(_dict(fixture.get("results")).get("smoke_overclaim_present")),
+            not bool(_dict(fixture.get("anonymization")).get("leak_expected")),
+            not bool(_dict(fixture.get("rebuttal")).get("open_blockers_expected")),
+            not bool(_dict(fixture.get("artifact_evaluation")).get("missing_expected")),
         ]
     )

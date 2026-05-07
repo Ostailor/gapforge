@@ -236,10 +236,12 @@ def test_single_task_completion_passes_after_simulated_codex_flow(tmp_path: Path
     campaign_state = campaign_manager.load_campaign_state(record.campaign_id)
     task_id = campaign_state.campaign.task_ids[-1]
     task_pack = next(Path(path).parent for path in record.artifacts if path.endswith("CAMPAIGN_TASK.md"))
+    expected_outputs = json.loads((task_pack / "expected_outputs.json").read_text(encoding="utf-8"))
+    assert expected_outputs["files"]["novelty_dossiers_patch.json"]["required"] == ["novelty_dossiers"]
     (task_pack / "outputs" / "novelty_dossiers_patch.json").write_text(
         json.dumps(
             {
-                "novelty_dossiers_patch": [
+                "novelty_dossiers": [
                     {
                         "target_id": "gap-1",
                         "idea_summary": "Fixture Codex output marks novelty unknown.",

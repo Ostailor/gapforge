@@ -2,7 +2,7 @@
 
 GapForge is a Codex-powered Research Ideation OS. It turns a broad topic into auditable research state: papers, notes, claims, evidence, gaps, novelty dossiers, experiment plans, reviewer objections, and reports.
 
-GapForge v0.4 adds campaign-level Codex/GPT-5.4 actual-run workflows on top of the v0.3 semantic, project-memory-aware, optionally LLM-assisted research system. v0.5 extends that path toward live-literature campaign quality: source health, planned search rounds, canonicalization, closest-prior-work recall, human research-quality review, and a v5 release gate. v0.6 adds experiment execution and empirical validation: moving from experiment-ready directions to executed, logged, statistically analyzed, reproducible experiment packages. v0.7 adds real benchmark execution and replication plumbing: benchmark records, explicit dataset consent/cache handling, compute/job abstractions, result aggregation, error analysis, comparison reports, low-FPR power checks, and replication packages. GapForge is still not an exhaustive autonomous literature reviewer, and it must not fabricate experimental results. Deterministic and offline-safe paths remain the default.
+GapForge v0.4 adds campaign-level Codex/GPT-5.4 actual-run workflows on top of the v0.3 semantic, project-memory-aware, optionally LLM-assisted research system. v0.5 extends that path toward live-literature campaign quality: source health, planned search rounds, canonicalization, closest-prior-work recall, human research-quality review, and a v5 release gate. v0.6 adds experiment execution and empirical validation: moving from experiment-ready directions to executed, logged, statistically analyzed, reproducible experiment packages. v0.7 adds real benchmark execution and replication plumbing: benchmark records, explicit dataset consent/cache handling, compute/job abstractions, result aggregation, error analysis, comparison reports, low-FPR power checks, and replication packages. v0.8 adds the manuscript, artifact evaluation, and reviewer-rebuttal release layer: manuscript projects, claim-to-paper traceability, citations/BibTeX, venue templates, section drafting, artifact packages, rebuttal planning, blinding, and submission-readiness gates. GapForge is still not an exhaustive autonomous literature reviewer, and it must not fabricate citations, experimental results, venue acceptance, or novelty claims. Deterministic and offline-safe paths remain the default.
 
 ## Version Lineage
 
@@ -13,6 +13,7 @@ GapForge v0.4 adds campaign-level Codex/GPT-5.4 actual-run workflows on top of t
 - **v0.5**: real literature campaign quality layer. v0.5 validates multi-step live-literature campaigns, source coverage quality, closest-prior-work recall, real-paper citation grounding, expert review, experiment protocol quality, and correct rejection behavior when novelty is weak.
 - **v0.6**: experiment execution and empirical validation layer. v0.6 distinguishes protocols, scaffolds, smoke runs, pilot/main runs, failed/negative experiments, statistical analyses, reproducibility checks, and artifact-backed empirical claims.
 - **v0.7**: real benchmark execution and replication layer. v0.7 distinguishes fixture smoke, local benchmark, full benchmark, failed jobs, underpowered runs, benchmark comparison, replication packages, and real/local public benchmark validation.
+- **v0.8**: manuscript, artifact evaluation, and reviewer-rebuttal layer. v0.8 distinguishes manuscript-ready, submission-ready, and camera-ready while requiring claim, citation, result, artifact, blinding, and human-review traceability.
 
 ## Why Not Just Summarization?
 
@@ -332,6 +333,33 @@ gapforge v7-release-gate --write-report --json --claim-real
 
 Latest v0.7 validation status: fixture benchmark gate and opt-in real/local public benchmark gate passed locally on May 7, 2026. The real benchmark canary used explicit dataset consent, a cached public UCI Iris download, artifact-backed metrics and predictions, benchmark comparison, error analysis, and replication package verification. This validates the benchmark-and-replication path; it is not a SOTA claim, a large-scale benchmark study, a GPU/cluster validation, or independent replication by another researcher.
 
+## v0.8 Manuscript, Artifact Evaluation, and Rebuttal Workflow
+
+v0.8 is the manuscript release boundary. It turns project, literature, experiment, benchmark, and replication state into auditable manuscript and artifact-evaluation packages without hiding missing work.
+
+The v0.8 docs are:
+
+- `docs/V0_8_ROADMAP.md`
+- `docs/V0_8_ACCEPTANCE_CRITERIA.md`
+- `docs/V0_8_MANUSCRIPT_WORKFLOW.md`
+- `docs/V0_8_ARTIFACT_EVALUATION.md`
+- `docs/V0_8_REBUTTAL_WORKFLOW.md`
+- `docs/releases/v0.8.0.md`
+- `docs/releases/v0.8.0-manuscript-submission.md`
+
+Core boundary:
+
+- manuscript-ready means a draft package can be assembled, possibly with visible blockers
+- submission-ready means the venue profile, traceability, citations, results, artifact package, blinding, reviewer-objection, and human-review gates pass
+- camera-ready means a post-acceptance checklist has been completed after explicit acceptance metadata
+- manuscript claims must trace to claim ledger entries, evidence spans, result artifacts, benchmark records, reviewer decisions, and citations
+- figures and tables must be generated from recorded result artifacts or explicitly labeled conceptual placeholders
+- artifact evaluation packages must be generated from replication and workspace state
+- rebuttal plans must answer reviewer objections with evidence, changes, experiments, or honest concessions
+- normal CI must remain deterministic, offline, and free of LaTeX, GPU, cluster, live-source, large-download, and live-LLM requirements
+
+v0.8 must not fabricate results, citations, BibTeX, novelty, rebuttal evidence, venue acceptance, or camera-ready status. It must not mark a manuscript submission-ready when novelty, result, reproducibility, artifact, citation, blinding, or human-review gates fail.
+
 ### v0.5 Live Literature Campaign Workflow
 
 Use v0.5 when you want GapForge to assess whether a real literature campaign is research-useful, not merely whether the workflow ran.
@@ -492,7 +520,7 @@ Latest v0.4 validation status: deterministic checks, the fake-agent campaign can
 
 ## Manuscript Package Workflow
 
-Manuscript exports are starter kits, not finished papers:
+Legacy paper-package exports are starter kits, not finished papers:
 
 ```bash
 gapforge create-direction --project-id <project-id> --gap-id <gap-id>
@@ -504,6 +532,34 @@ gapforge export-paper-package --project-id <project-id> --direction-id <directio
 ```
 
 Exports include outlines, related-work matrix, protocol, limitations, reviewer objections, rebuttal plan, bibliography, claim ledger, and evidence index. They must not invent results.
+
+v0.8 extends this into a first-class manuscript workflow:
+
+```bash
+gapforge manuscript-create --project-id <project-id> --direction-id <direction-id> --workspace-id <workspace-id> --title "Paper title"
+gapforge bibliography-build --manuscript-id <manuscript-id>
+gapforge manuscript-traceability --manuscript-id <manuscript-id>
+gapforge manuscript-table --manuscript-id <manuscript-id> --type result_table
+gapforge manuscript-figure --manuscript-id <manuscript-id> --type metric_plot
+gapforge manuscript-set-venue --manuscript-id <manuscript-id> --venue generic_conference
+gapforge submission-checklist --manuscript-id <manuscript-id>
+gapforge anonymize-manuscript --manuscript-id <manuscript-id>
+gapforge artifact-eval-package --manuscript-id <manuscript-id>
+gapforge manuscript-review --manuscript-id <manuscript-id>
+gapforge rebuttal-plan --manuscript-id <manuscript-id>
+gapforge submission-package --manuscript-id <manuscript-id> --type review
+gapforge dashboard --manuscript-id <manuscript-id>
+gapforge v8-release-gate --write-report --json
+```
+
+Readiness terms are strict:
+
+- **Manuscript-ready**: a durable draft exists and can be inspected, but blockers may remain.
+- **Review-ready**: internal reviewer and artifact checks have run and remaining issues are visible.
+- **Submission-ready**: the venue-aware checklist, traceability, citation validity, result artifacts, artifact evaluation package, anonymization if required, and unsupported-claim gates pass.
+- **Camera-ready**: post-review/rebuttal blockers are addressed. It does not imply venue acceptance unless an external acceptance record exists.
+
+Manuscript citations must resolve to known `Paper` records. Result claims must link execution/result artifacts. Reviewer rebuttals must cite evidence or request fixes; they must not invent answers.
 
 ## Active v0.3 Loop
 
@@ -557,6 +613,7 @@ gapforge eval --v4
 gapforge eval --v5
 gapforge eval --v6
 gapforge eval --v7
+gapforge eval --v8
 ```
 
 ## Limitations and Safety Notes
@@ -569,6 +626,7 @@ gapforge eval --v7
 - Prompt-pack handoff counts as real only after Codex/GPT-5.4 outputs are validated, attested, and human-reviewed.
 - Empirical claims are artifact-gated: no run record and result artifact means no supported result claim.
 - Benchmark claims are stronger than fixture smoke claims and require benchmark records, real or benchmark-like data, consent where applicable, compute logs, result artifacts, analysis, replication packaging, and review.
+- Manuscript submission-readiness requires traceable claims, known citations, artifact-backed results, artifact evaluation package status, blinding review when applicable, reviewer-objection handling, and human review.
 - PDFs, transcripts, and generated dashboards may be unsafe to commit.
 - Human review is required before treating any direction as research-ready.
 
@@ -588,4 +646,5 @@ gapforge export-safe-bundle --project-id <project-id>
 - v0.5: real-literature campaign quality with source diagnostics, search strategy, prior-work recall, quality review, v5 evals, and v5 release gate
 - v0.6: experiment execution and empirical validation with run manifests, result artifacts, statistics, reproducibility checks, failed/negative result handling, and result claim ledger
 - v0.7: real benchmark execution and replication with benchmark registry, dataset consent/cache, compute modes, jobs, sweeps, error/slice analysis, low-FPR power checks, benchmark comparison, and replication packages
+- v0.8: manuscript, artifact evaluation, and reviewer-rebuttal workflow with manuscript projects, claim-to-paper traceability, citation/BibTeX management, venue templates, section drafting, figure/table generation, artifact evaluation packaging, blinding support, submission-readiness gates, and camera-ready checklists
 - Future: richer layout/OCR extraction, external reference-manager integration, larger distributed experiment runners, and collaborative review workflows

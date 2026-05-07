@@ -33,6 +33,19 @@ def test_create_experiment_workspace_persists_project_state(tmp_path: Path) -> N
     assert any(item.id == workspace.id for item in program.experiment_workspaces)
 
 
+def test_workspace_ids_are_unique_across_projects(tmp_path: Path) -> None:
+    config, project_id, _protocol = _workspace_project(tmp_path, name="Project A")
+    second_config, second_project_id, _second_protocol = _workspace_project(tmp_path, name="Project B")
+    assert second_config.project_root == config.project_root
+    manager = ExperimentWorkspaceManager(config)
+
+    first = manager.create_workspace(project_id=project_id, direction_id="direction-1")
+    second = manager.create_workspace(project_id=second_project_id, direction_id="direction-1")
+
+    assert first.id == "workspace-direction-1"
+    assert second.id == "workspace-direction-1-2"
+
+
 def test_create_manifest_does_not_mark_experiment_executed(tmp_path: Path) -> None:
     config, project_id, _protocol = _workspace_project(tmp_path)
     manager = ExperimentWorkspaceManager(config)
@@ -166,10 +179,10 @@ def test_generated_experiment_workspaces_are_ignored_unless_fixtures() -> None:
     assert "*.pdf" in text
 
 
-def _workspace_project(tmp_path: Path) -> tuple[GapForgeConfig, str, ExperimentProtocol]:
+def _workspace_project(tmp_path: Path, *, name: str = "Experiment Workspace Project") -> tuple[GapForgeConfig, str, ExperimentProtocol]:
     config = GapForgeConfig.from_cwd(tmp_path)
     project_manager = ProjectMemoryManager(config)
-    program = project_manager.create_project("Experiment Workspace Project")
+    program = project_manager.create_project(name)
     protocol = ExperimentProtocol(
         id="protocol-1",
         direction_id="direction-1",

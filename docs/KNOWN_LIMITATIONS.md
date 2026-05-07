@@ -165,6 +165,36 @@ The v0.7 release gate passed for an opt-in real/local public small benchmark can
 
 If no real or benchmark-like non-fixture run exists in a future release candidate, the v0.7 release gate should mark real benchmark validation incomplete.
 
+## v0.8 Manuscript and Artifact-Evaluation Limits
+
+v0.8 adds manuscript, artifact evaluation, and reviewer-rebuttal workflow state. It moves beyond starter paper packages into explicit manuscript projects, claim-to-paper traceability, citation/BibTeX management, venue templates, section-level drafting, figure/table generation from artifacts, artifact evaluation packages, reviewer simulation, rebuttal planning, blinding support, camera-ready checklists, and submission-readiness gates.
+
+v0.8 must still preserve these limits:
+
+- manuscript-ready is not the same as submission-ready
+- submission-ready is not the same as venue acceptance
+- camera-ready requires explicit post-acceptance metadata and must not be inferred
+- a manuscript claim is unsupported unless it links to claim ledger records, evidence, result artifacts, benchmark records, citations, or a visible hypothesis/limitation label
+- citation and BibTeX records must come from known paper metadata or user-supplied records
+- figures and tables must come from result artifacts, benchmark comparison state, statistical analysis, or explicit conceptual placeholders
+- artifact evaluation packages are only as complete as the underlying replication and workspace state
+- reviewer simulation is diagnostic and does not predict acceptance
+- rebuttal plans must answer objections with evidence, manuscript changes, experiments, or concessions
+- double-blind support can reduce deanonymization risk, but it cannot guarantee anonymity
+- dashboards make blockers inspectable, but they are not readiness certificates
+- normal CI must not require LaTeX, live sources, live LLM calls, GPUs, clusters, or large downloads
+
+v0.8 non-goals:
+
+- fabricating results, citations, BibTeX, DOIs, arXiv IDs, venues, or reviewer responses
+- marking a manuscript submission-ready when novelty, result, reproducibility, artifact, citation, blinding, or human-review gates fail
+- claiming venue acceptance
+- requiring LaTeX installation in CI
+- hiding negative results, failed experiments, missing baselines, failed jobs, failed replication attempts, or artifact-evaluation gaps
+- weakening v5 literature gates, v6 empirical gates, or v7 benchmark/replication gates
+
+The v0.8 workflow should make incomplete manuscripts safer to review by labeling blockers clearly. It does not make a paper publishable by formatting it.
+
 ## Operational Guidance
 
 Use strict mode and coverage assessment before interpreting outputs:
@@ -185,6 +215,10 @@ The May 6, 2026 local verification pass succeeded for the v0.4 actual-run releas
 The follow-up v0.5 verification pass completed live-literature quality acceptance locally. `gapforge v5-release-gate --write-report --json` passed after two campaigns were accepted for research quality: one experiment-ready live-literature smoke campaign and one conservative refusal campaign. This validates the v0.5 gate and workflow behavior, but it still does not prove exhaustive literature review, broad expert acceptance, or complete field coverage.
 
 The v0.6 release pass completed fixture experiment execution acceptance locally. `gapforge v6-release-gate --write-report --json` passed with successful fixture execution, failed-path preservation, parsed result artifacts, artifact-backed empirical claims, reproducibility checks, empirical review, and paper package v2 export. This validates empirical workflow mechanics, not real benchmark performance or independent replication.
+
+The v0.7 release pass completed fixture benchmark and opt-in real/local public benchmark acceptance locally on May 7, 2026. `gapforge v7-release-gate --write-report --json --claim-real` passed for a small UCI Iris canary with explicit dataset consent and replication package verification. This validates the benchmark and replication path, not broad benchmark coverage, SOTA performance, GPU/cluster execution, or independent third-party reproduction.
+
+v0.8 deterministic fixtures and release-gate mechanics validate the manuscript workflow behavior offline. They do not prove that any real manuscript is novel, accepted, independently reproduced, double-blind safe, or venue-ready without the recorded evidence and human review required by the gate.
 
 ## v0.4.1 Planned Limitation Fix
 

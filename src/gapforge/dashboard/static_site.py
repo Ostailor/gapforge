@@ -11,6 +11,7 @@ from typing import Any
 
 from gapforge.campaigns import CampaignState
 from gapforge.config import GapForgeConfig
+from gapforge.manuscript.citations import suspicious_citation_string
 from gapforge.models import (
     AgentActualRunAttestation,
     CampaignAcceptanceSummary,
@@ -39,6 +40,7 @@ from gapforge.models import (
     to_plain,
 )
 from gapforge.project_memory import ProjectMemoryManager
+from gapforge.release_gate.v08 import V08ReleaseGateEnforcer
 from gapforge.state import ResearchStateManager
 
 PAGES = [
@@ -81,6 +83,17 @@ PAGES = [
     ("replication_packages.html", "Replication Packages"),
     ("reproduction_matrix.html", "Reproduction Matrix"),
     ("v7_release_gate.html", "v7 Release Gate"),
+    ("manuscripts.html", "Manuscripts"),
+    ("manuscript_sections.html", "Manuscript Sections"),
+    ("bibliography.html", "Bibliography"),
+    ("traceability.html", "Traceability"),
+    ("figures_tables.html", "Figures/Tables"),
+    ("submission_checklist.html", "Submission Checklist"),
+    ("artifact_evaluation.html", "Artifact Evaluation"),
+    ("reviewer_panel.html", "Reviewer Panel"),
+    ("rebuttal.html", "Rebuttal"),
+    ("submission_packages.html", "Submission Packages"),
+    ("v8_release_gate.html", "v8 Release Gate"),
 ]
 
 
@@ -106,16 +119,21 @@ class StaticDashboardBuilder:
         context = _DashboardContext.from_run(state)
         return _write_dashboard(Path(state.run_dir) / "dashboard", context)
 
-    def build_project(self, project_id: str) -> DashboardResult:
+    def build_project(self, project_id: str, *, include_manuscripts: bool = False) -> DashboardResult:
         program = self.project_manager.load_project(project_id)
         states = [self.state_manager.load_run(run_id) for run_id in program.run_ids]
-        context = _DashboardContext.from_project(program, states)
+        context = _DashboardContext.from_project(program, states, include_manuscripts=include_manuscripts, config=self.config)
         return _write_dashboard(Path(program.project.root_dir) / "dashboard", context)
 
     def build_workspace(self, workspace_id: str) -> DashboardResult:
         workspace_dir = _find_experiment_workspace_dir(self.config.project_root, workspace_id)
         context = _DashboardContext.from_workspace(workspace_dir)
         return _write_dashboard(workspace_dir / "dashboard", context)
+
+    def build_manuscript(self, manuscript_id: str) -> DashboardResult:
+        manuscript_root = _find_manuscript_root(self.config.project_root, manuscript_id)
+        context = _DashboardContext.from_manuscript(manuscript_root, self.config)
+        return _write_dashboard(manuscript_root / "dashboard", context)
 
     def open(self, result: DashboardResult) -> None:
         webbrowser.open(result.index_path.resolve().as_uri())
@@ -144,6 +162,7 @@ class _DashboardContext:
         canary_records: list[CampaignCanaryRecord] | None = None,
         run_states: list[ResearchRunState] | None = None,
         experiments: dict[str, list[dict[str, Any]]] | None = None,
+        manuscripts: dict[str, Any] | None = None,
     ) -> None:
         self.title = title
         self.subtitle = subtitle
@@ -164,6 +183,7 @@ class _DashboardContext:
         self.canary_records = canary_records or []
         self.run_states = run_states or []
         self.experiments = experiments or _empty_experiment_context()
+        self.manuscripts = manuscripts or _empty_manuscript_context()
 
     @classmethod
     def from_run(cls, state: ResearchRunState) -> _DashboardContext:
@@ -187,10 +207,18 @@ class _DashboardContext:
             canary_records=[],
             run_states=[state],
             experiments=_load_experiment_context(Path(state.run_dir)),
+            manuscripts=_empty_manuscript_context(),
         )
 
     @classmethod
-    def from_project(cls, program: ResearchProgramState, states: list[ResearchRunState]) -> _DashboardContext:
+    def from_project(
+        cls,
+        program: ResearchProgramState,
+        states: list[ResearchRunState],
+        *,
+        include_manuscripts: bool = False,
+        config: GapForgeConfig | None = None,
+    ) -> _DashboardContext:
         coverage_reports = [state.source_coverage for state in states if state.source_coverage is not None]
         campaign_states = _load_campaign_states(program)
         experiments = _load_experiment_context(Path(program.project.root_dir))
@@ -226,6 +254,9 @@ class _DashboardContext:
             canary_records=_load_campaign_canaries(Path(program.project.root_dir).parents[1] / "data", program.project.id),
             run_states=states,
             experiments=experiments,
+            manuscripts=_load_project_manuscript_context(Path(program.project.root_dir), config)
+            if include_manuscripts and config is not None
+            else _empty_manuscript_context(),
         )
 
     @classmethod
@@ -253,6 +284,36 @@ class _DashboardContext:
             canary_records=[],
             run_states=[],
             experiments=_load_experiment_context(workspace_dir),
+            manuscripts=_empty_manuscript_context(),
+        )
+
+    @classmethod
+    def from_manuscript(cls, manuscript_root: Path, config: GapForgeConfig) -> _DashboardContext:
+        state = _read_json_if_exists(manuscript_root / "manuscript.json")
+        manuscript = state.get("manuscript", {}) if isinstance(state.get("manuscript"), dict) else {}
+        title = str(manuscript.get("title") or manuscript_root.name)
+        subtitle = str(manuscript.get("project_id") or manuscript.get("target_venue") or manuscript_root)
+        return cls(
+            title=f"GapForge Manuscript: {title}",
+            subtitle=subtitle,
+            base_dir=manuscript_root,
+            papers=[],
+            gaps=[],
+            directions=[],
+            novelty_dossiers=[],
+            evidence_spans=[],
+            coverage_reports=[],
+            rejected_ideas=[],
+            human_reviews=[],
+            review_panels=[],
+            review_queue=None,
+            artifact_links=_manuscript_artifact_links(manuscript_root),
+            campaigns=[],
+            campaign_states=[],
+            canary_records=[],
+            run_states=[],
+            experiments=_empty_experiment_context(),
+            manuscripts=_load_manuscript_context([manuscript_root], config),
         )
 
 
@@ -298,6 +359,17 @@ def _write_dashboard(root: Path, context: _DashboardContext) -> DashboardResult:
         "replication_packages.html": _render_replication_packages(context),
         "reproduction_matrix.html": _render_reproduction_matrix(context),
         "v7_release_gate.html": _render_v7_release_gate(context),
+        "manuscripts.html": _render_manuscripts(context),
+        "manuscript_sections.html": _render_manuscript_sections(context),
+        "bibliography.html": _render_manuscript_bibliography(context),
+        "traceability.html": _render_manuscript_traceability(context),
+        "figures_tables.html": _render_manuscript_figures_tables(context),
+        "submission_checklist.html": _render_manuscript_submission_checklist(context),
+        "artifact_evaluation.html": _render_manuscript_artifact_evaluation(context),
+        "reviewer_panel.html": _render_manuscript_reviewer_panel(context),
+        "rebuttal.html": _render_manuscript_rebuttal(context),
+        "submission_packages.html": _render_manuscript_submission_packages(context),
+        "v8_release_gate.html": _render_v8_release_gate(context),
     }
     written = []
     for filename, body in pages.items():
@@ -1588,6 +1660,415 @@ def _render_v7_release_gate(context: _DashboardContext) -> str:
     )
 
 
+def _render_manuscripts(context: _DashboardContext) -> str:
+    states = context.manuscripts["states"]
+    rows = []
+    for state in states:
+        manuscript = _dict(state.get("manuscript"))
+        manuscript_id = str(manuscript.get("id", ""))
+        rows.append(
+            [
+                _code(manuscript_id),
+                _e(str(manuscript.get("title", ""))),
+                _code(str(manuscript.get("project_id", ""))),
+                _code(str(manuscript.get("direction_id", ""))),
+                _e(str(manuscript.get("target_venue", ""))),
+                _e(str(manuscript.get("status", ""))),
+                str(len(_as_list(state.get("sections")))),
+                str(len(_as_list(state.get("claim_uses")))),
+                _e("; ".join(_manuscript_blockers(context, manuscript_id))),
+            ]
+        )
+    return "\n".join(
+        [
+            "<p>Manuscript readiness is summarized from manuscript metadata and generated audit artifacts. "
+            "Missing reports remain visible as missing.</p>",
+            _filter_box(),
+            _table(["Manuscript", "Title", "Project", "Direction", "Venue", "Status", "Sections", "Claims", "Visible Blockers"], rows),
+        ]
+    )
+
+
+def _render_manuscript_sections(context: _DashboardContext) -> str:
+    section_rows = [
+        [
+            _code(str(section.get("manuscript_id", ""))),
+            _code(str(section.get("id", ""))),
+            _e(str(section.get("section_type", ""))),
+            _e(str(section.get("title", ""))),
+            _e(str(section.get("status", ""))),
+            _e(", ".join(map(str, _as_list(section.get("source_claim_ids"))))),
+            _e(", ".join(map(str, _as_list(section.get("source_paper_ids"))))),
+            _e(", ".join(map(str, _as_list(section.get("source_result_ids"))))),
+            _e(", ".join(map(str, _as_list(section.get("source_artifact_ids"))))),
+            _e("; ".join(map(str, _as_list(section.get("warnings"))))),
+        ]
+        for section in context.manuscripts["sections"]
+    ]
+    claim_rows = [
+        [
+            _code(str(claim.get("manuscript_id", ""))),
+            _code(str(claim.get("section_id", ""))),
+            _code(str(claim.get("claim_id", ""))),
+            _e(str(claim.get("use_type", ""))),
+            _e(str(claim.get("support_status", ""))),
+            _e(str(claim.get("claim_text", ""))),
+            _e(", ".join(map(str, _as_list(claim.get("evidence_locators"))))),
+            _e(", ".join(map(str, _as_list(claim.get("citation_keys"))))),
+            _e(str(claim.get("requires_softening", ""))),
+        ]
+        for claim in context.manuscripts["claim_uses"]
+    ]
+    return "\n".join(
+        [
+            "<h2>Sections</h2>",
+            _filter_box(),
+            _table(
+                ["Manuscript", "Section", "Type", "Title", "Status", "Claims", "Papers", "Results", "Artifacts", "Warnings"],
+                section_rows,
+            ),
+            "<h2>Claim Uses</h2>",
+            _table(
+                ["Manuscript", "Section", "Claim", "Use", "Support", "Text", "Evidence", "Citations", "Softening"],
+                claim_rows,
+            ),
+        ]
+    )
+
+
+def _render_manuscript_bibliography(context: _DashboardContext) -> str:
+    entry_rows = []
+    known_keys: set[str] = set()
+    for record in context.manuscripts["bibliographies"]:
+        manuscript_id = str(record.get("manuscript_id", ""))
+        for entry in _as_list(record.get("entries")):
+            if not isinstance(entry, dict):
+                continue
+            key = str(entry.get("citation_key", ""))
+            known_keys.add(key)
+            entry_rows.append(
+                [
+                    _code(manuscript_id),
+                    _code(key),
+                    _code(str(entry.get("paper_id", ""))),
+                    _e(str(entry.get("title", ""))),
+                    _e("; ".join(map(str, _as_list(entry.get("authors"))))),
+                    _e(str(entry.get("year", ""))),
+                    _e(str(entry.get("venue", ""))),
+                    _e(str(entry.get("doi", "") or entry.get("arxiv_id", "") or entry.get("url", ""))),
+                ]
+            )
+    unresolved_rows = []
+    for claim in context.manuscripts["claim_uses"]:
+        for raw_key in _as_list(claim.get("citation_keys")):
+            citation_key = str(raw_key)
+            if citation_key in known_keys:
+                continue
+            unresolved_rows.append(
+                [
+                    _code(str(claim.get("manuscript_id", ""))),
+                    _code(str(claim.get("claim_id", ""))),
+                    _e(citation_key),
+                    _e("fake-looking unresolved citation" if suspicious_citation_string(citation_key) else "unresolved citation key"),
+                ]
+            )
+    warning_rows = []
+    for record in context.manuscripts["bibliographies"]:
+        for paper_id, fields in _dict(record.get("missing_metadata")).items():
+            warning_rows.append(
+                [_code(str(record.get("manuscript_id", ""))), _code(str(paper_id)), _e(", ".join(map(str, _as_list(fields))))]
+            )
+        for duplicate, canonical in _dict(record.get("duplicate_entries")).items():
+            warning_rows.append([_code(str(record.get("manuscript_id", ""))), _code(str(duplicate)), _e(f"duplicate of {canonical}")])
+    return "\n".join(
+        [
+            "<h2>Known Bibliography Entries</h2>",
+            _filter_box(),
+            _table(["Manuscript", "Citation Key", "Paper", "Title", "Authors", "Year", "Venue", "Locator"], entry_rows),
+            "<h2>Unresolved/Fake-Looking Citations</h2>",
+            _table(["Manuscript", "Claim", "Citation", "Status"], unresolved_rows),
+            "<h2>Metadata Warnings</h2>",
+            _table(["Manuscript", "Paper/Entry", "Warning"], warning_rows),
+        ]
+    )
+
+
+def _render_manuscript_traceability(context: _DashboardContext) -> str:
+    summary_rows = [
+        [
+            _code(str(report.get("manuscript_id", ""))),
+            _e(str(report.get("claim_count", ""))),
+            _e(str(report.get("supported_claim_count", ""))),
+            _e(str(report.get("unsupported_claim_count", ""))),
+            _e(str(report.get("empirical_claim_count", ""))),
+            _e(str(report.get("novelty_claim_count", ""))),
+            _e(str(report.get("limitation_claim_count", ""))),
+            _e("; ".join(map(str, _as_list(report.get("blocking_issues"))))),
+        ]
+        for report in context.manuscripts["traceability_reports"]
+    ]
+    unsupported_rows = [
+        [_code(str(report.get("manuscript_id", ""))), _code(str(claim_id))]
+        for report in context.manuscripts["traceability_reports"]
+        for claim_id in _as_list(report.get("unsupported_claims"))
+    ]
+    warning_rows = [
+        [
+            _code(str(warning.get("manuscript_id", report.get("manuscript_id", "")))),
+            _code(str(warning.get("section_id", ""))),
+            _e(str(warning.get("warning_type", ""))),
+            _e(str(warning.get("severity", ""))),
+            _e(str(warning.get("text", ""))),
+            _e(str(warning.get("suggested_fix", ""))),
+        ]
+        for report in context.manuscripts["traceability_reports"]
+        for warning in _dict_items(report.get("overclaim_warnings"))
+    ]
+    return "\n".join(
+        [
+            "<h2>Traceability Summary</h2>",
+            _filter_box(),
+            _table(
+                ["Manuscript", "Claims", "Supported", "Unsupported", "Empirical", "Novelty", "Limitations", "Blocking Issues"],
+                summary_rows,
+            ),
+            "<h2>Unsupported Claims</h2>",
+            _table(["Manuscript", "Claim"], unsupported_rows),
+            "<h2>Overclaim Warnings</h2>",
+            _table(["Manuscript", "Section", "Type", "Severity", "Text", "Suggested Fix"], warning_rows),
+        ]
+    )
+
+
+def _render_manuscript_figures_tables(context: _DashboardContext) -> str:
+    figure_rows = [
+        [
+            _code(str(figure.get("manuscript_id", ""))),
+            _code(str(figure.get("id", ""))),
+            _e(str(figure.get("figure_type", ""))),
+            _e(str(figure.get("title", ""))),
+            _e(str(figure.get("caption", ""))),
+            _e(", ".join(map(str, _as_list(figure.get("source_artifact_ids"))))),
+            _e(str(figure.get("status", ""))),
+            _e(_safe_path_label(str(figure.get("path", "")))),
+        ]
+        for figure in context.manuscripts["figures"]
+    ]
+    table_rows = [
+        [
+            _code(str(table.get("manuscript_id", ""))),
+            _code(str(table.get("id", ""))),
+            _e(str(table.get("table_type", ""))),
+            _e(str(table.get("title", ""))),
+            _e(str(table.get("caption", ""))),
+            _e(", ".join(map(str, _as_list(table.get("source_result_ids"))))),
+            _e(", ".join(map(str, _as_list(table.get("source_artifact_ids"))))),
+            _e(str(table.get("status", ""))),
+            _e(_safe_path_label(str(table.get("path", "")))),
+        ]
+        for table in context.manuscripts["tables"]
+    ]
+    return "\n".join(
+        [
+            "<p>Figures and tables list source result/artifact identifiers; raw result files are not embedded here.</p>",
+            "<h2>Figures</h2>",
+            _filter_box(),
+            _table(["Manuscript", "Figure", "Type", "Title", "Caption", "Artifacts", "Status", "Path"], figure_rows),
+            "<h2>Tables</h2>",
+            _table(["Manuscript", "Table", "Type", "Title", "Caption", "Results", "Artifacts", "Status", "Path"], table_rows),
+        ]
+    )
+
+
+def _render_manuscript_submission_checklist(context: _DashboardContext) -> str:
+    check_rows = []
+    blocker_rows = []
+    for checklist in context.manuscripts["submission_checklists"]:
+        manuscript_id = str(checklist.get("manuscript_id", ""))
+        for name, value in _dict(checklist.get("checks")).items():
+            check_rows.append([_code(manuscript_id), _code(str(name)), _e(str(value))])
+        for issue in _as_list(checklist.get("blocking_issues")):
+            blocker_rows.append([_code(manuscript_id), _e(str(issue)), _e(str(checklist.get("status", "")))])
+        for warning in _as_list(checklist.get("warnings")):
+            blocker_rows.append([_code(manuscript_id), _e(str(warning)), _e("warning")])
+    return "\n".join(
+        [
+            "<h2>Checks</h2>",
+            _filter_box(),
+            _table(["Manuscript", "Check", "Result"], check_rows),
+            "<h2>Blockers And Warnings</h2>",
+            _table(["Manuscript", "Issue", "Status"], blocker_rows),
+        ]
+    )
+
+
+def _render_manuscript_artifact_evaluation(context: _DashboardContext) -> str:
+    rows = [
+        [
+            _code(str(package.get("manuscript_id", ""))),
+            _code(str(package.get("id", ""))),
+            _code(str(package.get("workspace_id", ""))),
+            _code(str(package.get("replication_package_id", ""))),
+            _e(str(package.get("status", ""))),
+            _e(", ".join(map(str, _as_list(package.get("expected_badges"))))),
+            _e("; ".join(map(str, _as_list(package.get("expected_outputs"))))),
+            str(len(_as_list(package.get("files")))),
+        ]
+        for package in context.manuscripts["artifact_packages"]
+    ]
+    return "\n".join(
+        [
+            "<p>Artifact packages are summarized from package manifests. Restricted data and logs are not embedded.</p>",
+            _filter_box(),
+            _table(["Manuscript", "Package", "Workspace", "Replication", "Status", "Expected Badges", "Expected Outputs", "Files"], rows),
+        ]
+    )
+
+
+def _render_manuscript_reviewer_panel(context: _DashboardContext) -> str:
+    panel_rows = [
+        [
+            _code(str(panel.get("manuscript_id", ""))),
+            _e(str(panel.get("decision_risk", ""))),
+            _e("; ".join(map(str, _as_list(panel.get("fatal_flaws"))))),
+            _e("; ".join(map(str, _as_list(panel.get("required_fixes"))))),
+            _e(str(panel.get("area_chair_summary", ""))),
+        ]
+        for panel in context.manuscripts["review_panels"]
+    ]
+    review_rows = []
+    for panel in context.manuscripts["review_panels"]:
+        manuscript_id = str(panel.get("manuscript_id", ""))
+        for review in _dict_items(panel.get("reviewer_reports")):
+            review_rows.append(
+                [
+                    _code(manuscript_id),
+                    _code(str(review.get("reviewer_id", ""))),
+                    _e(str(review.get("role", ""))),
+                    _e(str(review.get("score", ""))),
+                    _e("; ".join(map(str, _as_list(review.get("fatal_flaws"))))),
+                    _e("; ".join(map(str, _as_list(review.get("required_fixes"))))),
+                    _e(", ".join(map(str, _as_list(review.get("evidence_or_prior_work"))))),
+                ]
+            )
+    return "\n".join(
+        [
+            "<h2>Panel Summary</h2>",
+            _filter_box(),
+            _table(["Manuscript", "Decision Risk", "Fatal Flaws", "Required Fixes", "Area Chair"], panel_rows),
+            "<h2>Reviewer Reports</h2>",
+            _table(["Manuscript", "Reviewer", "Role", "Score", "Fatal Flaws", "Required Fixes", "Evidence"], review_rows),
+        ]
+    )
+
+
+def _render_manuscript_rebuttal(context: _DashboardContext) -> str:
+    rebuttal_rows = [
+        [
+            _code(str(item.get("manuscript_id", ""))),
+            _code(str(item.get("id", ""))),
+            _code(str(item.get("reviewer_id", ""))),
+            _e(str(item.get("status", ""))),
+            _e(str(item.get("objection", ""))),
+            _e(str(item.get("response_strategy", ""))),
+            _e("; ".join(map(str, _as_list(item.get("evidence_needed"))))),
+            _e("; ".join(map(str, _as_list(item.get("experiments_needed"))))),
+            _e("; ".join(map(str, _as_list(item.get("citations_needed"))))),
+            _e("; ".join(map(str, _as_list(item.get("claim_softening_needed"))))),
+        ]
+        for item in context.manuscripts["rebuttal_items"]
+    ]
+    revision_rows = [
+        [
+            _code(str(plan.get("manuscript_id", ""))),
+            _code(str(plan.get("id", ""))),
+            _e(str(plan.get("status", ""))),
+            _e("; ".join(map(str, _as_list(plan.get("section_edits"))))),
+            _e("; ".join(map(str, _as_list(plan.get("required_experiments"))))),
+            _e("; ".join(map(str, _as_list(plan.get("required_searches"))))),
+            _e("; ".join(map(str, _as_list(plan.get("required_citations"))))),
+        ]
+        for plan in context.manuscripts["revision_plans"]
+    ]
+    return "\n".join(
+        [
+            "<h2>Rebuttal Items</h2>",
+            _filter_box(),
+            _table(
+                [
+                    "Manuscript",
+                    "Item",
+                    "Reviewer",
+                    "Status",
+                    "Objection",
+                    "Strategy",
+                    "Evidence Needed",
+                    "Experiments",
+                    "Citations",
+                    "Softening",
+                ],
+                rebuttal_rows,
+            ),
+            "<h2>Revision Plans</h2>",
+            _table(["Manuscript", "Plan", "Status", "Section Edits", "Experiments", "Searches", "Citations"], revision_rows),
+        ]
+    )
+
+
+def _render_manuscript_submission_packages(context: _DashboardContext) -> str:
+    rows = [
+        [
+            _code(str(package.get("manuscript_id", ""))),
+            _code(str(package.get("id", ""))),
+            _e(str(package.get("package_type", ""))),
+            _code(str(package.get("venue_template_id", ""))),
+            _e(str(package.get("status", ""))),
+            _code(str(package.get("checklist_id", ""))),
+            _code(str(package.get("anonymization_report_id", ""))),
+            _code(str(package.get("artifact_package_id", ""))),
+            _e(", ".join(_safe_path_label(str(item)) for item in _as_list(package.get("files")))),
+        ]
+        for package in context.manuscripts["submission_packages"]
+    ]
+    return _filter_box() + _table(
+        ["Manuscript", "Package", "Type", "Venue", "Status", "Checklist", "Anonymization", "Artifact Package", "Files"],
+        rows,
+    )
+
+
+def _render_v8_release_gate(context: _DashboardContext) -> str:
+    report = _dict(context.manuscripts.get("v8_release_gate"))
+    if not report:
+        return "<p>No v0.8 manuscript release-gate report is available for this dashboard context.</p>"
+    requirement_rows = [[_code(str(name)), _e(str(passed))] for name, passed in _dict(report.get("requirements")).items()]
+    manuscript_rows = [
+        [
+            _code(str(item.get("manuscript_id", ""))),
+            _e(str(item.get("status", ""))),
+            _e("; ".join(map(str, _as_list(item.get("blockers"))))),
+            _e("; ".join(map(str, _as_list(item.get("warnings"))))),
+        ]
+        for item in _dict_items(report.get("manuscripts"))
+    ]
+    status = "PASSED" if report.get("passed") else "NOT PASSED"
+    return "\n".join(
+        [
+            f'<div class="{"card" if report.get("passed") else "card warning"}">'
+            f"<h2>v0.8 Manuscript Release Gate: {_e(status)}</h2>"
+            f"<p>Status: {_e(str(report.get('status', '')))}</p></div>",
+            "<h2>Requirements</h2>",
+            _filter_box(),
+            _table(["Requirement", "Passed"], requirement_rows),
+            "<h2>Blockers</h2>",
+            _list([str(item) for item in _as_list(report.get("blockers"))], css_class="warning"),
+            "<h2>Warnings</h2>",
+            _list([str(item) for item in _as_list(report.get("warnings"))], css_class="warning"),
+            "<h2>Manuscripts</h2>",
+            _table(["Manuscript", "Status", "Blockers", "Warnings"], manuscript_rows),
+        ]
+    )
+
+
 def _run_artifact_links(state: ResearchRunState) -> list[tuple[str, str]]:
     names = [
         "run_report.md",
@@ -1633,11 +2114,30 @@ def _workspace_artifact_links(workspace_dir: Path) -> list[tuple[str, str]]:
     return [(name, f"../{name}") for name in names if (workspace_dir / name).exists()]
 
 
+def _manuscript_artifact_links(manuscript_root: Path) -> list[tuple[str, str]]:
+    names = [
+        "submission/status.md",
+        "submission/manuscript_report.md",
+        "submission/traceability_report.md",
+        "submission/submission_checklist.md",
+        "reviews/manuscript_review_panel.md",
+        "reviews/rebuttal_plan_actionable.md",
+    ]
+    return [(name, f"../{name}") for name in names if (manuscript_root / name).exists()]
+
+
 def _find_experiment_workspace_dir(project_root: Path, workspace_id: str) -> Path:
     for path in project_root.glob(f"*/experiment_workspaces/{workspace_id}"):
         if (path / "workspace.json").exists():
             return path
     raise FileNotFoundError(f"No experiment workspace found for {workspace_id}")
+
+
+def _find_manuscript_root(project_root: Path, manuscript_id: str) -> Path:
+    for path in project_root.glob(f"*/manuscripts/{manuscript_id}"):
+        if (path / "manuscript.json").exists():
+            return path
+    raise FileNotFoundError(f"No manuscript found for {manuscript_id}")
 
 
 def _empty_experiment_context() -> dict[str, list[dict[str, Any]]]:
@@ -1674,6 +2174,62 @@ def _empty_experiment_context() -> dict[str, list[dict[str, Any]]]:
         "reproducibility_matrices": [],
         "v7_release_gate": [],
     }
+
+
+def _empty_manuscript_context() -> dict[str, Any]:
+    return {
+        "roots": [],
+        "states": [],
+        "sections": [],
+        "claim_uses": [],
+        "citation_uses": [],
+        "bibliographies": [],
+        "traceability_reports": [],
+        "figures": [],
+        "tables": [],
+        "submission_checklists": [],
+        "artifact_packages": [],
+        "review_panels": [],
+        "rebuttal_items": [],
+        "revision_plans": [],
+        "submission_packages": [],
+        "v8_release_gate": {},
+    }
+
+
+def _load_project_manuscript_context(project_dir: Path, config: GapForgeConfig | None) -> dict[str, Any]:
+    roots = [path for path in sorted((project_dir / "manuscripts").glob("*")) if (path / "manuscript.json").exists()]
+    return _load_manuscript_context(roots, config) if config is not None else _empty_manuscript_context()
+
+
+def _load_manuscript_context(roots: list[Path], config: GapForgeConfig) -> dict[str, Any]:
+    context = _empty_manuscript_context()
+    context["roots"] = [str(root) for root in roots]
+    for root in roots:
+        state = _read_json_if_exists(root / "manuscript.json")
+        if not state:
+            continue
+        manuscript_id = _state_manuscript_id(state, root)
+        context["states"].append(state)
+        context["sections"].extend(_tag_manuscript_records(_as_list(state.get("sections")), manuscript_id))
+        context["claim_uses"].extend(_tag_manuscript_records(_as_list(state.get("claim_uses")), manuscript_id))
+        context["citation_uses"].extend(_tag_manuscript_records(_as_list(state.get("citation_uses")), manuscript_id))
+        _append_if_present(context["bibliographies"], root / "bibliography" / "bibliography.json", manuscript_id)
+        _append_if_present(context["traceability_reports"], root / "submission" / "traceability_report.json", manuscript_id)
+        for path in sorted((root / "figures").glob("*.json")):
+            _append_if_present(context["figures"], path, manuscript_id)
+        for path in sorted((root / "tables").glob("*.json")):
+            _append_if_present(context["tables"], path, manuscript_id)
+        _append_if_present(context["submission_checklists"], root / "submission" / "submission_checklist.json", manuscript_id)
+        for path in sorted((root / "artifact_evaluation").glob("*/artifact_evaluation_package.json")):
+            _append_if_present(context["artifact_packages"], path, manuscript_id)
+        _append_if_present(context["review_panels"], root / "reviews" / "manuscript_review_panel.json", manuscript_id)
+        _append_list_if_present(context["rebuttal_items"], root / "reviews" / "rebuttal_items.json", manuscript_id)
+        _append_if_present(context["revision_plans"], root / "reviews" / "revision_plan.json", manuscript_id)
+        for path in sorted((root / "submission" / "packages").glob("*/submission_package.json")):
+            _append_if_present(context["submission_packages"], path, manuscript_id)
+    context["v8_release_gate"] = V08ReleaseGateEnforcer(config).evaluate().to_dict() if roots else {}
+    return context
 
 
 def _load_experiment_context(base_dir: Path) -> dict[str, list[dict[str, Any]]]:
@@ -1875,11 +2431,73 @@ def _read_json_if_exists(path: Path) -> dict[str, Any]:
     return raw if isinstance(raw, dict) else {}
 
 
+def _read_json_value_if_exists(path: Path) -> Any:
+    if not path.exists():
+        return None
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+
+
 def _read_list(path: Path) -> list[dict[str, Any]]:
     if not path.exists():
         return []
     raw = json.loads(path.read_text(encoding="utf-8"))
     return raw if isinstance(raw, list) else []
+
+
+def _append_if_present(records: list[dict[str, Any]], path: Path, manuscript_id: str) -> None:
+    raw = _read_json_value_if_exists(path)
+    if isinstance(raw, dict):
+        records.append(_tag_manuscript_record(raw, manuscript_id))
+
+
+def _append_list_if_present(records: list[dict[str, Any]], path: Path, manuscript_id: str) -> None:
+    raw = _read_json_value_if_exists(path)
+    if isinstance(raw, dict):
+        records.append(_tag_manuscript_record(raw, manuscript_id))
+    elif isinstance(raw, list):
+        records.extend(_tag_manuscript_records(raw, manuscript_id))
+
+
+def _tag_manuscript_records(items: list[object], manuscript_id: str) -> list[dict[str, Any]]:
+    return [_tag_manuscript_record(item, manuscript_id) for item in items if isinstance(item, dict)]
+
+
+def _tag_manuscript_record(item: object, manuscript_id: str) -> dict[str, Any]:
+    record = dict(item) if isinstance(item, dict) else {}
+    record.setdefault("manuscript_id", manuscript_id)
+    return record
+
+
+def _state_manuscript_id(state: dict[str, Any], root: Path) -> str:
+    manuscript = state.get("manuscript")
+    if isinstance(manuscript, dict):
+        return str(manuscript.get("id") or root.name)
+    return root.name
+
+
+def _manuscript_blockers(context: _DashboardContext, manuscript_id: str) -> list[str]:
+    blockers: list[str] = []
+    for report in context.manuscripts["traceability_reports"]:
+        if str(report.get("manuscript_id", "")) != manuscript_id:
+            continue
+        blockers.extend(f"Unsupported claim: {item}" for item in _as_list(report.get("unsupported_claims")))
+        blockers.extend(str(item) for item in _as_list(report.get("blocking_issues")))
+    for checklist in context.manuscripts["submission_checklists"]:
+        if str(checklist.get("manuscript_id", "")) == manuscript_id:
+            blockers.extend(str(item) for item in _as_list(checklist.get("blocking_issues")))
+    for panel in context.manuscripts["review_panels"]:
+        if str(panel.get("manuscript_id", "")) == manuscript_id:
+            blockers.extend(str(item) for item in _as_list(panel.get("fatal_flaws")))
+    for item in context.manuscripts["rebuttal_items"]:
+        if str(item.get("manuscript_id", "")) == manuscript_id and str(item.get("status", "")) in {"open", "deferred"}:
+            blockers.append(f"Open rebuttal item: {item.get('id', '')}")
+    for assessment in _dict_items(_dict(context.manuscripts.get("v8_release_gate")).get("manuscripts")):
+        if str(assessment.get("manuscript_id", "")) == manuscript_id:
+            blockers.extend(str(item) for item in _as_list(assessment.get("blockers")))
+    return _dedupe(blockers)
 
 
 def _campaign_dir_for(context: _DashboardContext, state: CampaignState) -> Path:
@@ -1918,6 +2536,21 @@ def _campaign_live_source_diagnostic(context: _DashboardContext, state: Campaign
 
 def _as_list(value: object) -> list[object]:
     return value if isinstance(value, list) else []
+
+
+def _dict(value: object) -> dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def _dict_items(value: object) -> list[dict[str, Any]]:
+    return [item for item in _as_list(value) if isinstance(item, dict)]
+
+
+def _safe_path_label(value: str) -> str:
+    if not value:
+        return ""
+    path = Path(value)
+    return path.name if path.is_absolute() else value
 
 
 def _search_round_row(scope: str, round_item: SearchRound) -> list[str]:

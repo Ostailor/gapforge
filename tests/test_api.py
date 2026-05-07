@@ -215,6 +215,100 @@ def test_api_v4_release_gate(tmp_path: Path) -> None:
     assert result.blockers
 
 
+def test_api_create_draft_and_traceability_manuscript(tmp_path: Path) -> None:
+    config, manuscript_id, execution_id, artifact_ids = _api_manuscript_fixture(tmp_path)
+
+    drafted = api.draft_manuscript(
+        manuscript_id,
+        sections=["abstract", "introduction", "related_work", "method", "experiments", "results", "limitations", "conclusion"],
+        section_links={
+            "related_work": {"source_paper_ids": ["paper-api"]},
+            "results": {"source_result_ids": [execution_id], "source_artifact_ids": artifact_ids},
+        },
+        claim_uses=[
+            {
+                "section_type": "related_work",
+                "claim_id": "claim-api-background",
+                "claim_text": "Prior work motivates scriptable manuscript workflows.",
+                "use_type": "background",
+                "support_status": "supported",
+                "evidence_locators": ["paper-api:introduction:p1"],
+            },
+            {
+                "section_type": "results",
+                "claim_id": "claim-api-result",
+                "claim_text": "The API fixture records an artifact-backed result.",
+                "use_type": "result",
+                "support_status": "supported",
+            },
+        ],
+        status="approved",
+        config=config,
+    )
+    bibliography = api.build_bibliography(manuscript_id, config=config)
+    rendered = api.render_manuscript(manuscript_id, config=config)
+    traceability = api.run_traceability_check(manuscript_id, config=config)
+
+    assert drafted.manuscript.id == manuscript_id
+    assert len(drafted.sections) == 8
+    assert bibliography.entries[0].paper_id == "paper-api"
+    assert "API Manuscript" in rendered
+    assert traceability.blocking_issues == []
+    assert traceability.supported_claim_count == 2
+
+
+def test_api_submission_package_and_v8_release_gate(tmp_path: Path) -> None:
+    config, manuscript_id, execution_id, artifact_ids = _api_manuscript_fixture(tmp_path)
+    _write_v8_api_prerequisites(config)
+    api.draft_manuscript(
+        manuscript_id,
+        sections=["abstract", "introduction", "related_work", "method", "experiments", "results", "limitations", "conclusion"],
+        section_links={
+            "related_work": {"source_paper_ids": ["paper-api"]},
+            "results": {"source_result_ids": [execution_id], "source_artifact_ids": artifact_ids},
+        },
+        claim_uses=[
+            {
+                "section_type": "related_work",
+                "claim_id": "claim-api-background",
+                "claim_text": "Prior work motivates scriptable manuscript workflows.",
+                "use_type": "background",
+                "support_status": "supported",
+                "evidence_locators": ["paper-api:introduction:p1"],
+            },
+            {
+                "section_type": "results",
+                "claim_id": "claim-api-result",
+                "claim_text": "The API fixture records an artifact-backed result.",
+                "use_type": "result",
+                "support_status": "supported",
+            },
+        ],
+        status="approved",
+        config=config,
+    )
+    api.build_bibliography(manuscript_id, config=config)
+    api.set_venue(manuscript_id, "generic_conference", config=config)
+    assets = api.generate_manuscript_assets(manuscript_id, table_types=["result_table"], figure_types=["metric_plot"], config=config)
+    anonymization = api.anonymize_manuscript(manuscript_id, config=config)
+    artifact_package = api.create_artifact_eval_package(manuscript_id, config=config)
+    checklist = api.submission_checklist(manuscript_id, config=config)
+    review = api.manuscript_review(manuscript_id, config=config)
+    revision = api.rebuttal_plan(manuscript_id, config=config)
+    package = api.submission_package(manuscript_id, "review", config=config)
+    gate = api.v8_release_gate(write_report=True, config=config)
+
+    assert assets.tables and assets.figures
+    assert anonymization.status == "pass"
+    assert artifact_package.status == "review_ready"
+    assert checklist.blocking_issues == []
+    assert review.manuscript_id == manuscript_id
+    assert revision.manuscript_id == manuscript_id
+    assert package.files
+    assert gate.requirements["manuscript_project_created"] is True
+    assert gate.requirements["submission_package_exported"] is True
+
+
 def test_api_source_health_with_mocked_source(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.delenv("GAPFORGE_DISABLE_NETWORK", raising=False)
     config = GapForgeConfig.from_cwd(tmp_path)
@@ -595,6 +689,42 @@ def _run_api_fixture_experiment(
         config=config,
     )
     return api.run_experiment(workspace_id, manifest_id=manifest.id, config=config)
+
+
+def _api_manuscript_fixture(tmp_path: Path) -> tuple[GapForgeConfig, str, str, list[str]]:
+    config, workspace_id, dataset_id, baseline_id, metric_id = _api_experiment_workspace(tmp_path)
+    workspace = ExperimentWorkspaceManager(config).load_workspace(workspace_id)
+    run = api.create_run("api manuscript evidence", project_id=workspace.project_id, config=config)
+    run.papers = [
+        Paper(
+            id="paper-api",
+            title="Scriptable Manuscript Workflows",
+            authors=["Ada Lovelace"],
+            abstract="Known paper evidence for API manuscript tests.",
+            year=2026,
+            venue="APIConf",
+            doi="10.1000/api-manuscript",
+        )
+    ]
+    ResearchStateManager(config).save_run(run)
+    result = _run_api_fixture_experiment(config, workspace_id, dataset_id, baseline_id, metric_id)
+    api.parse_results(result.execution.id, config=config)
+    api.export_replication_package(workspace_id, config=config)
+    manuscript = api.create_manuscript(
+        workspace.project_id,
+        workspace.direction_id,
+        workspace.id,
+        "API Manuscript",
+        config=config,
+    )
+    return config, manuscript.manuscript.id, result.execution.id, result.execution.result_artifact_ids
+
+
+def _write_v8_api_prerequisites(config: GapForgeConfig) -> None:
+    release_dir = config.data_dir / "release_gate"
+    release_dir.mkdir(parents=True, exist_ok=True)
+    (release_dir / "deterministic_ci.json").write_text('{"passed": true}\n', encoding="utf-8")
+    (release_dir / "v0.7_latest.json").write_text('{"passed": true, "status": "pass"}\n', encoding="utf-8")
 
 
 def _tiny_pdf(text: str) -> bytes:

@@ -66,6 +66,33 @@ Located in `tests/fixtures/experiments_v6/`:
 
 These fixtures test empirical execution integrity offline. They distinguish planned protocols, scaffolds, smoke runs, failed runs, parsed result artifacts, reproducibility, empirical review, and paper package labels. They do not prove real-world empirical success.
 
+### v0.7 Benchmark and Replication Fixtures
+
+Located in `tests/fixtures/benchmarks_v7/`:
+
+- `fixture_benchmark_success`
+- `fixture_benchmark_failure`
+- `fake_result_rejected`
+- `low_fpr_underpowered_benchmark`
+- `replication_package_canary`
+
+These fixtures test benchmark registry, fixture-versus-real labeling, failed benchmark runs, fake result rejection, low-FPR power warnings, and replication package safety. They do not prove broad benchmark validation.
+
+### v0.8 Manuscript Submission Fixtures
+
+Located in `tests/fixtures/manuscript_v8/`:
+
+- `complete_submission_package`
+- `unsupported_claim_blocked`
+- `fake_citation_blocked`
+- `smoke_result_overclaim`
+- `missing_artifact_package`
+- `anonymous_submission_leak`
+- `reviewer_rebuttal_required`
+- `camera_ready_blocked`
+
+These fixtures test manuscript honesty offline. They enforce citation validity, claim traceability, result artifact backing, venue checklist behavior, artifact evaluation packaging, reviewer/rebuttal actionability, anonymization safety, submission package completeness, and v8 release-gate correctness. They do not prove a paper is accepted, novel, or independently reproduced.
+
 ## Metrics
 
 Core metrics:
@@ -149,6 +176,19 @@ v0.6 metrics:
 - `paper_package_honesty`
 - `v6_release_gate_correctness`
 
+v0.8 metrics:
+
+- `manuscript_traceability_score`
+- `citation_validity_score`
+- `result_claim_honesty_score`
+- `venue_checklist_score`
+- `artifact_eval_package_score`
+- `reviewer_panel_quality`
+- `rebuttal_actionability`
+- `anonymization_safety`
+- `submission_package_completeness`
+- `v8_release_gate_correctness`
+
 ## Commands
 
 ```bash
@@ -158,10 +198,13 @@ gapforge eval --v3
 gapforge eval --v4
 gapforge eval --v5
 gapforge eval --v6
+gapforge eval --v7
+gapforge eval --v8
 gapforge eval --fixture low_fpr_collusion --v3
 gapforge eval --fixture fake_agent_campaign --v4
 gapforge eval --fixture live_like_low_fpr_collusion --v5
 gapforge eval --fixture smoke_success --v6
+gapforge eval --fixture complete_submission_package --v8
 gapforge eval --write-report
 make eval
 ```
@@ -193,6 +236,13 @@ make eval
 - failed experiment paths hidden from reports
 - low-FPR metrics missing confidence/sample-size caution
 - paper packages blending planned, smoke, pilot, main, failed, and hypothetical result categories
+- manuscript citations that do not resolve to known papers
+- unsupported manuscript claims marked submission-ready
+- smoke results phrased as main results
+- artifact evaluation packages missing replication/workspace state
+- anonymous submission identity leaks hidden from checklists
+- reviewer objections answered with invented results or citations
+- camera-ready packages with open fatal rebuttal items
 
 ## Fixture Policy
 
@@ -211,3 +261,5 @@ For v0.4, passing `gapforge eval --v4` means the offline campaign behavior fixtu
 For v0.5, passing `gapforge eval --v5` means offline real-literature quality gate fixtures passed. It does not mean live-literature campaign quality passed. That requires live source diagnostics, real campaign records, human quality review, and `gapforge v5-release-gate`.
 
 For v0.6, passing `gapforge eval --v6` means offline experiment execution safety fixtures passed. It does not mean a real empirical result was established. Empirical claims require execution records, result artifacts, parsed metrics, statistical analysis, reproducibility checks, and reviewer scrutiny.
+
+For v0.8, passing `gapforge eval --v8` means offline manuscript workflow safety fixtures passed. It does not mean a venue-ready manuscript exists. Submission readiness requires known citations, traceable claims, artifact-backed results, artifact evaluation state, anonymization checks when required, reviewer/rebuttal blockers addressed, and human review.

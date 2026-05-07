@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
 from gapforge.config import GapForgeConfig
 from gapforge.experiments.runner import ExperimentRunner
 from gapforge.experiments.workspace import ExperimentWorkspaceManager
-from gapforge.models import ExperimentProtocol
+from gapforge.models import ExperimentExecutionRecord, ExperimentProtocol, ExperimentWorkspace, Provenance, to_plain
 from gapforge.project_memory import ProjectMemoryManager
 
 
@@ -122,6 +123,40 @@ def test_experiment_run_status_and_rerun(tmp_path: Path) -> None:
     assert "Result Artifacts" in status
     assert second.execution.status == "complete"
     assert second.execution.id != first.execution.id
+
+
+def test_find_execution_handles_duplicate_workspace_ids(tmp_path: Path) -> None:
+    config = GapForgeConfig.from_cwd(tmp_path)
+    duplicate_id = "workspace-duplicate-direction"
+    for project_name in ["project-a", "project-b"]:
+        project_dir = config.project_root / project_name
+        workspace_dir = project_dir / "experiment_workspaces" / duplicate_id
+        runs_dir = workspace_dir / "runs"
+        runs_dir.mkdir(parents=True, exist_ok=True)
+        workspace = ExperimentWorkspace(
+            id=duplicate_id,
+            project_id=project_name,
+            campaign_id="",
+            direction_id="duplicate-direction",
+            experiment_protocol_id="",
+            root_dir=str(workspace_dir),
+            provenance=Provenance(created_by_skill="test"),
+        )
+        (workspace_dir / "workspace.json").write_text(json.dumps(to_plain(workspace)) + "\n", encoding="utf-8")
+
+    execution = ExperimentExecutionRecord(
+        id="execution-in-second-workspace",
+        workspace_id=duplicate_id,
+        manifest_id="manifest-second",
+        status="complete",
+    )
+    second_runs = config.project_root / "project-b" / "experiment_workspaces" / duplicate_id / "runs"
+    (second_runs / f"{execution.id}.json").write_text(json.dumps(to_plain(execution)) + "\n", encoding="utf-8")
+
+    workspace, record = ExperimentRunner(config).find_execution(execution.id)
+
+    assert workspace.project_id == "project-b"
+    assert record.id == execution.id
 
 
 def _manifest_with_script(config: GapForgeConfig, workspace_id: str, name: str, payload: str):

@@ -12,6 +12,7 @@ from gapforge.evals.fixtures import (
     V5_FIXTURE_NAMES,
     V6_FIXTURE_NAMES,
     V7_FIXTURE_NAMES,
+    V8_FIXTURE_NAMES,
     EvalFixture,
     load_fixtures,
     load_v3_fixtures,
@@ -19,18 +20,22 @@ from gapforge.evals.fixtures import (
     load_v5_fixtures,
     load_v6_fixtures,
     load_v7_fixtures,
+    load_v8_fixtures,
 )
 from gapforge.evals.metrics import (
     EvalScores,
     RunMetrics,
     actual_run_gate_correctness,
     agent_output_validation_strictness,
+    anonymization_safety,
+    artifact_eval_package_score,
     benchmark_comparison_honesty,
     benchmark_execution_integrity,
     benchmark_failure_path_preservation,
     campaign_decision_quality,
     campaign_report_honesty,
     canonicalization_quality,
+    citation_validity_score,
     contradiction_detection_score,
     direction_maturity_accuracy,
     direction_maturity_gate_accuracy_from_fixture,
@@ -52,6 +57,7 @@ from gapforge.evals.metrics import (
     llm_output_grounding_score,
     low_fpr_underpowered_warning_score,
     manuscript_package_honesty,
+    manuscript_traceability_score,
     novelty_dossier_completeness_score,
     novelty_gate_accuracy,
     novelty_research_loop_quality,
@@ -61,6 +67,7 @@ from gapforge.evals.metrics import (
     protocol_completeness,
     quality_review_gate_correctness,
     real_literature_refusal_quality,
+    rebuttal_actionability,
     related_work_matrix_quality,
     replication_package_quality,
     report_uncertainty_score,
@@ -69,9 +76,11 @@ from gapforge.evals.metrics import (
     research_direction_quality_proxy,
     result_aggregation_quality,
     result_artifact_grounding,
+    result_claim_honesty_score,
     retrieval_relevance_at_k,
     review_queue_quality,
     reviewer_objection_quality_score,
+    reviewer_panel_quality,
     rollback_safety,
     search_strategy_completeness,
     section_grounding_score,
@@ -79,10 +88,13 @@ from gapforge.evals.metrics import (
     source_policy_compliance,
     statistical_caution_score,
     stop_reason_correctness,
+    submission_package_completeness,
     unsupported_claim_rate,
     v5_release_gate_correctness,
     v6_release_gate_correctness,
     v7_release_gate_correctness,
+    v8_release_gate_correctness,
+    venue_checklist_score,
 )
 from gapforge.experiments.protocol import build_protocol_from_state
 from gapforge.export.manuscript import render_expected_results
@@ -122,6 +134,7 @@ class EvalReport:
     v5: bool = False
     v6: bool = False
     v7: bool = False
+    v8: bool = False
     report_path: Path | None = None
 
     @property
@@ -148,12 +161,15 @@ def run_evals(
     v5: bool = False,
     v6: bool = False,
     v7: bool = False,
+    v8: bool = False,
 ) -> EvalReport:
     selected = (
         [fixture]
         if fixture
         else (
-            V7_FIXTURE_NAMES
+            V8_FIXTURE_NAMES
+            if v8
+            else V7_FIXTURE_NAMES
             if v7
             else V6_FIXTURE_NAMES
             if v6
@@ -168,7 +184,9 @@ def run_evals(
             else None
         )
     )
-    if v7:
+    if v8:
+        fixtures = load_v8_fixtures(selected, fixture_root)
+    elif v7:
         fixtures = load_v7_fixtures(selected, fixture_root)
     elif v6:
         fixtures = load_v6_fixtures(selected, fixture_root)
@@ -189,6 +207,7 @@ def run_evals(
         v5=v5 or any(item.is_v5 for item in fixtures),
         v6=v6 or any(item.is_v6 for item in fixtures),
         v7=v7 or any(item.is_v7 for item in fixtures),
+        v8=v8 or any(item.is_v8 for item in fixtures),
     )
     if write_report:
         path = (output_dir or Path.cwd()) / "eval_report.md"
@@ -223,6 +242,10 @@ def render_eval_report(report: EvalReport) -> str:
         v7_scores = [score for result in report.results if (score := result.scores.v7_overall()) is not None]
         v7_overall = round(sum(v7_scores) / len(v7_scores), 3) if v7_scores else 0.0
         lines.extend([f"v0.7 overall score: **{v7_overall:.3f}**", ""])
+    if report.v8:
+        v8_scores = [score for result in report.results if (score := result.scores.v8_overall()) is not None]
+        v8_overall = round(sum(v8_scores) / len(v8_scores), 3) if v8_scores else 0.0
+        lines.extend([f"v0.8 overall score: **{v8_overall:.3f}**", ""])
     for result in report.results:
         scores = result.scores
         lines.extend(
@@ -351,6 +374,25 @@ def render_eval_report(report: EvalReport) -> str:
                     "",
                 ]
             )
+        if scores.v8_overall() is not None:
+            lines.extend(
+                [
+                    "### v0.8 Scores",
+                    "",
+                    f"- manuscript_traceability_score: {scores.manuscript_traceability_score:.3f}",
+                    f"- citation_validity_score: {scores.citation_validity_score:.3f}",
+                    f"- result_claim_honesty_score: {scores.result_claim_honesty_score:.3f}",
+                    f"- venue_checklist_score: {scores.venue_checklist_score:.3f}",
+                    f"- artifact_eval_package_score: {scores.artifact_eval_package_score:.3f}",
+                    f"- reviewer_panel_quality: {scores.reviewer_panel_quality:.3f}",
+                    f"- rebuttal_actionability: {scores.rebuttal_actionability:.3f}",
+                    f"- anonymization_safety: {scores.anonymization_safety:.3f}",
+                    f"- submission_package_completeness: {scores.submission_package_completeness:.3f}",
+                    f"- v8_release_gate_correctness: {scores.v8_release_gate_correctness:.3f}",
+                    f"- fixture_v8_overall: {scores.v8_overall():.3f}",
+                    "",
+                ]
+            )
         failed_checks = _failed_checks(scores, result)
         lines.extend(["### Failed Checks And Suggested Improvements", ""])
         lines.extend(["| Check | Suggested improvement |", "| --- | --- |"])
@@ -468,6 +510,18 @@ def _evaluate_fixture(fixture: EvalFixture) -> FixtureEvalResult:
         scores.reproduction_verification_quality = reproduction_verification_quality(benchmark_fixture)
         scores.low_fpr_underpowered_warning_score = low_fpr_underpowered_warning_score(benchmark_fixture)
         scores.v7_release_gate_correctness = v7_release_gate_correctness(benchmark_fixture)
+    if fixture.is_v8:
+        manuscript_fixture = fixture.manuscript_fixture
+        scores.manuscript_traceability_score = manuscript_traceability_score(manuscript_fixture)
+        scores.citation_validity_score = citation_validity_score(manuscript_fixture)
+        scores.result_claim_honesty_score = result_claim_honesty_score(manuscript_fixture)
+        scores.venue_checklist_score = venue_checklist_score(manuscript_fixture)
+        scores.artifact_eval_package_score = artifact_eval_package_score(manuscript_fixture)
+        scores.reviewer_panel_quality = reviewer_panel_quality(manuscript_fixture)
+        scores.rebuttal_actionability = rebuttal_actionability(manuscript_fixture)
+        scores.anonymization_safety = anonymization_safety(manuscript_fixture)
+        scores.submission_package_completeness = submission_package_completeness(manuscript_fixture)
+        scores.v8_release_gate_correctness = v8_release_gate_correctness(manuscript_fixture)
     unsupported = [
         claim.id
         for claim in state.claims
@@ -715,6 +769,16 @@ def _failed_checks(scores: EvalScores, result: FixtureEvalResult) -> list[tuple[
         "reproduction_verification_quality": 0.75,
         "low_fpr_underpowered_warning_score": 0.85,
         "v7_release_gate_correctness": 1.0,
+        "manuscript_traceability_score": 0.9,
+        "citation_validity_score": 0.9,
+        "result_claim_honesty_score": 0.9,
+        "venue_checklist_score": 0.85,
+        "artifact_eval_package_score": 0.85,
+        "reviewer_panel_quality": 0.8,
+        "rebuttal_actionability": 0.8,
+        "anonymization_safety": 0.9,
+        "submission_package_completeness": 0.9,
+        "v8_release_gate_correctness": 1.0,
     }
     suggestions = {
         "full_text_coverage_score": "Parse more full text before evaluating research quality.",
@@ -770,6 +834,18 @@ def _failed_checks(scores: EvalScores, result: FixtureEvalResult) -> list[tuple[
         "v7_release_gate_correctness": (
             "Require benchmark success/failure canaries, aggregation, error analysis, and replication evidence."
         ),
+        "manuscript_traceability_score": "Block unsupported manuscript claims unless explicitly marked hypothesis/speculation.",
+        "citation_validity_score": "Reject fake or unknown citation strings and tie citations to known paper records.",
+        "result_claim_honesty_score": "Require result claims to cite artifacts and block smoke/pilot overclaims.",
+        "venue_checklist_score": "Generate venue-aware checklists with explicit blockers.",
+        "artifact_eval_package_score": (
+            "Export artifact evaluation packages with replication, hashes, instructions, and safe data handling."
+        ),
+        "reviewer_panel_quality": "Run manuscript reviewers that cite sections/evidence and report fatal flaws.",
+        "rebuttal_actionability": "Convert reviewer objections into evidence, experiment, search, citation, and softening tasks.",
+        "anonymization_safety": "Detect identity leaks and block anonymous submissions when leaks remain.",
+        "submission_package_completeness": "Export auditable submission packages with manuscript, assets, bibliography, and reports.",
+        "v8_release_gate_correctness": "Require traceability, artifacts, review/rebuttal, and submission packages before v0.8 readiness.",
     }
     for name, threshold in thresholds.items():
         value = getattr(scores, name)

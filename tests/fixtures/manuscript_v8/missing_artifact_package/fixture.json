@@ -1,0 +1,13 @@
+{
+  "topic": "missing artifact evaluation package blocks release",
+  "traceability": {"report_generated": true, "unsupported_claim_present": false, "unsupported_claims_blocked": true, "claims": [{"id": "claim-result", "supported": true, "source": "artifact-1"}], "blocking_issues": []},
+  "citations": {"bibliography_built": true, "known_paper_records": true, "unresolved_known_citations": false, "fake_citation_present": false},
+  "results": {"result_claims_artifact_backed": true, "run_type_labels_visible": true, "claims_results_without_artifacts": false, "smoke_overclaim_present": false, "fake_result_present": false},
+  "venue_checklist": {"generated": true, "status": "not_ready", "required_sections_checked": true, "bibliography_checked": true, "traceability_checked": true, "artifact_package_checked": true, "limitations_checked": true, "expected_block": true, "blocking_issues": ["artifact package missing"]},
+  "artifact_evaluation": {"generated": false, "missing_expected": true, "release_gate_blocked": true, "replication_package_included": false, "install_instructions": false, "run_instructions": false, "expected_outputs_hashes": false, "restricted_data_included": false},
+  "reviewer_panel": {"generated": true, "roles": ["novelty", "empirical", "clarity", "related-work", "artifact", "ethics"], "evidence_linked": true, "required_fixes": ["export artifact package"], "fatal_expected": true, "fatal_flaws": ["missing artifact package"], "invented_experiments": false},
+  "rebuttal": {"plan_generated": true, "items": ["item-artifact"], "evidence_needed_listed": true, "experiments_or_searches_created": true, "fake_responses": false},
+  "anonymization": {"checked": true, "status": "pass", "original_preserved": true, "leak_expected": false, "leak_detected": false},
+  "submission_package": {"exported": true, "status": "blocked", "anonymous_required": true, "expected_block": true, "auditable": true, "unsupported_claims_allowed": false, "files": ["manuscript", "bibliography", "figures_or_tables", "appendix", "replication_instructions", "limitations", "checklist_report", "anonymization_report"]},
+  "v8_release_gate": {"expected_pass": false, "expected_blockers": ["artifact package missing"]}
+}

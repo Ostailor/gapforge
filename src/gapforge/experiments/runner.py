@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 from dataclasses import dataclass, field
@@ -10,7 +11,7 @@ from pathlib import Path
 from gapforge.compute.resources import resource_request_is_default, validate_resource_request
 from gapforge.config import GapForgeConfig
 from gapforge.experiments.workspace import ExperimentWorkspaceManager
-from gapforge.models import ExperimentExecutionRecord, ExperimentRunManifest, ExperimentWorkspace
+from gapforge.models import ExperimentExecutionRecord, ExperimentRunManifest, ExperimentWorkspace, from_dict
 from gapforge.redaction import redact_text
 
 
@@ -109,8 +110,8 @@ class ExperimentRunner:
                 workspace_path = workspace_dir / "workspace.json"
                 execution_path = workspace_dir / "runs" / f"{execution_id}.json"
                 if workspace_path.exists() and execution_path.exists():
-                    workspace = self.workspace_manager.load_workspace(workspace_dir.name)
-                    record = next(item for item in self.workspace_manager.list_execution_records(workspace.id) if item.id == execution_id)
+                    workspace = from_dict(ExperimentWorkspace, json.loads(workspace_path.read_text(encoding="utf-8")))
+                    record = from_dict(ExperimentExecutionRecord, json.loads(execution_path.read_text(encoding="utf-8")))
                     return workspace, record
         raise FileNotFoundError(f"No experiment execution found for {execution_id}")
 

@@ -153,6 +153,26 @@ def test_v04_release_gate_required_campaign_mix_passes_and_report_renders(tmp_pa
     assert "Passed: true" in md_path.read_text(encoding="utf-8")
 
 
+def test_v04_release_gate_ignores_noneligible_handoff_plumbing_campaign(tmp_path: Path) -> None:
+    config = GapForgeConfig.from_cwd(tmp_path)
+    _write_ci_and_fake_canary(config)
+    _accepted_campaign(config, "experiment ready", ready=True)
+    _accepted_campaign(config, "coverage refusal", refusal=True, stop_reason="not_ready_poor_coverage")
+    _accepted_campaign(config, "manual pdf full text", ready=True, full_text=True)
+    handoff_id = _accepted_campaign(config, "handoff plumbing", mode="manual_handoff", full_text=True)
+    campaign_manager = CampaignManager(config)
+    handoff = campaign_manager.load_campaign_state(handoff_id)
+    assert handoff.acceptance_summary is not None
+    handoff.acceptance_summary.release_gate_eligible = False
+    campaign_manager.save_campaign_state(handoff)
+
+    result = V04ReleaseGateEnforcer(config).evaluate()
+
+    assert result.passed is True
+    assert handoff_id not in result.accepted_real_campaign_ids
+    assert not any(handoff_id in blocker for blocker in result.blockers)
+
+
 def test_v04_release_gate_explain_and_next_commands_cli(tmp_path: Path) -> None:
     result = subprocess.run(
         [sys.executable, "-m", "gapforge.cli", "v4-release-gate", "--explain", "--next-commands"],
