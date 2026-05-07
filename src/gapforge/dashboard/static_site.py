@@ -36,6 +36,7 @@ from gapforge.models import (
     SearchRound,
     SourceCoverageReport,
     from_dict,
+    to_plain,
 )
 from gapforge.project_memory import ProjectMemoryManager
 from gapforge.state import ResearchStateManager
@@ -70,6 +71,16 @@ PAGES = [
     ("results.html", "Results"),
     ("reproducibility.html", "Reproducibility"),
     ("empirical_reviews.html", "Empirical Reviews"),
+    ("benchmarks.html", "Benchmarks"),
+    ("benchmark_suites.html", "Benchmark Suites"),
+    ("jobs.html", "Jobs"),
+    ("sweeps.html", "Sweeps"),
+    ("result_tables.html", "Result Tables"),
+    ("error_analysis.html", "Error Analysis"),
+    ("leaderboard.html", "Leaderboard"),
+    ("replication_packages.html", "Replication Packages"),
+    ("reproduction_matrix.html", "Reproduction Matrix"),
+    ("v7_release_gate.html", "v7 Release Gate"),
 ]
 
 
@@ -182,6 +193,8 @@ class _DashboardContext:
     def from_project(cls, program: ResearchProgramState, states: list[ResearchRunState]) -> _DashboardContext:
         coverage_reports = [state.source_coverage for state in states if state.source_coverage is not None]
         campaign_states = _load_campaign_states(program)
+        experiments = _load_experiment_context(Path(program.project.root_dir))
+        experiments["benchmark_suites"] = [to_plain(suite) for suite in program.benchmark_suites]
         return cls(
             title=f"GapForge Project: {program.project.name}",
             subtitle=program.project.description or program.project.id,
@@ -212,7 +225,7 @@ class _DashboardContext:
             campaign_states=campaign_states,
             canary_records=_load_campaign_canaries(Path(program.project.root_dir).parents[1] / "data", program.project.id),
             run_states=states,
-            experiments=_load_experiment_context(Path(program.project.root_dir)),
+            experiments=experiments,
         )
 
     @classmethod
@@ -275,6 +288,16 @@ def _write_dashboard(root: Path, context: _DashboardContext) -> DashboardResult:
         "results.html": _render_experiment_results(context),
         "reproducibility.html": _render_experiment_reproducibility(context),
         "empirical_reviews.html": _render_experiment_reviews(context),
+        "benchmarks.html": _render_benchmarks(context),
+        "benchmark_suites.html": _render_benchmark_suites(context),
+        "jobs.html": _render_jobs(context),
+        "sweeps.html": _render_sweeps(context),
+        "result_tables.html": _render_result_tables(context),
+        "error_analysis.html": _render_error_analysis(context),
+        "leaderboard.html": _render_leaderboard(context),
+        "replication_packages.html": _render_replication_packages(context),
+        "reproduction_matrix.html": _render_reproduction_matrix(context),
+        "v7_release_gate.html": _render_v7_release_gate(context),
     }
     written = []
     for filename, body in pages.items():
@@ -1223,6 +1246,348 @@ def _render_experiment_reviews(context: _DashboardContext) -> str:
     )
 
 
+def _render_benchmarks(context: _DashboardContext) -> str:
+    rows = [
+        [
+            _code(str(record.get("workspace_id", ""))),
+            _code(str(record.get("id", ""))),
+            _e(str(record.get("name", ""))),
+            _e(str(record.get("domain", ""))),
+            _e(str(record.get("task_type", ""))),
+            _e(", ".join(map(str, _as_list(record.get("dataset_ids"))))),
+            _e(", ".join(map(str, _as_list(record.get("baseline_ids"))))),
+            _e(", ".join(map(str, _as_list(record.get("metric_ids"))))),
+            _e("; ".join(map(str, _as_list(record.get("limitations")) + _as_list(record.get("safety_notes"))))),
+        ]
+        for record in context.experiments["benchmarks"]
+    ]
+    canary_rows = [
+        [
+            _code(str(record.get("workspace_id", ""))),
+            _code(str(record.get("profile_id", ""))),
+            _e(str(record.get("status", ""))),
+            _e(str(record.get("execution_status", ""))),
+            _e("; ".join(map(str, _as_list(record.get("warnings"))))),
+            _e("; ".join(map(str, _as_list(record.get("issues"))))),
+        ]
+        for record in context.experiments["benchmark_canaries"]
+    ]
+    failures = [
+        f"`{record.get('profile_id', '')}` status `{record.get('status', '')}`: "
+        f"{'; '.join(map(str, _as_list(record.get('issues')))) or 'failure path recorded'}"
+        for record in context.experiments["benchmark_canaries"]
+        if str(record.get("status", "")) in {"failed", "warning", "refused"}
+    ]
+    return "\n".join(
+        [
+            "<h2>Benchmark Records</h2>",
+            _filter_box(),
+            _table(["Workspace", "Benchmark", "Name", "Domain", "Task", "Datasets", "Baselines", "Metrics", "Limitations"], rows),
+            "<h2>Benchmark Canaries</h2>",
+            _table(["Workspace", "Profile", "Status", "Execution", "Warnings", "Issues"], canary_rows),
+            "<h2>Failures and Warnings</h2>",
+            _list(failures, css_class="warning"),
+        ]
+    )
+
+
+def _render_benchmark_suites(context: _DashboardContext) -> str:
+    rows = [
+        [
+            _code(str(suite.get("id", ""))),
+            _e(str(suite.get("name", ""))),
+            _e(str(suite.get("source_profile", ""))),
+            _e(", ".join(map(str, _as_list(suite.get("benchmark_ids"))))),
+            _e(", ".join(map(str, _as_list(suite.get("required_tasks"))))),
+            _e(", ".join(map(str, _as_list(suite.get("optional_tasks"))))),
+        ]
+        for suite in context.experiments["benchmark_suites"]
+    ]
+    return _filter_box() + _table(["Suite", "Name", "Source Profile", "Benchmarks", "Required Tasks", "Optional Tasks"], rows)
+
+
+def _render_jobs(context: _DashboardContext) -> str:
+    rows = [
+        [
+            _code(str(job.get("workspace_id", ""))),
+            _code(str(job.get("id", ""))),
+            _code(str(job.get("manifest_id", ""))),
+            _e(str(job.get("environment_id", ""))),
+            _e(str(job.get("status", ""))),
+            _code(str(job.get("execution_id", ""))),
+            _e(", ".join(map(str, _as_list(job.get("logs"))))),
+        ]
+        for job in context.experiments["jobs"]
+    ]
+    result_rows = [
+        [
+            _code(str(result.get("workspace_id", ""))),
+            _code(str(result.get("job_id", ""))),
+            _e(str(result.get("status", ""))),
+            _e(str(result.get("returncode", ""))),
+            _e(str(result.get("error", ""))),
+            _e(", ".join(map(str, _as_list(result.get("result_paths"))))),
+        ]
+        for result in context.experiments["job_results"]
+    ]
+    return "\n".join(
+        [
+            "<p>Job log paths are shown, but stdout/stderr contents are not embedded.</p>",
+            "<h2>Jobs</h2>",
+            _filter_box(),
+            _table(["Workspace", "Job", "Manifest", "Environment", "Status", "Execution", "Log Paths"], rows),
+            "<h2>Runner Results</h2>",
+            _table(["Workspace", "Job", "Status", "Return Code", "Error", "Result Paths"], result_rows),
+        ]
+    )
+
+
+def _render_sweeps(context: _DashboardContext) -> str:
+    sweep_rows = [
+        [
+            _code(str(record.get("workspace_id", ""))),
+            _code(str(record.get("id", ""))),
+            _e(str(record.get("name", ""))),
+            _code(str(record.get("base_manifest_id", ""))),
+            _e(str(record.get("status", ""))),
+            str(len(_as_list(record.get("generated_manifest_ids")))),
+        ]
+        for record in context.experiments["sweeps"]
+    ]
+    ablation_rows = [
+        [
+            _code(str(record.get("workspace_id", ""))),
+            _code(str(record.get("id", ""))),
+            _e(str(record.get("name", ""))),
+            _e(", ".join(map(str, _as_list(record.get("factors"))))),
+            _e(", ".join(map(str, _as_list(record.get("controls"))))),
+            str(len(_as_list(record.get("generated_manifest_ids")))),
+        ]
+        for record in context.experiments["ablation_plans"]
+    ]
+    seed_rows = [
+        [
+            _code(str(record.get("workspace_id", ""))),
+            _code(str(record.get("id", ""))),
+            _e(", ".join(map(str, _as_list(record.get("seeds"))))),
+            str(len(_as_list(record.get("generated_manifest_ids")))),
+            _e(str(record.get("rationale", ""))),
+        ]
+        for record in context.experiments["seed_plans"]
+    ]
+    return "\n".join(
+        [
+            "<h2>Parameter Sweeps</h2>",
+            _filter_box(),
+            _table(["Workspace", "Sweep", "Name", "Base Manifest", "Status", "Generated Manifests"], sweep_rows),
+            "<h2>Ablations</h2>",
+            _table(["Workspace", "Ablation", "Name", "Factors", "Controls", "Generated Manifests"], ablation_rows),
+            "<h2>Seed Plans</h2>",
+            _table(["Workspace", "Seed Plan", "Seeds", "Generated Manifests", "Rationale"], seed_rows),
+        ]
+    )
+
+
+def _render_result_tables(context: _DashboardContext) -> str:
+    rows: list[list[str]] = []
+    failed: list[str] = []
+    for table in context.experiments["result_tables"]:
+        for row in _as_list(table.get("rows")):
+            if not isinstance(row, dict):
+                continue
+            rows.append(
+                [
+                    _code(str(table.get("workspace_id", ""))),
+                    _code(str(row.get("execution_id", ""))),
+                    _code(str(row.get("benchmark_id", ""))),
+                    _code(str(row.get("baseline_id", ""))),
+                    _code(str(row.get("metric_id", ""))),
+                    _e(str(row.get("run_type", ""))),
+                    _e(str(row.get("value", ""))),
+                    _code(str(row.get("artifact_id", ""))),
+                ]
+            )
+        failed.extend(map(str, _as_list(table.get("failed_execution_ids"))))
+    aggregate_rows = []
+    for payload in context.experiments["aggregate_results"]:
+        aggregates = payload if isinstance(payload, list) else _as_list(payload.get("items"))
+        for aggregate in aggregates:
+            if not isinstance(aggregate, dict):
+                continue
+            aggregate_rows.append(
+                [
+                    _code(str(aggregate.get("workspace_id", ""))),
+                    _code(str(aggregate.get("id", ""))),
+                    _code(str(aggregate.get("metric_id", ""))),
+                    _code(str(aggregate.get("baseline_id", ""))),
+                    _e(str(aggregate.get("n", ""))),
+                    _e(str(aggregate.get("mean", ""))),
+                    _e(str(aggregate.get("std", ""))),
+                ]
+            )
+    return "\n".join(
+        [
+            "<h2>Result Table Rows</h2>",
+            _filter_box(),
+            _table(["Workspace", "Execution", "Benchmark", "Baseline", "Metric", "Run Type", "Value", "Artifact"], rows),
+            "<h2>Aggregate Results</h2>",
+            _table(["Workspace", "Aggregate", "Metric", "Baseline", "N", "Mean", "Std"], aggregate_rows),
+            "<h2>Failed Runs Excluded From Aggregates</h2>",
+            _list(failed, css_class="warning"),
+        ]
+    )
+
+
+def _render_error_analysis(context: _DashboardContext) -> str:
+    rows = [
+        [
+            _code(str(report.get("workspace_id", ""))),
+            _code(str(report.get("execution_id", ""))),
+            _e("; ".join(map(str, _as_list(report.get("top_error_types"))))),
+            _e(str(len(_as_list(report.get("slices"))))),
+            _e("; ".join(map(str, _as_list(report.get("limitations"))))),
+        ]
+        for report in context.experiments["error_analysis"]
+    ]
+    return _filter_box() + _table(["Workspace", "Execution", "Top Error Types", "Slices", "Limitations"], rows)
+
+
+def _render_leaderboard(context: _DashboardContext) -> str:
+    comparison_rows = [
+        [
+            _code(str(comparison.get("workspace_id", ""))),
+            _code(str(comparison.get("benchmark_id", ""))),
+            str(len(_as_list(comparison.get("baseline_results")))),
+            str(len(_as_list(comparison.get("proposed_method_results")))),
+            _e("; ".join(map(str, _as_list(comparison.get("missing_baselines"))))),
+            _e("; ".join(map(str, _as_list(comparison.get("limitations"))))),
+        ]
+        for comparison in context.experiments["benchmark_comparisons"]
+    ]
+    leaderboard_rows = []
+    for report in context.experiments["leaderboards"]:
+        for row in _as_list(report.get("rows")):
+            if not isinstance(row, dict):
+                continue
+            leaderboard_rows.append(
+                [
+                    _code(str(report.get("workspace_id", ""))),
+                    _code(str(report.get("benchmark_id", ""))),
+                    _e(str(row.get("method", ""))),
+                    _code(str(row.get("metric_id", ""))),
+                    _e(str(row.get("value", ""))),
+                    _e(str(row.get("run_type", ""))),
+                    _e(str(row.get("source", ""))),
+                ]
+            )
+    return "\n".join(
+        [
+            "<h2>Benchmark Comparisons</h2>",
+            _filter_box(),
+            _table(["Workspace", "Benchmark", "Baseline Rows", "Proposed Rows", "Missing Baselines", "Limitations"], comparison_rows),
+            "<h2>Leaderboard Rows</h2>",
+            _table(["Workspace", "Benchmark", "Method", "Metric", "Value", "Run Type", "Source"], leaderboard_rows),
+        ]
+    )
+
+
+def _render_replication_packages(context: _DashboardContext) -> str:
+    package_rows = [
+        [
+            _code(str(package.get("workspace_id", ""))),
+            _code(str(package.get("id", ""))),
+            _e(str(package.get("safe_to_share", ""))),
+            _e(", ".join(map(str, _as_list(package.get("execution_ids"))))),
+            _e("; ".join(map(str, _as_list(package.get("missing_requirements"))))),
+            _e(str(package.get("manifest_path", ""))),
+        ]
+        for package in context.experiments["replication_packages"]
+    ]
+    verification_rows = [
+        [
+            _code(str(verification.get("workspace_id", ""))),
+            _code(str(verification.get("package_id", ""))),
+            _e(str(verification.get("status", ""))),
+            _e("; ".join(f"{key}: {value}" for key, value in verification.get("checks", {}).items())),
+            _e("; ".join(map(str, _as_list(verification.get("blockers"))))),
+        ]
+        for verification in context.experiments["replication_verifications"]
+    ]
+    return "\n".join(
+        [
+            "<h2>Replication Packages</h2>",
+            _filter_box(),
+            _table(["Workspace", "Package", "Safe To Share", "Executions", "Missing Requirements", "Manifest"], package_rows),
+            "<h2>Verification Attempts</h2>",
+            _table(["Workspace", "Package", "Status", "Checks", "Blockers"], verification_rows),
+        ]
+    )
+
+
+def _render_reproduction_matrix(context: _DashboardContext) -> str:
+    matrix_rows = [
+        [
+            _code(str(matrix.get("workspace_id", ""))),
+            _code(str(matrix.get("package_id", ""))),
+            _e(", ".join(map(str, _as_list(matrix.get("environments"))))),
+            _e(str(matrix.get("pass_count", ""))),
+            _e(str(matrix.get("warning_count", ""))),
+            _e(str(matrix.get("fail_count", ""))),
+            _e("; ".join(map(str, _as_list(matrix.get("differences"))))),
+        ]
+        for matrix in context.experiments["reproducibility_matrices"]
+    ]
+    reproduction_rows = [
+        [
+            _code(str(record.get("workspace_id", ""))),
+            _code(str(record.get("id", ""))),
+            _code(str(record.get("package_id", ""))),
+            _e(str(record.get("environment", ""))),
+            _e(str(record.get("status", ""))),
+            _e("; ".join(map(str, _as_list(record.get("errors"))))),
+        ]
+        for record in context.experiments["reproductions"]
+    ]
+    return "\n".join(
+        [
+            "<p>No single environment result should be generalized to all compute settings.</p>",
+            "<h2>Reproducibility Matrix</h2>",
+            _filter_box(),
+            _table(["Workspace", "Package", "Environments", "Pass", "Warning", "Fail", "Differences"], matrix_rows),
+            "<h2>Reproduction Attempts</h2>",
+            _table(["Workspace", "Reproduction", "Package", "Environment", "Status", "Errors"], reproduction_rows),
+        ]
+    )
+
+
+def _render_v7_release_gate(context: _DashboardContext) -> str:
+    if not context.experiments["v7_release_gate"]:
+        return "<p>No v0.7 release-gate report is available. Run <code>gapforge v7-release-gate --write-report</code>.</p>"
+    latest = context.experiments["v7_release_gate"][-1]
+    requirements = latest.get("requirements", {})
+    real_requirements = latest.get("real_benchmark_requirements", {})
+    rows = [[_code(str(key)), _e(str(value))] for key, value in requirements.items()] if isinstance(requirements, dict) else []
+    real_rows = (
+        [[_code(str(key)), _e(str(value))] for key, value in real_requirements.items()] if isinstance(real_requirements, dict) else []
+    )
+    return "\n".join(
+        [
+            f'<div class="{"card" if latest.get("passed") else "card warning"}">'
+            f"<h2>v0.7 Benchmark Release Gate: {_e('PASSED' if latest.get('passed') else 'NOT PASSED')}</h2>"
+            f"<p>Fixture gate passed: {_e(str(latest.get('fixture_gate_passed', False)))}</p>"
+            f"<p>Real benchmark claimed: {_e(str(latest.get('real_benchmark_claimed', False)))}</p></div>",
+            "<h2>Fixture Requirements</h2>",
+            _table(["Requirement", "Passed"], rows),
+            "<h2>Real Benchmark Claim Requirements</h2>",
+            _table(["Requirement", "Passed"], real_rows),
+            "<h2>Blockers</h2>",
+            _list([str(item) for item in _as_list(latest.get("blockers"))], css_class="warning"),
+            "<h2>Warnings</h2>",
+            _list([str(item) for item in _as_list(latest.get("warnings"))], css_class="warning"),
+        ]
+    )
+
+
 def _run_artifact_links(state: ResearchRunState) -> list[tuple[str, str]]:
     names = [
         "run_report.md",
@@ -1289,6 +1654,25 @@ def _empty_experiment_context() -> dict[str, list[dict[str, Any]]]:
         "reproducibility": [],
         "empirical_reviews": [],
         "paper_packages": [],
+        "benchmarks": [],
+        "benchmark_cards": [],
+        "benchmark_suites": [],
+        "benchmark_canaries": [],
+        "jobs": [],
+        "job_results": [],
+        "sweeps": [],
+        "ablation_plans": [],
+        "seed_plans": [],
+        "result_tables": [],
+        "aggregate_results": [],
+        "error_analysis": [],
+        "benchmark_comparisons": [],
+        "leaderboards": [],
+        "replication_packages": [],
+        "replication_verifications": [],
+        "reproductions": [],
+        "reproducibility_matrices": [],
+        "v7_release_gate": [],
     }
 
 
@@ -1308,6 +1692,38 @@ def _load_experiment_context(base_dir: Path) -> dict[str, list[dict[str, Any]]]:
         context["metrics"].extend(_tagged_json_files(workspace_dir / "metrics", "metric-*.record.json", workspace_id))
         context["reproducibility"].extend(_tagged_json_files(workspace_dir / "reports", "reproducibility_check*.json", workspace_id))
         context["empirical_reviews"].extend(_tagged_json_files(workspace_dir / "reports", "empirical_review*.json", workspace_id))
+        context["benchmarks"].extend(_tagged_json_files(workspace_dir / "benchmarks", "benchmark-*.record.json", workspace_id))
+        context["benchmark_cards"].extend(_tagged_json_files(workspace_dir / "benchmarks" / "cards", "*.card.json", workspace_id))
+        context["benchmark_canaries"].extend(
+            _tagged_json_files(workspace_dir / "benchmark_canaries", "benchmark-canary-*.json", workspace_id)
+        )
+        for queue in _tagged_json_files(workspace_dir / "jobs", "queue-*.json", workspace_id):
+            for job in _as_list(queue.get("jobs")):
+                if isinstance(job, dict):
+                    context["jobs"].append({**job, "workspace_id": workspace_id, "queue_id": queue.get("id", "")})
+        context["job_results"].extend(_tagged_json_files(workspace_dir / "jobs", "job-*.result.json", workspace_id))
+        context["sweeps"].extend(_tagged_json_files(workspace_dir / "sweeps", "sweep-*.json", workspace_id))
+        context["ablation_plans"].extend(_tagged_json_files(workspace_dir / "sweeps", "ablation-*.json", workspace_id))
+        context["seed_plans"].extend(_tagged_json_files(workspace_dir / "sweeps", "seed-plan-*.json", workspace_id))
+        context["result_tables"].extend(_tagged_json_files(workspace_dir / "reports", "result_table.json", workspace_id))
+        context["aggregate_results"].extend(_tagged_json_payloads(workspace_dir / "reports", "aggregate_results.json", workspace_id))
+        context["error_analysis"].extend(_tagged_json_files(workspace_dir / "reports", "error_analysis_*.json", workspace_id))
+        context["benchmark_comparisons"].extend(_tagged_json_files(workspace_dir / "reports", "benchmark_comparison_*.json", workspace_id))
+        context["leaderboards"].extend(_tagged_json_files(workspace_dir / "reports", "leaderboard_*.json", workspace_id))
+        context["replication_packages"].extend(
+            _tagged_json_files(workspace_dir / "replication_packages", "*/replication_package.json", workspace_id)
+        )
+        context["replication_verifications"].extend(
+            _tagged_json_files(workspace_dir / "replication_packages", "*/verification/replication_verification.json", workspace_id)
+        )
+        context["reproductions"].extend(_tagged_json_files(workspace_dir / "replication_packages", "*/reproductions/*.json", workspace_id))
+        context["reproducibility_matrices"].extend(
+            _tagged_json_files(
+                workspace_dir / "replication_packages",
+                "*/reproducibility_matrix/reproducibility_matrix.json",
+                workspace_id,
+            )
+        )
         package = _read_json_if_exists(workspace_dir / "paper_package_v2" / "paper_package.json")
         if package:
             package["workspace_id"] = workspace_id
@@ -1323,6 +1739,8 @@ def _load_experiment_context(base_dir: Path) -> dict[str, list[dict[str, Any]]]:
                 if isinstance(item, dict):
                     item = {**item, "workspace_id": workspace_id}
                     context["empirical_claims"].append(item)
+    for release_dir in _candidate_release_gate_dirs(base_dir):
+        context["v7_release_gate"].extend(_tagged_json_files(release_dir, "v0.7_latest.json", ""))
     return context
 
 
@@ -1333,6 +1751,13 @@ def _experiment_workspace_dirs(base_dir: Path) -> list[Path]:
     if not root.exists():
         return []
     return sorted(path for path in root.iterdir() if path.is_dir() and (path / "workspace.json").exists())
+
+
+def _candidate_release_gate_dirs(base_dir: Path) -> list[Path]:
+    candidates = [base_dir / "data" / "release_gate"]
+    for parent in base_dir.parents:
+        candidates.append(parent / "data" / "release_gate")
+    return [path for path in _dedupe_paths(candidates) if path.exists()]
 
 
 def _tagged_json_files(root: Path, pattern: str, workspace_id: str) -> list[dict[str, Any]]:
@@ -1348,6 +1773,26 @@ def _tagged_json_files(root: Path, pattern: str, workspace_id: str) -> list[dict
         if raw:
             raw["workspace_id"] = workspace_id
             records.append(raw)
+    return records
+
+
+def _tagged_json_payloads(root: Path, pattern: str, workspace_id: str) -> list[Any]:
+    if not root.exists():
+        return []
+    records: list[Any] = []
+    for path in sorted(root.glob(pattern)):
+        try:
+            raw = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if isinstance(raw, dict):
+            raw["workspace_id"] = workspace_id
+            records.append(raw)
+        elif isinstance(raw, list):
+            tagged_items = []
+            for item in raw:
+                tagged_items.append({**item, "workspace_id": workspace_id} if isinstance(item, dict) else item)
+            records.append(tagged_items)
     return records
 
 
@@ -1587,6 +2032,18 @@ def _dedupe(items: list[str]) -> list[str]:
         if item and item not in seen:
             result.append(item)
             seen.add(item)
+    return result
+
+
+def _dedupe_paths(items: list[Path]) -> list[Path]:
+    seen: set[Path] = set()
+    result: list[Path] = []
+    for item in items:
+        resolved = item.resolve()
+        if resolved in seen:
+            continue
+        result.append(item)
+        seen.add(resolved)
     return result
 
 

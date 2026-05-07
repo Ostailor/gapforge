@@ -143,6 +143,8 @@ class V06ReleaseGateEnforcer:
         if not self.config.project_root.exists():
             return workspaces
         for path in sorted(self.config.project_root.glob("*/experiment_workspaces/*/workspace.json")):
+            if _is_v07_benchmark_workspace(path.parent):
+                continue
             try:
                 workspaces.append(from_dict(ExperimentWorkspace, json.loads(path.read_text(encoding="utf-8"))))
             except (OSError, json.JSONDecodeError, TypeError, ValueError):
@@ -361,6 +363,16 @@ def _manifest_run_type_from_execution(execution: ExperimentExecutionRecord) -> s
         if value in parts or value in execution.manifest_id:
             return value
     return ""
+
+
+def _is_v07_benchmark_workspace(workspace_root: Path) -> bool:
+    project_slug = workspace_root.parent.parent.name
+    return (
+        project_slug.startswith("benchmark-canary-")
+        or (workspace_root / "benchmark_canaries").exists()
+        or any((workspace_root / "benchmarks").glob("benchmark-*.record.json"))
+        or any(workspace_root.glob("reports/benchmark_comparison_*.json"))
+    )
 
 
 def _package_readiness(package_path: Path) -> str:

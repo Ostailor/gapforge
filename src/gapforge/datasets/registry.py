@@ -101,6 +101,14 @@ class DatasetRegistry:
         (validation_dir / f"{record.id}.validation.md").write_text(render_dataset_validation_markdown(result), encoding="utf-8")
         return result
 
+    def update_local_path(self, dataset_id: str, local_path: str | Path) -> DatasetRecord:
+        record = self.load_dataset(dataset_id)
+        workspace_id = _workspace_id_from_record(record)
+        record.local_path = str(Path(local_path).resolve())
+        self._write_record(workspace_id, record)
+        self._write_registry_markdown(workspace_id)
+        return record
+
     def _write_record(self, workspace_id: str, record: DatasetRecord) -> None:
         path = self._data_dir(workspace_id) / f"{record.id}.record.json"
         path.write_text(json.dumps(to_plain(record), indent=2) + "\n", encoding="utf-8")

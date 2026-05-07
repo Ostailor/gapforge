@@ -138,6 +138,33 @@ v0.6 non-goals:
 
 v0.6 requires at least one executed fixture experiment and one failed or negative experiment path for release acceptance. That bar validates experiment execution mechanics and reporting honesty; it does not prove publishable empirical findings.
 
+## v0.7 Benchmark and Replication Limits
+
+v0.7 is the real benchmark execution and replication release. It moves beyond fixture smoke execution into explicit benchmark records, real or benchmark-like non-fixture benchmark runs, compute environment records, sweeps, ablations, comparison tables, error/slice analysis, low-FPR power checks, and replication packages.
+
+v0.7 must still preserve these limits:
+
+- fixture smoke does not prove benchmark performance
+- local benchmark runs are not automatically full benchmark runs
+- full benchmark runs may require external data, approval, compute, and human review
+- GPU, cluster, and large external dataset workflows must not be required in normal CI
+- large downloads must not occur without explicit user approval and cache/license metadata
+- failed jobs, missing baselines, underpowered analyses, and negative results must remain visible
+- v5 literature, novelty, and closest-prior-work gates must not be weakened
+- v6 empirical claim gates must continue to require run records and result artifacts
+
+v0.7 non-goals:
+
+- claiming benchmark success from fixture runs
+- silently downloading large datasets
+- hiding failed jobs or missing baselines
+- treating underpowered low-FPR numbers as strong empirical support
+- claiming independent replication when no independent rerun package or review exists
+
+The v0.7 release gate passed for an opt-in real/local public small benchmark canary using the UCI Iris dataset with explicit consent, cached download, artifact-backed metrics and predictions, comparison, error analysis, and replication package verification. This is not a broad benchmark suite, a GPU/cluster validation, or independent replication.
+
+If no real or benchmark-like non-fixture run exists in a future release candidate, the v0.7 release gate should mark real benchmark validation incomplete.
+
 ## Operational Guidance
 
 Use strict mode and coverage assessment before interpreting outputs:
@@ -156,6 +183,8 @@ When in doubt, treat GapForge output as a to-do list for search, reading, and re
 The May 6, 2026 local verification pass succeeded for the v0.4 actual-run release gate. Three real Codex/GPT-5.4 workflow canaries were executed through the direct runner, validated/imported, attested, human-reviewed, and accepted by `gapforge v4-release-gate`. This resolves the v0.4 release-gate blocker for the workflow path, but it does not prove exhaustive literature-review quality or broad field coverage.
 
 The follow-up v0.5 verification pass completed live-literature quality acceptance locally. `gapforge v5-release-gate --write-report --json` passed after two campaigns were accepted for research quality: one experiment-ready live-literature smoke campaign and one conservative refusal campaign. This validates the v0.5 gate and workflow behavior, but it still does not prove exhaustive literature review, broad expert acceptance, or complete field coverage.
+
+The v0.6 release pass completed fixture experiment execution acceptance locally. `gapforge v6-release-gate --write-report --json` passed with successful fixture execution, failed-path preservation, parsed result artifacts, artifact-backed empirical claims, reproducibility checks, empirical review, and paper package v2 export. This validates empirical workflow mechanics, not real benchmark performance or independent replication.
 
 ## v0.4.1 Planned Limitation Fix
 

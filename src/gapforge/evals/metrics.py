@@ -89,6 +89,15 @@ class EvalScores:
     fake_result_rejection: float | None = None
     paper_package_honesty: float | None = None
     v6_release_gate_correctness: float | None = None
+    benchmark_execution_integrity: float | None = None
+    benchmark_failure_path_preservation: float | None = None
+    result_aggregation_quality: float | None = None
+    error_analysis_quality: float | None = None
+    benchmark_comparison_honesty: float | None = None
+    replication_package_quality: float | None = None
+    reproduction_verification_quality: float | None = None
+    low_fpr_underpowered_warning_score: float | None = None
+    v7_release_gate_correctness: float | None = None
 
     def overall(self) -> float:
         positive = [
@@ -179,6 +188,23 @@ class EvalScores:
             self.fake_result_rejection,
             self.paper_package_honesty,
             self.v6_release_gate_correctness,
+        ]
+        present = [value for value in values if value is not None]
+        if not present:
+            return None
+        return round(sum(present) / len(present), 3)
+
+    def v7_overall(self) -> float | None:
+        values = [
+            self.benchmark_execution_integrity,
+            self.benchmark_failure_path_preservation,
+            self.result_aggregation_quality,
+            self.error_analysis_quality,
+            self.benchmark_comparison_honesty,
+            self.replication_package_quality,
+            self.reproduction_verification_quality,
+            self.low_fpr_underpowered_warning_score,
+            self.v7_release_gate_correctness,
         ]
         present = [value for value in values if value is not None]
         if not present:
@@ -1006,6 +1032,117 @@ def v6_release_gate_correctness(fixture: dict[str, object]) -> float:
     return round((0.7 * int(computed_pass is False)) + (0.3 * int(bool(expected_blockers))), 3)
 
 
+def benchmark_execution_integrity(fixture: dict[str, object]) -> float:
+    benchmark = _dict(fixture.get("benchmark"))
+    execution = _dict(fixture.get("execution"))
+    checks = [
+        bool(benchmark.get("registered")),
+        bool(benchmark.get("fixture_labeled", True)),
+        bool(_list(benchmark.get("dataset_ids"))),
+        bool(_list(benchmark.get("baseline_ids"))),
+        bool(_list(benchmark.get("metric_ids"))),
+        execution.get("status") in {"complete", "failed"},
+    ]
+    if execution.get("status") == "complete":
+        checks.append(bool(_list(execution.get("result_artifacts"))))
+    return round(sum(1 for item in checks if item) / len(checks), 3)
+
+
+def benchmark_failure_path_preservation(fixture: dict[str, object]) -> float:
+    execution = _dict(fixture.get("execution"))
+    if execution.get("status") != "failed":
+        return 1.0 if bool(fixture.get("failure_path_not_applicable", False)) else 0.8
+    checks = [
+        bool(execution.get("failure_reason")),
+        bool(_list(execution.get("logs"))),
+        bool(execution.get("preserved")),
+        not bool(execution.get("hidden")),
+    ]
+    return round(sum(1 for item in checks if item) / len(checks), 3)
+
+
+def result_aggregation_quality(fixture: dict[str, object]) -> float:
+    aggregation = _dict(fixture.get("aggregation"))
+    checks = [
+        bool(aggregation.get("built")),
+        bool(_list(aggregation.get("rows"))),
+        bool(aggregation.get("smoke_separated", True)),
+        bool(aggregation.get("failed_runs_excluded", True)),
+    ]
+    return round(sum(1 for item in checks if item) / len(checks), 3)
+
+
+def error_analysis_quality(fixture: dict[str, object]) -> float:
+    analysis = _dict(fixture.get("error_analysis"))
+    checks = [
+        bool(analysis.get("ran")),
+        bool(analysis.get("from_artifacts", True)),
+        bool(analysis.get("failed_or_missing_predictions_visible", True)),
+        not bool(analysis.get("fabricated_examples")),
+    ]
+    return round(sum(1 for item in checks if item) / len(checks), 3)
+
+
+def benchmark_comparison_honesty(fixture: dict[str, object]) -> float:
+    comparison = _dict(fixture.get("comparison"))
+    checks = [
+        bool(comparison.get("generated")),
+        bool(comparison.get("missing_baselines_visible", True)),
+        bool(comparison.get("smoke_main_separated", True)),
+        not bool(comparison.get("claims_sota_without_evidence")),
+    ]
+    return round(sum(1 for item in checks if item) / len(checks), 3)
+
+
+def replication_package_quality(fixture: dict[str, object]) -> float:
+    replication = _dict(fixture.get("replication"))
+    checks = [
+        bool(replication.get("exported")),
+        bool(replication.get("manifest")),
+        bool(replication.get("commands")),
+        bool(replication.get("seeds")),
+        bool(replication.get("hashes")),
+        not bool(replication.get("restricted_data_included")),
+    ]
+    return round(sum(1 for item in checks if item) / len(checks), 3)
+
+
+def reproduction_verification_quality(fixture: dict[str, object]) -> float:
+    reproduction = _dict(fixture.get("reproduction"))
+    checks = [
+        bool(reproduction.get("verification_attempted")),
+        reproduction.get("status") in {"pass", "warning", "fail"},
+        bool(reproduction.get("differences_reported", True)),
+        not bool(reproduction.get("overgeneralized_single_environment")),
+    ]
+    return round(sum(1 for item in checks if item) / len(checks), 3)
+
+
+def low_fpr_underpowered_warning_score(fixture: dict[str, object]) -> float:
+    low_fpr = _dict(fixture.get("low_fpr"))
+    if not low_fpr:
+        return 1.0
+    if not bool(low_fpr.get("underpowered")):
+        return 1.0 if not bool(low_fpr.get("claim_overstated")) else 0.0
+    checks = [
+        bool(low_fpr.get("warning")),
+        bool(low_fpr.get("sample_size_reported")),
+        bool(low_fpr.get("upper_bound_reported")),
+        not bool(low_fpr.get("claim_overstated")),
+    ]
+    return round(sum(1 for item in checks if item) / len(checks), 3)
+
+
+def v7_release_gate_correctness(fixture: dict[str, object]) -> float:
+    expected = _dict(fixture.get("v7_release_gate"))
+    expected_pass = bool(expected.get("expected_fixture_pass"))
+    computed_pass = _computed_v7_fixture_gate(fixture)
+    if expected_pass:
+        return 1.0 if computed_pass else 0.0
+    expected_blockers = _list(expected.get("expected_blockers"))
+    return round((0.7 * int(computed_pass is False)) + (0.3 * int(bool(expected_blockers))), 3)
+
+
 def _tokens(text: str) -> list[str]:
     return re.findall(r"[a-z0-9-]+", text.lower())
 
@@ -1083,5 +1220,21 @@ def _computed_v6_release_gate(fixture: dict[str, object]) -> bool:
             bool(package.get("exported")),
             fake_ok,
             failed_visible,
+        ]
+    )
+
+
+def _computed_v7_fixture_gate(fixture: dict[str, object]) -> bool:
+    return all(
+        [
+            benchmark_execution_integrity(fixture) >= 0.85,
+            benchmark_failure_path_preservation(fixture) >= 0.8,
+            result_aggregation_quality(fixture) >= 0.75,
+            error_analysis_quality(fixture) >= 0.75,
+            benchmark_comparison_honesty(fixture) >= 0.85,
+            replication_package_quality(fixture) >= 0.8,
+            reproduction_verification_quality(fixture) >= 0.75,
+            low_fpr_underpowered_warning_score(fixture) >= 0.85,
+            not bool(_dict(fixture.get("fake_result")).get("accepted")),
         ]
     )

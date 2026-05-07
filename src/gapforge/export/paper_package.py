@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 
 from gapforge.baselines import BaselineRegistry, render_baseline_registry_markdown
+from gapforge.benchmarks import BenchmarkRegistry, render_benchmark_registry_markdown
 from gapforge.claim_ledger import ClaimLedger
 from gapforge.config import GapForgeConfig
 from gapforge.datasets import DatasetRegistry, render_dataset_registry_markdown
@@ -23,6 +24,7 @@ from gapforge.export.manuscript import (
 )
 from gapforge.export.rebuttal import render_rebuttal_plan, render_reviewer_objections
 from gapforge.metrics import MetricRegistry, render_metric_registry_markdown
+from gapforge.metrics.low_fpr_power import LowFPRPowerChecker, render_low_fpr_check_markdown
 from gapforge.models import (
     EmpiricalClaim,
     EvidenceSpan,
@@ -46,6 +48,7 @@ from gapforge.models import (
 )
 from gapforge.project_memory import ProjectMemoryManager
 from gapforge.related_work.renderer import render_related_work_matrix_markdown
+from gapforge.replication import ReproducibilityMatrixBuilder, render_reproducibility_matrix_markdown
 from gapforge.results import ResultParser, ResultStatisticsAnalyzer, render_analysis_report_markdown, render_result_summary_markdown
 from gapforge.reviewers.empirical import EmpiricalReviewBuilder, render_empirical_review_markdown
 from gapforge.reviewers.panel import render_review_panel_markdown
@@ -77,11 +80,13 @@ V2_EXPECTED_FILES = [
     "experiment_protocol.md",
     "datasets.md",
     "baselines.md",
+    "benchmarks.md",
     "metrics.md",
     "execution_records.md",
     "result_summary.md",
     "statistical_analysis.md",
     "reproducibility_check.md",
+    "reproducibility_matrix.md",
     "limitations.md",
     "negative_results.md",
     "reviewer_panel.md",
@@ -342,12 +347,15 @@ class _V2ExportContext:
         executions: list[ExperimentExecutionRecord],
         result_summaries: list[ResultSummary],
         statistical_analysis_markdown: str,
+        low_fpr_power_markdown: str,
         reproducibility_markdown: str,
+        reproducibility_matrix_markdown: str,
         empirical_review_markdown: str,
         empirical_rebuttal_markdown: str,
         empirical_claims: list[EmpiricalClaim],
         datasets_markdown: str,
         baselines_markdown: str,
+        benchmarks_markdown: str,
         metrics_markdown: str,
         reproducibility_status: str,
         empirical_fatal_flaws: list[str],
@@ -360,12 +368,15 @@ class _V2ExportContext:
         self.executions = executions
         self.result_summaries = result_summaries
         self.statistical_analysis_markdown = statistical_analysis_markdown
+        self.low_fpr_power_markdown = low_fpr_power_markdown
         self.reproducibility_markdown = reproducibility_markdown
+        self.reproducibility_matrix_markdown = reproducibility_matrix_markdown
         self.empirical_review_markdown = empirical_review_markdown
         self.empirical_rebuttal_markdown = empirical_rebuttal_markdown
         self.empirical_claims = empirical_claims
         self.datasets_markdown = datasets_markdown
         self.baselines_markdown = baselines_markdown
+        self.benchmarks_markdown = benchmarks_markdown
         self.metrics_markdown = metrics_markdown
         self.reproducibility_status = reproducibility_status
         self.empirical_fatal_flaws = empirical_fatal_flaws
@@ -388,10 +399,12 @@ class _V2ExportContext:
         summaries = [_load_result_summary_safely(parser, execution.id) for execution in executions]
         result_summaries = [summary for summary in summaries if summary is not None]
         analysis = ResultStatisticsAnalyzer(config).analyze_workspace(workspace.id)
+        low_fpr_check = LowFPRPowerChecker(config).check_workspace(workspace.id)
         reproducibility = ReproducibilityChecker(config).check_workspace(workspace.id)
         empirical_panel = EmpiricalReviewBuilder(config).review_workspace(workspace.id)
         datasets = DatasetRegistry(config).list_datasets(workspace.id)
         baselines = BaselineRegistry(config).list_baselines(workspace.id)
+        benchmarks = BenchmarkRegistry(config).list_benchmarks(workspace.id)
         metrics = MetricRegistry(config).list_metrics(workspace.id)
         return cls(
             program=program,
@@ -401,13 +414,18 @@ class _V2ExportContext:
             manifests=manifests,
             executions=executions,
             result_summaries=result_summaries,
-            statistical_analysis_markdown=render_analysis_report_markdown(analysis),
+            statistical_analysis_markdown=(
+                render_analysis_report_markdown(analysis).rstrip() + "\n\n" + render_low_fpr_check_markdown(low_fpr_check).rstrip() + "\n"
+            ),
+            low_fpr_power_markdown=render_low_fpr_check_markdown(low_fpr_check),
             reproducibility_markdown=render_reproducibility_check_markdown(reproducibility),
+            reproducibility_matrix_markdown=_render_reproducibility_matrix_safely(config, workspace.id),
             empirical_review_markdown=render_empirical_review_markdown(empirical_panel),
             empirical_rebuttal_markdown=_render_v2_rebuttal_plan(empirical_panel.rebuttal_plan),
             empirical_claims=[claim for summary in result_summaries for claim in summary.empirical_claims],
             datasets_markdown=render_dataset_registry_markdown(datasets),
             baselines_markdown=render_baseline_registry_markdown(baselines),
+            benchmarks_markdown=render_benchmark_registry_markdown(benchmarks),
             metrics_markdown=render_metric_registry_markdown(metrics),
             reproducibility_status=reproducibility.status,
             empirical_fatal_flaws=empirical_panel.fatal_flaws,
@@ -432,14 +450,17 @@ class _V2ExportContext:
             executions=[],
             result_summaries=[],
             statistical_analysis_markdown="# Statistical Analysis\n\nNo experiment workspace is linked; no analysis exists.\n",
+            low_fpr_power_markdown="# Low-FPR Power Check\n\nNo experiment workspace is linked; no low-FPR power check exists.\n",
             reproducibility_markdown=(
                 "# Reproducibility Check\n\nNo experiment workspace is linked; reproducibility has not been audited.\n"
             ),
+            reproducibility_matrix_markdown="# Reproducibility Matrix\n\nNo experiment workspace is linked; no matrix exists.\n",
             empirical_review_markdown="# Empirical Review Panel\n\nNo experiment workspace is linked; empirical review has not run.\n",
             empirical_rebuttal_markdown="# Rebuttal Plan\n\nNo empirical reviewer panel is available.\n",
             empirical_claims=[],
             datasets_markdown="# Dataset Registry\n\nNo experiment workspace is linked.\n",
             baselines_markdown="# Baseline Registry\n\nNo experiment workspace is linked.\n",
+            benchmarks_markdown="# Benchmark Registry\n\nNo experiment workspace is linked.\n",
             metrics_markdown="# Metric Registry\n\nNo experiment workspace is linked.\n",
             reproducibility_status="fail",
             empirical_fatal_flaws=["No experiment workspace is linked to the direction."],
@@ -464,11 +485,13 @@ def _write_v2_package_files(
         else "# Experiment Protocol\n\nNo experiment protocol is linked.\n",
         "datasets.md": context.datasets_markdown,
         "baselines.md": context.baselines_markdown,
+        "benchmarks.md": context.benchmarks_markdown,
         "metrics.md": context.metrics_markdown,
         "execution_records.md": _render_v2_execution_records(context),
         "result_summary.md": _render_v2_result_summary(context),
         "statistical_analysis.md": context.statistical_analysis_markdown,
         "reproducibility_check.md": context.reproducibility_markdown,
+        "reproducibility_matrix.md": context.reproducibility_matrix_markdown,
         "limitations.md": render_limitations(context.direction, project_context.gap, project_context.dossier, missing),
         "negative_results.md": _render_v2_negative_results(context),
         "reviewer_panel.md": context.empirical_review_markdown,
@@ -621,6 +644,14 @@ def _render_v2_rebuttal_plan(plans) -> str:
             ]
         )
     return "\n".join(lines).rstrip() + "\n"
+
+
+def _render_reproducibility_matrix_safely(config: GapForgeConfig, workspace_id: str) -> str:
+    try:
+        matrix = ReproducibilityMatrixBuilder(config).for_workspace(workspace_id)
+    except FileNotFoundError:
+        return "# Reproducibility Matrix\n\nNo replication package or reproduction records are available for this workspace.\n"
+    return render_reproducibility_matrix_markdown(matrix)
 
 
 def _render_v2_claim_ledger(context: _V2ExportContext) -> str:

@@ -2,7 +2,7 @@
 
 GapForge is a Codex-powered Research Ideation OS. It turns a broad topic into auditable research state: papers, notes, claims, evidence, gaps, novelty dossiers, experiment plans, reviewer objections, and reports.
 
-GapForge v0.4 adds campaign-level Codex/GPT-5.4 actual-run workflows on top of the v0.3 semantic, project-memory-aware, optionally LLM-assisted research system. v0.5 extends that path toward live-literature campaign quality: source health, planned search rounds, canonicalization, closest-prior-work recall, human research-quality review, and a v5 release gate. v0.6 adds experiment execution and empirical validation: moving from experiment-ready directions to executed, logged, statistically analyzed, reproducible experiment packages. GapForge is still not an exhaustive autonomous literature reviewer, and it must not fabricate experimental results. Deterministic and offline-safe paths remain the default.
+GapForge v0.4 adds campaign-level Codex/GPT-5.4 actual-run workflows on top of the v0.3 semantic, project-memory-aware, optionally LLM-assisted research system. v0.5 extends that path toward live-literature campaign quality: source health, planned search rounds, canonicalization, closest-prior-work recall, human research-quality review, and a v5 release gate. v0.6 adds experiment execution and empirical validation: moving from experiment-ready directions to executed, logged, statistically analyzed, reproducible experiment packages. v0.7 adds real benchmark execution and replication plumbing: benchmark records, explicit dataset consent/cache handling, compute/job abstractions, result aggregation, error analysis, comparison reports, low-FPR power checks, and replication packages. GapForge is still not an exhaustive autonomous literature reviewer, and it must not fabricate experimental results. Deterministic and offline-safe paths remain the default.
 
 ## Version Lineage
 
@@ -12,6 +12,7 @@ GapForge v0.4 adds campaign-level Codex/GPT-5.4 actual-run workflows on top of t
 - **v0.4**: actual Codex/GPT-5.4 agentic campaign release path with campaign-level state, task packs, direct/handoff runner support, strict validated import, repair/rollback, campaign dashboards/reports, v4 evals, and release gates. Fake-agent success still does not count as real-run acceptance.
 - **v0.5**: real literature campaign quality layer. v0.5 validates multi-step live-literature campaigns, source coverage quality, closest-prior-work recall, real-paper citation grounding, expert review, experiment protocol quality, and correct rejection behavior when novelty is weak.
 - **v0.6**: experiment execution and empirical validation layer. v0.6 distinguishes protocols, scaffolds, smoke runs, pilot/main runs, failed/negative experiments, statistical analyses, reproducibility checks, and artifact-backed empirical claims.
+- **v0.7**: real benchmark execution and replication layer. v0.7 distinguishes fixture smoke, local benchmark, full benchmark, failed jobs, underpowered runs, benchmark comparison, replication packages, and real/local public benchmark validation.
 
 ## Why Not Just Summarization?
 
@@ -285,6 +286,52 @@ The v0.6 release gate requires at least one executed fixture experiment and one 
 
 Latest v0.6 validation status: fixture experiment execution passed locally on May 6, 2026, and `gapforge v6-release-gate --write-report --json` passed. One real Codex/GPT-5.4 experiment-code task was executed and imported as a validated workspace-bounded implementation patch. No real-world main experiment was run, and no real empirical result is claimed.
 
+## v0.7 Real Benchmark Execution and Replication
+
+v0.6 validates experiment execution mechanics. v0.7 validates benchmark execution and replication plumbing: external data policies, compute environments, sweeps, ablations, comparison tables, error/slice analysis, low-FPR power checks, and replication packages.
+
+The v0.7 docs are:
+
+- `docs/V0_7_ROADMAP.md`
+- `docs/V0_7_ACCEPTANCE_CRITERIA.md`
+- `docs/V0_7_REAL_BENCHMARKS.md`
+- `docs/V0_7_COMPUTE_AND_REPLICATION.md`
+- `docs/V0_7_BENCHMARK_RELEASE_GATE.md`
+- `docs/releases/v0.7.0.md`
+- `docs/releases/v0.7.0-benchmark-replication.md`
+
+Core boundary:
+
+- fixture smoke validates wiring only
+- local benchmark may count when it uses real or benchmark-like non-fixture data with complete artifacts
+- full benchmark requires intended data, baselines, metrics, compute records, and analysis
+- replication requires rerunnable package instructions, checksums/version IDs, expected artifacts, and review
+- no GPU, cluster, live source, or external download is required in normal CI
+- no large dataset should be downloaded without explicit user approval
+- no benchmark success should be claimed from fixture runs
+
+v0.7 must preserve v5 literature gates and v6 empirical claim gates. Benchmark output should become a supported claim only when execution records, result artifacts, statistical analysis, and review justify it.
+
+Minimal fixture benchmark smoke:
+
+```bash
+export GAPFORGE_DISABLE_NETWORK=1
+gapforge benchmark-canary-run --profile fixture_benchmark_success
+gapforge benchmark-canary-run --profile fixture_benchmark_failure
+gapforge benchmark-canary-run --profile low_fpr_underpowered_benchmark
+gapforge benchmark-canary-run --profile replication_package_canary
+gapforge v7-release-gate --write-report --json
+```
+
+Opt-in real/local public benchmark validation:
+
+```bash
+gapforge benchmark-canary-run --profile local_public_small_benchmark --real --accept-download
+gapforge v7-release-gate --write-report --json --claim-real
+```
+
+Latest v0.7 validation status: fixture benchmark gate and opt-in real/local public benchmark gate passed locally on May 7, 2026. The real benchmark canary used explicit dataset consent, a cached public UCI Iris download, artifact-backed metrics and predictions, benchmark comparison, error analysis, and replication package verification. This validates the benchmark-and-replication path; it is not a SOTA claim, a large-scale benchmark study, a GPU/cluster validation, or independent replication by another researcher.
+
 ### v0.5 Live Literature Campaign Workflow
 
 Use v0.5 when you want GapForge to assess whether a real literature campaign is research-useful, not merely whether the workflow ran.
@@ -509,6 +556,7 @@ gapforge eval --v3
 gapforge eval --v4
 gapforge eval --v5
 gapforge eval --v6
+gapforge eval --v7
 ```
 
 ## Limitations and Safety Notes
@@ -520,6 +568,7 @@ gapforge eval --v6
 - Fake-agent outputs validate plumbing only and never count as real Codex/GPT-5.4 research.
 - Prompt-pack handoff counts as real only after Codex/GPT-5.4 outputs are validated, attested, and human-reviewed.
 - Empirical claims are artifact-gated: no run record and result artifact means no supported result claim.
+- Benchmark claims are stronger than fixture smoke claims and require benchmark records, real or benchmark-like data, consent where applicable, compute logs, result artifacts, analysis, replication packaging, and review.
 - PDFs, transcripts, and generated dashboards may be unsafe to commit.
 - Human review is required before treating any direction as research-ready.
 
@@ -538,4 +587,5 @@ gapforge export-safe-bundle --project-id <project-id>
 - v0.4: actual Codex/GPT-5.4 agentic campaign execution path, campaign recovery, multi-step canaries, v4 evals, and strict human-reviewed real-run acceptance gates
 - v0.5: real-literature campaign quality with source diagnostics, search strategy, prior-work recall, quality review, v5 evals, and v5 release gate
 - v0.6: experiment execution and empirical validation with run manifests, result artifacts, statistics, reproducibility checks, failed/negative result handling, and result claim ledger
-- Future: richer layout/OCR extraction, external reference-manager integration, larger experiment runners, and collaborative review workflows
+- v0.7: real benchmark execution and replication with benchmark registry, dataset consent/cache, compute modes, jobs, sweeps, error/slice analysis, low-FPR power checks, benchmark comparison, and replication packages
+- Future: richer layout/OCR extraction, external reference-manager integration, larger distributed experiment runners, and collaborative review workflows

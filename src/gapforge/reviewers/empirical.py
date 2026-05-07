@@ -12,6 +12,7 @@ from gapforge.experiments.reproducibility_checker import ReproducibilityChecker
 from gapforge.experiments.runner import ExperimentRunner
 from gapforge.experiments.workspace import ExperimentWorkspaceManager
 from gapforge.metrics import MetricRegistry
+from gapforge.metrics.low_fpr_power import LowFPRCheckResult, LowFPRPowerChecker
 from gapforge.models import (
     BaselineRecord,
     EmpiricalReviewPanel,
@@ -45,6 +46,7 @@ class _EmpiricalContext:
     artifacts: list[ExperimentResultArtifact]
     result_summary: ResultSummary | None
     statistical_analysis: StatisticalAnalysisReport
+    low_fpr_power_check: LowFPRCheckResult
     reproducibility: ReproducibilityCheckResult
     related_work_matrix: RelatedWorkMatrix | None
 
@@ -60,6 +62,7 @@ class EmpiricalReviewBuilder:
         self.metric_registry = MetricRegistry(config)
         self.result_parser = ResultParser(config)
         self.statistics = ResultStatisticsAnalyzer(config)
+        self.low_fpr_power = LowFPRPowerChecker(config)
         self.reproducibility = ReproducibilityChecker(config)
 
     def review_workspace(self, workspace_id: str) -> EmpiricalReviewPanel:
@@ -112,9 +115,11 @@ class EmpiricalReviewBuilder:
         result_summary = _load_result_summary(self.result_parser, execution)
         if execution is not None:
             statistical_analysis = self.statistics.analyze_execution(execution.id)
+            low_fpr_power_check = self.low_fpr_power.check_execution(execution.id)
             reproducibility = self.reproducibility.check_execution(execution.id)
         else:
             statistical_analysis = self.statistics.analyze_workspace(workspace.id)
+            low_fpr_power_check = self.low_fpr_power.check_workspace(workspace.id)
             reproducibility = self.reproducibility.check_workspace(workspace.id)
         program = self.project_manager.load_project(workspace.project_id)
         return _EmpiricalContext(
@@ -126,6 +131,7 @@ class EmpiricalReviewBuilder:
             artifacts=artifacts,
             result_summary=result_summary,
             statistical_analysis=statistical_analysis,
+            low_fpr_power_check=low_fpr_power_check,
             reproducibility=reproducibility,
             related_work_matrix=next(
                 (matrix for matrix in program.related_work_matrices if matrix.direction_id == workspace.direction_id),
@@ -257,6 +263,19 @@ def _statistics_review(context: _EmpiricalContext) -> ReviewerReview:
         if missing_low_fpr_ci:
             weaknesses.append("Low-FPR metrics are missing confidence intervals.")
             fixes.append("Add confidence intervals for low-FPR metrics: " + ", ".join(missing_low_fpr_ci))
+        if context.low_fpr_power_check.status == "fail":
+            underpowered = ", ".join(context.low_fpr_power_check.underpowered_metric_ids) or "low-FPR metric"
+            weaknesses.extend(context.low_fpr_power_check.blockers)
+            fixes.append(f"Collect enough negative examples before claiming low-FPR performance for: {underpowered}.")
+        elif context.low_fpr_power_check.status == "warning":
+            warnings = [
+                warning
+                for warning in context.low_fpr_power_check.warnings
+                if "No low-FPR metric results" not in warning and "No execution summaries" not in warning
+            ]
+            weaknesses.extend(warnings)
+            if warnings:
+                fixes.append("Resolve low-FPR power warnings or soften low-FPR claims.")
         if context.statistical_analysis.multiple_testing_warning:
             weaknesses.append(context.statistical_analysis.multiple_testing_warning)
             fixes.append("Declare a primary metric and soften secondary metric claims.")
@@ -269,7 +288,7 @@ def _statistics_review(context: _EmpiricalContext) -> ReviewerReview:
         weaknesses=weaknesses,
         required_fixes=fixes,
         fatal_flaws=fatal,
-        evidence=[*evidence, context.statistical_analysis.id],
+        evidence=[*evidence, context.statistical_analysis.id, context.low_fpr_power_check.id],
     )
 
 

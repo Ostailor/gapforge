@@ -5,6 +5,7 @@ import sys
 from pathlib import Path
 
 from gapforge.baselines import BaselineRegistry
+from gapforge.benchmarks.canaries import BenchmarkCanaryRunner
 from gapforge.config import GapForgeConfig
 from gapforge.datasets import DatasetRegistry
 from gapforge.experiment_code import ExperimentCodeScaffolderV2
@@ -97,6 +98,36 @@ def test_v06_release_gate_all_requirements_pass_and_report_renders(tmp_path: Pat
     assert "v0.6 Empirical Validation Release Gate" in rendered
     assert json.loads(json_path.read_text(encoding="utf-8"))["passed"] is True
     assert "Failed execution paths" in md_path.read_text(encoding="utf-8")
+
+
+def test_v06_release_gate_ignores_v07_benchmark_canary_workspaces(tmp_path: Path) -> None:
+    config, _workspace_id = _passing_workspace(tmp_path)
+    BenchmarkCanaryRunner(config).run("fixture_benchmark_failure")
+    markerless_workspace = (
+        config.project_root
+        / "benchmark-canary-fixture-benchmark-failure-2"
+        / "experiment_workspaces"
+        / "workspace-direction-fixture-benchmark-failure"
+    )
+    markerless_workspace.mkdir(parents=True)
+    (markerless_workspace / "workspace.json").write_text(
+        json.dumps(
+            {
+                "id": "workspace-direction-fixture-benchmark-failure",
+                "project_id": "benchmark-canary-fixture-benchmark-failure-2",
+                "direction_id": "direction-fixture-benchmark-failure",
+                "root_dir": str(markerless_workspace),
+                "status": "failed",
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    result = V06ReleaseGateEnforcer(config).evaluate()
+
+    assert result.passed is True
+    assert all("fixture-benchmark-failure" not in item.workspace_id for item in result.workspaces)
 
 
 def _passing_workspace(tmp_path: Path) -> tuple[GapForgeConfig, str]:

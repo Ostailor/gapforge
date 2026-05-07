@@ -13,6 +13,8 @@ from pathlib import Path
 
 from gapforge.agents.validation import create_actual_run_attestation as create_run_actual_run_attestation
 from gapforge.baselines.registry import BaselineRegistry
+from gapforge.benchmarks.comparison import BenchmarkComparisonBuilder
+from gapforge.benchmarks.registry import BenchmarkRegistry
 from gapforge.campaigns import CampaignManager, CampaignState
 from gapforge.campaigns.acceptance import create_campaign_actual_run_attestation
 from gapforge.campaigns.controller import CampaignController
@@ -21,30 +23,43 @@ from gapforge.campaigns.import_workflow import find_campaign_task
 from gapforge.campaigns.importer import CampaignOutputImporter
 from gapforge.campaigns.review import CampaignReviewManager
 from gapforge.campaigns.task_packs import create_campaign_task_pack
+from gapforge.compute import detect_compute_environments
 from gapforge.config import GapForgeConfig
+from gapforge.datasets.download import DatasetDownloadManager
 from gapforge.datasets.registry import DatasetRegistry
 from gapforge.directions.maturation import DirectionMaturationManager
 from gapforge.experiment_code import ExperimentCodeTaskGenerator
 from gapforge.experiment_code.scaffold_v2 import ExperimentCodeScaffolderV2
 from gapforge.experiments.reproducibility_checker import ReproducibilityChecker
 from gapforge.experiments.runner import ExperimentRunner, ExperimentRunResult
+from gapforge.experiments.sweeps import ExperimentSweepManager
 from gapforge.experiments.workspace import ExperimentWorkspaceManager
 from gapforge.export.paper_package import PaperPackageExporter
 from gapforge.fulltext.pdf_parser import FullTextParser
 from gapforge.ingest import ManualIngestor
+from gapforge.jobs import JobScheduler
 from gapforge.metrics.registry import MetricRegistry
 from gapforge.models import (
     AgentActualRunAttestation,
     AgentTaskSpec,
+    AggregateResult,
     BaselineRecord,
+    BenchmarkComparison,
+    BenchmarkRecord,
+    BenchmarkSuite,
     CampaignAcceptanceSummary,
     CampaignHumanReview,
     CampaignImportRecord,
     CanonicalPaperIdentity,
+    ComputeEnvironment,
+    DatasetDownloadRecord,
     DatasetRecord,
     EmpiricalReviewPanel,
+    ErrorAnalysisReport,
     ExperimentCodeTask,
+    ExperimentJob,
     ExperimentRunManifest,
+    ExperimentSweep,
     ExperimentWorkspace,
     IndexManifest,
     LiveSourceDiagnostic,
@@ -57,7 +72,10 @@ from gapforge.models import (
     PriorWorkRecallAssessment,
     RealLiteratureCampaignRecord,
     RealLiteratureHumanReview,
+    ReplicationPackage,
+    ReplicationVerificationResult,
     ReproducibilityCheckResult,
+    ReproductionRecord,
     ResearchDirection,
     ResearchProgramState,
     ResearchRunState,
@@ -77,8 +95,10 @@ from gapforge.release_gate import (
     V06ReleaseGateEnforcer,
     V06ReleaseGateResult,
 )
+from gapforge.release_gate.v07 import V07ReleaseGateEnforcer, V07ReleaseGateResult
+from gapforge.replication import ReplicationPackageExporter, ReplicationPackageVerifier, ReproductionRunner
 from gapforge.reporting import write_final_report
-from gapforge.results import ResultParser, ResultStatisticsAnalyzer
+from gapforge.results import ErrorAnalysisBuilder, ResultAggregator, ResultParser, ResultStatisticsAnalyzer
 from gapforge.results.statistics import StatisticalAnalysisReport
 from gapforge.retrieval import build_project_index, build_run_index
 from gapforge.reviewers.empirical import EmpiricalReviewBuilder
@@ -979,6 +999,200 @@ def v6_release_gate(
     return V06ReleaseGateEnforcer(_config(config)).evaluate()
 
 
+def register_benchmark(
+    workspace_id: str,
+    name: str,
+    *,
+    description: str = "",
+    domain: str = "",
+    task_type: str = "custom",
+    source_url: str = "",
+    dataset_ids: list[str] | None = None,
+    baseline_ids: list[str] | None = None,
+    metric_ids: list[str] | None = None,
+    license: str = "",
+    expected_splits: list[str] | None = None,
+    evaluation_protocol: str = "",
+    leaderboard_url: str = "",
+    paper_ids: list[str] | None = None,
+    limitations: list[str] | None = None,
+    safety_notes: list[str] | None = None,
+    config: GapForgeConfig | None = None,
+) -> BenchmarkRecord:
+    """Register a v0.7 benchmark artifact for an experiment workspace."""
+
+    return BenchmarkRegistry(_config(config)).register_benchmark(
+        workspace_id=workspace_id,
+        name=name,
+        description=description,
+        domain=domain,
+        task_type=task_type,
+        source_url=source_url,
+        dataset_ids=dataset_ids,
+        baseline_ids=baseline_ids,
+        metric_ids=metric_ids,
+        license=license,
+        expected_splits=expected_splits,
+        evaluation_protocol=evaluation_protocol,
+        leaderboard_url=leaderboard_url,
+        paper_ids=paper_ids,
+        limitations=limitations,
+        safety_notes=safety_notes,
+    )
+
+
+def create_benchmark_suite(
+    project_id: str,
+    name: str,
+    *,
+    description: str = "",
+    benchmark_ids: list[str] | None = None,
+    required_tasks: list[str] | None = None,
+    optional_tasks: list[str] | None = None,
+    source_profile: str = "generic",
+    config: GapForgeConfig | None = None,
+) -> BenchmarkSuite:
+    """Create a project-level benchmark suite."""
+
+    return BenchmarkRegistry(_config(config)).create_suite(
+        project_id=project_id,
+        name=name,
+        description=description,
+        benchmark_ids=benchmark_ids,
+        required_tasks=required_tasks,
+        optional_tasks=optional_tasks,
+        source_profile=source_profile,
+    )
+
+
+def download_dataset(
+    dataset_id: str,
+    *,
+    accept_license: bool = False,
+    user: str = "",
+    config: GapForgeConfig | None = None,
+) -> DatasetDownloadRecord:
+    """Download or plan/refuse a registered dataset using the v0.7 consent rules."""
+
+    return DatasetDownloadManager(_config(config)).download(dataset_id, accept_license=accept_license, user=user)
+
+
+def compute_status(*, config: GapForgeConfig | None = None) -> list[ComputeEnvironment]:
+    """Detect local/Docker/GPU/Slurm compute availability.
+
+    The ``config`` parameter is accepted for API consistency; detection is
+    environment-local and does not require GapForge state.
+    """
+
+    _config(config)
+    return detect_compute_environments()
+
+
+def submit_job(
+    workspace_id: str,
+    manifest_id: str,
+    *,
+    config: GapForgeConfig | None = None,
+) -> ExperimentJob:
+    """Queue an experiment manifest through the v0.7 job scheduler."""
+
+    return JobScheduler(_config(config)).submit(workspace_id=workspace_id, manifest_id=manifest_id)
+
+
+def create_sweep(
+    workspace_id: str,
+    manifest_id: str,
+    parameters: dict[str, list[str]],
+    *,
+    name: str = "parameter sweep",
+    confirm_large: bool = False,
+    config: GapForgeConfig | None = None,
+) -> ExperimentSweep:
+    """Create parameter-sweep manifests from a base experiment manifest."""
+
+    return ExperimentSweepManager(_config(config)).create_parameter_sweep(
+        workspace_id=workspace_id,
+        base_manifest_id=manifest_id,
+        name=name,
+        parameters=parameters,
+        confirm_large=confirm_large,
+    )
+
+
+def aggregate_results(
+    workspace_id: str,
+    *,
+    include_smoke: bool = False,
+    config: GapForgeConfig | None = None,
+) -> list[AggregateResult]:
+    """Aggregate artifact-backed result rows for a workspace."""
+
+    return ResultAggregator(_config(config)).aggregate(workspace_id, include_smoke=include_smoke)
+
+
+def run_error_analysis(
+    execution_id: str,
+    *,
+    config: GapForgeConfig | None = None,
+) -> ErrorAnalysisReport:
+    """Create an artifact-backed error analysis report for an execution."""
+
+    return ErrorAnalysisBuilder(_config(config)).analyze_execution(execution_id)
+
+
+def benchmark_compare(
+    workspace_id: str,
+    benchmark_id: str,
+    *,
+    config: GapForgeConfig | None = None,
+) -> BenchmarkComparison:
+    """Compare internal result rows for one benchmark."""
+
+    return BenchmarkComparisonBuilder(_config(config)).compare(workspace_id=workspace_id, benchmark_id=benchmark_id)
+
+
+def export_replication_package(
+    workspace_id: str,
+    *,
+    execution_ids: list[str] | None = None,
+    config: GapForgeConfig | None = None,
+) -> ReplicationPackage:
+    """Export a safe-by-default replication package."""
+
+    return ReplicationPackageExporter(_config(config)).export_workspace(workspace_id, execution_ids=execution_ids)
+
+
+def verify_replication_package(
+    package_path: str | Path,
+    *,
+    config: GapForgeConfig | None = None,
+) -> ReplicationVerificationResult:
+    """Verify a replication package manifest, commands, seeds, and hashes."""
+
+    return ReplicationPackageVerifier(_config(config)).verify(package_path)
+
+
+def reproduce_package(
+    package_path: str | Path,
+    *,
+    dry_run: bool = False,
+    config: GapForgeConfig | None = None,
+) -> ReproductionRecord:
+    """Attempt or dry-run reproduction from a replication package."""
+
+    return ReproductionRunner(_config(config)).reproduce(package_path, dry_run=dry_run)
+
+
+def v7_release_gate(
+    *,
+    claim_real_benchmark_validation: bool = False,
+    config: GapForgeConfig | None = None,
+) -> V07ReleaseGateResult:
+    """Evaluate the v0.7 benchmark execution and replication release gate."""
+
+    return V07ReleaseGateEnforcer(_config(config)).evaluate(claim_real_benchmark_validation=claim_real_benchmark_validation)
+
+
 def get_state(run_id: str, *, config: GapForgeConfig | None = None) -> ResearchRunState:
     """Load a persisted run state."""
 
@@ -1080,21 +1294,28 @@ __all__ = [
     "RealLiteratureReviewResult",
     "ReportResult",
     "add_pdf",
+    "aggregate_results",
+    "benchmark_compare",
     "attest_agent_run",
     "build_index",
     "campaign_acceptance",
     "campaign_next",
     "canonicalize_papers",
+    "compute_status",
     "create_campaign",
     "create_campaign_task",
+    "create_benchmark_suite",
     "create_direction",
     "create_experiment_manifest",
     "create_experiment_workspace",
     "create_project",
     "create_run",
+    "create_sweep",
+    "download_dataset",
     "empirical_review",
     "export_paper_package",
     "export_paper_package_v2",
+    "export_replication_package",
     "export_report",
     "generate_code_tasks",
     "get_project",
@@ -1110,18 +1331,24 @@ __all__ = [
     "real_literature_review",
     "real_literature_status",
     "register_baseline",
+    "register_benchmark",
     "register_dataset",
     "register_metric",
     "reproducibility_check",
+    "reproduce_package",
     "review_campaign",
+    "run_error_analysis",
     "run_real_literature_campaign",
     "run_campaign",
     "run_experiment",
     "search_papers",
     "scaffold_experiment_code",
+    "submit_job",
     "source_health",
     "v4_release_gate",
     "v5_release_gate",
     "v6_release_gate",
+    "v7_release_gate",
     "validate_campaign_output",
+    "verify_replication_package",
 ]

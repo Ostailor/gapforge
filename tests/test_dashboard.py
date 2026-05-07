@@ -9,6 +9,7 @@ from pathlib import Path
 
 import gapforge.models as gf_models
 from gapforge.baselines import BaselineRegistry
+from gapforge.benchmarks import BenchmarkRegistry
 from gapforge.campaigns import CampaignManager
 from gapforge.config import GapForgeConfig
 from gapforge.dashboard import StaticDashboardBuilder
@@ -18,6 +19,8 @@ from gapforge.export.paper_package import PaperPackageExporter
 from gapforge.metrics import MetricRegistry
 from gapforge.project_memory import ProjectMemoryManager
 from gapforge.real_literature.review import RealLiteratureReviewManager
+from gapforge.release_gate.v07 import V07ReleaseGateEnforcer
+from gapforge.replication import ReplicationPackageExporter, ReplicationPackageVerifier, ReproducibilityMatrixBuilder
 from gapforge.results import ResultParser
 from gapforge.reporting import write_final_report
 from gapforge.reviewers import EmpiricalReviewBuilder
@@ -60,6 +63,16 @@ def test_static_run_dashboard_files_generated_and_escaped(tmp_path: Path) -> Non
         "results.html",
         "reproducibility.html",
         "empirical_reviews.html",
+        "benchmarks.html",
+        "benchmark_suites.html",
+        "jobs.html",
+        "sweeps.html",
+        "result_tables.html",
+        "error_analysis.html",
+        "leaderboard.html",
+        "replication_packages.html",
+        "reproduction_matrix.html",
+        "v7_release_gate.html",
     }
     assert {path.name for path in result.pages} == expected
     for filename in expected:
@@ -282,6 +295,73 @@ def test_dashboard_cli_generates_workspace_dashboard(tmp_path: Path) -> None:
     assert "index.html" in result.stdout
     workspace = ExperimentWorkspaceManager(config).load_workspace(workspace_id)
     assert (Path(workspace.root_dir) / "dashboard" / "experiment_runs.html").exists()
+
+
+def test_dashboard_renders_v7_benchmark_and_replication_pages(tmp_path: Path) -> None:
+    config = GapForgeConfig.from_cwd(tmp_path)
+    project_id, workspace_id, _failed_execution_id = _experiment_dashboard_project(config)
+    benchmark_id = _v7_dashboard_artifacts(config, workspace_id)
+
+    result = StaticDashboardBuilder(config).build_project(project_id)
+
+    expected_pages = {
+        "benchmarks.html",
+        "benchmark_suites.html",
+        "jobs.html",
+        "sweeps.html",
+        "result_tables.html",
+        "error_analysis.html",
+        "leaderboard.html",
+        "replication_packages.html",
+        "reproduction_matrix.html",
+        "v7_release_gate.html",
+    }
+    assert expected_pages.issubset({path.name for path in result.pages})
+    benchmarks = (result.root / "benchmarks.html").read_text(encoding="utf-8")
+    replication = (result.root / "replication_packages.html").read_text(encoding="utf-8")
+    v7_gate = (result.root / "v7_release_gate.html").read_text(encoding="utf-8")
+    combined = "\n".join(path.read_text(encoding="utf-8") for path in result.pages)
+
+    assert benchmark_id in benchmarks
+    assert "fixture_benchmark_failure" in benchmarks
+    assert "underpowered low-FPR fixture" in benchmarks
+    assert "&lt;script&gt;benchmark&lt;/script&gt;" in benchmarks
+    assert "replication-package-" in replication
+    assert "Verification Attempts" in replication
+    assert "result_hashes" in replication
+    assert "Fixture gate passed" in v7_gate
+    assert "sk-test-dashboard-secret" not in combined
+    assert "<script>benchmark</script>" not in combined
+
+
+def test_dashboard_cli_accepts_v7_include_flags(tmp_path: Path) -> None:
+    config = GapForgeConfig.from_cwd(tmp_path)
+    _project_id, workspace_id, _failed_execution_id = _experiment_dashboard_project(config)
+    _v7_dashboard_artifacts(config, workspace_id)
+    env = {**os.environ, "PYTHONPATH": str(Path(__file__).resolve().parents[1] / "src")}
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "gapforge.cli",
+            "dashboard",
+            "--workspace-id",
+            workspace_id,
+            "--include-benchmarks",
+            "--include-replication",
+        ],
+        cwd=tmp_path,
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    workspace = ExperimentWorkspaceManager(config).load_workspace(workspace_id)
+    assert (Path(workspace.root_dir) / "dashboard" / "benchmarks.html").exists()
+    assert (Path(workspace.root_dir) / "dashboard" / "replication_packages.html").exists()
 
 
 def _dashboard_run(config: GapForgeConfig):
@@ -625,6 +705,182 @@ def _experiment_dashboard_project(config: GapForgeConfig) -> tuple[str, str, str
     EmpiricalReviewBuilder(config).review_execution(success_execution.id)
     PaperPackageExporter(config).export_workspace_v2(workspace.id)
     return program.project.id, workspace.id, failed_execution.id
+
+
+def _v7_dashboard_artifacts(config: GapForgeConfig, workspace_id: str) -> str:
+    workspace = ExperimentWorkspaceManager(config).load_workspace(workspace_id)
+    datasets = DatasetRegistry(config).list_datasets(workspace_id)
+    baselines = BaselineRegistry(config).list_baselines(workspace_id)
+    metrics = MetricRegistry(config).list_metrics(workspace_id)
+    benchmark = BenchmarkRegistry(config).register_benchmark(
+        workspace_id=workspace_id,
+        name="<script>benchmark</script>",
+        description="Dashboard benchmark fixture.",
+        domain="fixture",
+        task_type="detection",
+        dataset_ids=[datasets[0].id],
+        baseline_ids=[baselines[0].id],
+        metric_ids=[metrics[0].id],
+        license="CC0",
+        expected_splits=["test"],
+        evaluation_protocol="Report smoke false-positive rate.",
+    )
+    root = Path(workspace.root_dir)
+    canary_dir = root / "benchmark_canaries"
+    canary_dir.mkdir(parents=True, exist_ok=True)
+    (canary_dir / "benchmark-canary-fixture_benchmark_failure.json").write_text(
+        json_dumps(
+            {
+                "id": "benchmark-canary-fixture_benchmark_failure",
+                "profile_id": "fixture_benchmark_failure",
+                "status": "failed",
+                "workspace_id": workspace_id,
+                "benchmark_id": benchmark.id,
+                "execution_status": "failed",
+                "issues": ["failed benchmark path preserved"],
+            }
+        ),
+        encoding="utf-8",
+    )
+    (canary_dir / "benchmark-canary-low_fpr_underpowered_benchmark.json").write_text(
+        json_dumps(
+            {
+                "id": "benchmark-canary-low_fpr_underpowered_benchmark",
+                "profile_id": "low_fpr_underpowered_benchmark",
+                "status": "warning",
+                "workspace_id": workspace_id,
+                "benchmark_id": benchmark.id,
+                "execution_status": "complete",
+                "warnings": ["underpowered low-FPR fixture"],
+            }
+        ),
+        encoding="utf-8",
+    )
+    reports = root / "reports"
+    reports.mkdir(parents=True, exist_ok=True)
+    (reports / "result_table.json").write_text(
+        json_dumps(
+            {
+                "id": "result-table-dashboard",
+                "workspace_id": workspace_id,
+                "rows": [
+                    {
+                        "execution_id": "execution-dashboard",
+                        "benchmark_id": benchmark.id,
+                        "baseline_id": baselines[0].id,
+                        "metric_id": metrics[0].id,
+                        "run_type": "smoke",
+                        "value": 0.01,
+                        "artifact_id": "artifact-dashboard",
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    (reports / "aggregate_results.json").write_text(
+        json_dumps(
+            [
+                {
+                    "id": "aggregate-dashboard",
+                    "workspace_id": workspace_id,
+                    "metric_id": metrics[0].id,
+                    "baseline_id": baselines[0].id,
+                    "n": 1,
+                    "mean": 0.01,
+                    "std": 0.0,
+                }
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (reports / "error_analysis_dashboard.json").write_text(
+        json_dumps(
+            {
+                "id": "error-analysis-dashboard",
+                "workspace_id": workspace_id,
+                "execution_id": "execution-dashboard",
+                "top_error_types": ["false_positive: 1"],
+                "limitations": ["fixture-only error analysis"],
+            }
+        ),
+        encoding="utf-8",
+    )
+    (reports / f"benchmark_comparison_{benchmark.id}.json").write_text(
+        json_dumps(
+            {
+                "id": "benchmark-comparison-dashboard",
+                "workspace_id": workspace_id,
+                "benchmark_id": benchmark.id,
+                "baseline_results": [{"run_type": "smoke", "value": 0.01}],
+                "proposed_method_results": [],
+                "missing_baselines": [],
+                "limitations": ["fixture comparison only"],
+            }
+        ),
+        encoding="utf-8",
+    )
+    (reports / f"leaderboard_{benchmark.id}.json").write_text(
+        json_dumps(
+            {
+                "id": "leaderboard-dashboard",
+                "workspace_id": workspace_id,
+                "benchmark_id": benchmark.id,
+                "rows": [{"method": baselines[0].id, "metric_id": metrics[0].id, "value": 0.01, "run_type": "smoke", "source": "internal"}],
+                "limitations": ["external leaderboard not verified"],
+            }
+        ),
+        encoding="utf-8",
+    )
+    queue_dir = root / "jobs"
+    queue_dir.mkdir(parents=True, exist_ok=True)
+    (queue_dir / f"queue-{workspace_id}.json").write_text(
+        json_dumps(
+            {
+                "id": f"queue-{workspace_id}",
+                "project_id": workspace.project_id,
+                "status": "failed",
+                "jobs": [
+                    {
+                        "id": "job-dashboard",
+                        "workspace_id": workspace_id,
+                        "manifest_id": "manifest-dashboard",
+                        "environment_id": "local",
+                        "status": "failed",
+                        "execution_id": "execution-dashboard",
+                        "logs": [str(root / "logs" / "execution-dashboard.stdout.txt")],
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    sweeps = root / "sweeps"
+    sweeps.mkdir(parents=True, exist_ok=True)
+    (sweeps / "sweep-sweep-dashboard.json").write_text(
+        json_dumps(
+            {
+                "id": "sweep-dashboard",
+                "workspace_id": workspace_id,
+                "name": "dashboard sweep",
+                "base_manifest_id": "manifest-dashboard",
+                "parameters": {"metric.threshold": ["0.1", "0.2"]},
+                "generated_manifest_ids": ["manifest-a", "manifest-b"],
+                "status": "planned",
+            }
+        ),
+        encoding="utf-8",
+    )
+    package = ReplicationPackageExporter(config).export_workspace(workspace_id)
+    package_dir = Path(package.manifest_path).parent
+    ReplicationPackageVerifier(config).verify(package_dir)
+    ReproducibilityMatrixBuilder(config).for_workspace(workspace_id)
+    release_dir = config.data_dir / "release_gate"
+    release_dir.mkdir(parents=True, exist_ok=True)
+    (release_dir / "deterministic_ci.json").write_text('{"passed": true}\n', encoding="utf-8")
+    (release_dir / "v0.6_latest.json").write_text('{"passed": true, "status": "pass"}\n', encoding="utf-8")
+    V07ReleaseGateEnforcer(config).write_outputs(V07ReleaseGateEnforcer(config).evaluate())
+    return benchmark.id
 
 
 def json_dumps(payload) -> str:

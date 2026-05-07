@@ -7,6 +7,7 @@ import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from gapforge.compute.resources import resource_request_is_default, validate_resource_request
 from gapforge.config import GapForgeConfig
 from gapforge.experiments.workspace import ExperimentWorkspaceManager
 from gapforge.models import ExperimentExecutionRecord, ExperimentRunManifest, ExperimentWorkspace
@@ -41,6 +42,7 @@ class ExperimentRunner:
         workspace = self.workspace_manager.load_workspace(workspace_id)
         manifest = self._select_manifest(workspace, manifest_id=manifest_id, run_type=run_type)
         command = manifest.command
+        resource_check = _validate_manifest_resources(manifest)
         if dry_run:
             record = self.workspace_manager.record_execution(
                 workspace_id=workspace.id,
@@ -52,6 +54,18 @@ class ExperimentRunner:
                 failure_reason="Dry run; command was not executed.",
             )
             return ExperimentRunResult(execution=record, dry_run=True)
+        if resource_check.status != "available":
+            failure_reason = _resource_failure_reason(resource_check)
+            record = self.workspace_manager.record_execution(
+                workspace_id=workspace.id,
+                manifest_id=manifest.id,
+                status="failed",
+                command=redact_text(command),
+                stdout_text="",
+                stderr_text=redact_text(failure_reason + "\n"),
+                failure_reason=failure_reason,
+            )
+            return ExperimentRunResult(execution=record)
 
         stdout, stderr, returncode, timed_out = _run_command(command, workspace=workspace, timeout_seconds=timeout_seconds)
         detected_outputs, missing_outputs = _detect_expected_outputs(workspace, manifest)
@@ -217,6 +231,25 @@ def _failure_reason(returncode: int | None, timed_out: bool, missing_outputs: li
     if returncode == 0 and not detected_outputs:
         reasons.append("Command succeeded but produced no expected result artifacts.")
     return " ".join(reasons)
+
+
+def _validate_manifest_resources(manifest: ExperimentRunManifest):
+    request = manifest.resource_request
+    if resource_request_is_default(request):
+        return validate_resource_request(request)
+    result = validate_resource_request(request)
+    if request.environment_type in {"docker", "slurm"}:
+        result.blockers.append(
+            "The current experiment runner executes local shell commands only; "
+            f"`{request.environment_type}` requires dry-run or a future runner."
+        )
+        result.status = "unavailable"
+    return result
+
+
+def _resource_failure_reason(resource_check) -> str:
+    blockers = "; ".join(resource_check.blockers) if resource_check.blockers else "no compatible compute environment was available"
+    return f"Resource request is incompatible with available compute. {blockers}"
 
 
 def _require_manifest(manifests: list[ExperimentRunManifest], manifest_id: str) -> ExperimentRunManifest:

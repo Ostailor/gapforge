@@ -397,6 +397,108 @@ def test_api_export_paper_package_v2(tmp_path: Path) -> None:
     assert gate.blockers
 
 
+def test_api_register_benchmark_suite_and_download_dataset(tmp_path: Path) -> None:
+    config, workspace_id, dataset_id, baseline_id, metric_id = _api_experiment_workspace(tmp_path)
+    workspace = ExperimentWorkspaceManager(config).load_workspace(workspace_id)
+
+    benchmark = api.register_benchmark(
+        workspace_id,
+        "API fixture benchmark",
+        description="Fixture benchmark through the API.",
+        domain="fixture",
+        task_type="detection",
+        dataset_ids=[dataset_id],
+        baseline_ids=[baseline_id],
+        metric_ids=[metric_id],
+        expected_splits=["test"],
+        evaluation_protocol="Report false positive rate.",
+        config=config,
+    )
+    suite = api.create_benchmark_suite(
+        workspace.project_id,
+        "API benchmark suite",
+        benchmark_ids=[benchmark.id],
+        required_tasks=["detection"],
+        config=config,
+    )
+    download = api.download_dataset(dataset_id, config=config)
+    comparison = api.benchmark_compare(workspace_id, benchmark.id, config=config)
+
+    assert benchmark.dataset_ids == [dataset_id]
+    assert suite.benchmark_ids == [benchmark.id]
+    assert download.status in {"manual_required", "skipped", "downloaded", "failed"}
+    assert comparison.benchmark_id == benchmark.id
+
+
+def test_api_submit_fixture_job_and_create_sweep(tmp_path: Path) -> None:
+    config, workspace_id, dataset_id, baseline_id, metric_id = _api_experiment_workspace(tmp_path)
+    manifest = api.create_experiment_manifest(
+        workspace_id,
+        run_type="smoke",
+        run_name="api-job",
+        dataset_ids=[dataset_id],
+        baseline_ids=[baseline_id],
+        metric_ids=[metric_id],
+        command=f"{sys.executable} -c 'print(1)'",
+        expected_outputs=[],
+        random_seed=123,
+        config=config,
+    )
+
+    job = api.submit_job(workspace_id, manifest.id, config=config)
+    sweep = api.create_sweep(
+        workspace_id,
+        manifest.id,
+        {"metric.threshold": ["0.1", "0.2"]},
+        name="api sweep",
+        config=config,
+    )
+    environments = api.compute_status(config=config)
+
+    assert job.status == "queued"
+    assert job.manifest_id == manifest.id
+    assert len(sweep.generated_manifest_ids) == 2
+    assert any(environment.environment_type == "local" for environment in environments)
+
+
+def test_api_aggregate_results_and_error_analysis(tmp_path: Path) -> None:
+    config, workspace_id, dataset_id, baseline_id, metric_id = _api_experiment_workspace(tmp_path)
+    run_result = _run_api_fixture_experiment(config, workspace_id, dataset_id, baseline_id, metric_id)
+    api.parse_results(run_result.execution.id, config=config)
+
+    aggregates = api.aggregate_results(workspace_id, include_smoke=True, config=config)
+    error_report = api.run_error_analysis(run_result.execution.id, config=config)
+
+    assert aggregates
+    assert aggregates[0].workspace_id == workspace_id
+    assert error_report.execution_id == run_result.execution.id
+    assert "No predictions artifact" in " ".join(error_report.limitations)
+
+
+def test_api_export_verify_replication_and_reproduce(tmp_path: Path) -> None:
+    config, workspace_id, dataset_id, baseline_id, metric_id = _api_experiment_workspace(tmp_path)
+    run_result = _run_api_fixture_experiment(config, workspace_id, dataset_id, baseline_id, metric_id)
+    api.parse_results(run_result.execution.id, config=config)
+
+    package = api.export_replication_package(workspace_id, config=config)
+    package_dir = Path(package.manifest_path).parent
+    verification = api.verify_replication_package(package_dir, config=config)
+    reproduction = api.reproduce_package(package_dir, dry_run=True, config=config)
+
+    assert package.workspace_id == workspace_id
+    assert verification.package_id == package.id
+    assert verification.status in {"pass", "warning", "fail"}
+    assert reproduction.package_id == package.id
+    assert reproduction.status == "planned"
+
+
+def test_api_v7_release_gate(tmp_path: Path) -> None:
+    result = api.v7_release_gate(config=GapForgeConfig.from_cwd(tmp_path))
+
+    assert result.passed is False
+    assert result.blockers
+
+
 def _api_experiment_project(config: GapForgeConfig):
     project_manager = ProjectMemoryManager(config)
     program = project_manager.create_project("API Experiment Project")

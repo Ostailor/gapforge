@@ -226,3 +226,39 @@ For v0.6 task packs, prompts should include:
 - explicit instruction that empirical claims require run records and result artifacts
 
 Any Codex-generated experiment code must be validated by execution records before supporting empirical claims. If no run record and result artifact exist, the output remains scaffold or analysis preparation only.
+
+## v0.7 Benchmark and Replication Role
+
+For v0.7, Codex/GPT-5.4 may help implement benchmark adapters, sweep scripts, analysis utilities, and replication instructions. Codex remains an implementation and review assistant, not a benchmark authority.
+
+Codex may help:
+
+- implement benchmark dataset loaders after dataset cards and download/cache rules are recorded
+- implement benchmark baselines from the baseline registry
+- implement sweep and ablation scripts under the experiment workspace
+- write comparison table and error-analysis code for existing result artifacts
+- draft replication instructions from recorded manifests and environment data
+- diagnose failed jobs from logs
+- propose power/sample-size checks for low-FPR benchmark plans
+
+Codex must not:
+
+- auto-download large datasets without explicit user approval metadata
+- invent benchmark results, comparison tables, error examples, p-values, confidence intervals, or replication outcomes
+- hide failed jobs, missing baselines, or underpowered slices
+- present fixture smoke as benchmark performance
+- claim independent replication without a recorded rerun or review
+- bypass v5 literature gates or v6 empirical artifact gates
+
+For v0.7 task packs, prompts should include:
+
+- benchmark card and dataset card
+- download/cache policy and approved local paths
+- compute mode and resource constraints
+- run manifests and expected outputs
+- baseline and metric requirements
+- low-FPR power/sample-size requirements when applicable
+- artifact safety rules for large data, predictions, checkpoints, and logs
+- replication package requirements
+
+Any Codex-generated benchmark code or analysis must be validated by execution records, result artifacts, and benchmark review before supporting benchmark claims.

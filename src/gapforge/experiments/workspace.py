@@ -18,13 +18,28 @@ from gapforge.models import (
     ExperimentRunManifest,
     ExperimentWorkspace,
     Provenance,
+    ResourceRequest,
     from_dict,
     to_plain,
 )
 from gapforge.project_memory import ProjectMemoryManager
 from gapforge.state import slugify, utc_now_iso
 
-WORKSPACE_SUBDIRS = ["manifests", "runs", "results", "logs", "reports", "code", "data", "configs", "baselines", "metrics"]
+WORKSPACE_SUBDIRS = [
+    "manifests",
+    "runs",
+    "results",
+    "logs",
+    "reports",
+    "code",
+    "data",
+    "configs",
+    "baselines",
+    "metrics",
+    "benchmarks",
+    "jobs",
+    "sweeps",
+]
 T = TypeVar("T")
 
 
@@ -91,9 +106,11 @@ class ExperimentWorkspaceManager:
         dataset_ids: list[str] | None = None,
         baseline_ids: list[str] | None = None,
         metric_ids: list[str] | None = None,
+        config_path: str = "",
         command: str = "",
         expected_outputs: list[str] | None = None,
         random_seed: int = 0,
+        resource_request: ResourceRequest | None = None,
     ) -> ExperimentRunManifest:
         workspace = self.load_workspace(workspace_id)
         protocol = self._protocol_for_workspace(workspace)
@@ -110,9 +127,11 @@ class ExperimentWorkspaceManager:
             dataset_ids=dataset_ids,
             baseline_ids=baseline_ids,
             metric_ids=metric_ids,
+            config_path=config_path,
             command=command,
             expected_outputs=expected_outputs,
             random_seed=random_seed,
+            resource_request=resource_request,
             sequence=sequence,
         )
         manifest_path = Path(workspace.root_dir) / "manifests" / f"{manifest.id}.json"

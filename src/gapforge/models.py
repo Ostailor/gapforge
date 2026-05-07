@@ -843,6 +843,93 @@ class MetricRecord:
 
 
 @dataclass(slots=True)
+class BenchmarkRecord:
+    id: str
+    name: str
+    description: str = ""
+    domain: str = ""
+    task_type: str = "custom"
+    source_url: str = ""
+    dataset_ids: list[str] = field(default_factory=list)
+    baseline_ids: list[str] = field(default_factory=list)
+    metric_ids: list[str] = field(default_factory=list)
+    license: str = ""
+    expected_splits: list[str] = field(default_factory=list)
+    evaluation_protocol: str = ""
+    leaderboard_url: str = ""
+    paper_ids: list[str] = field(default_factory=list)
+    limitations: list[str] = field(default_factory=list)
+    safety_notes: list[str] = field(default_factory=list)
+    provenance: Provenance = field(default_factory=lambda: Provenance(created_by_skill="benchmark-registry"))
+
+
+@dataclass(slots=True)
+class BenchmarkTask:
+    id: str
+    benchmark_id: str
+    name: str
+    description: str = ""
+    input_schema: dict[str, object] = field(default_factory=dict)
+    output_schema: dict[str, object] = field(default_factory=dict)
+    splits: list[str] = field(default_factory=list)
+    metrics: list[str] = field(default_factory=list)
+    required_baselines: list[str] = field(default_factory=list)
+    minimum_sample_size_notes: str = ""
+    provenance: Provenance = field(default_factory=lambda: Provenance(created_by_skill="benchmark-task"))
+
+
+@dataclass(slots=True)
+class BenchmarkSuite:
+    id: str
+    name: str
+    description: str = ""
+    benchmark_ids: list[str] = field(default_factory=list)
+    required_tasks: list[str] = field(default_factory=list)
+    optional_tasks: list[str] = field(default_factory=list)
+    source_profile: str = "generic"
+    provenance: Provenance = field(default_factory=lambda: Provenance(created_by_skill="benchmark-suite"))
+
+
+@dataclass(slots=True)
+class BenchmarkCard:
+    benchmark_id: str
+    motivation: str = ""
+    intended_use: str = ""
+    dataset_summary: str = ""
+    evaluation_protocol: str = ""
+    known_failure_modes: list[str] = field(default_factory=list)
+    leakage_risks: list[str] = field(default_factory=list)
+    fairness_or_bias_risks: list[str] = field(default_factory=list)
+    citation: str = ""
+    provenance: Provenance = field(default_factory=lambda: Provenance(created_by_skill="benchmark-card"))
+
+
+@dataclass(slots=True)
+class BenchmarkComparison:
+    id: str
+    benchmark_id: str
+    workspace_id: str
+    baseline_results: list[dict[str, object]] = field(default_factory=list)
+    proposed_method_results: list[dict[str, object]] = field(default_factory=list)
+    comparison_metrics: list[str] = field(default_factory=list)
+    statistical_notes: list[str] = field(default_factory=list)
+    missing_baselines: list[str] = field(default_factory=list)
+    limitations: list[str] = field(default_factory=list)
+    provenance: Provenance = field(default_factory=lambda: Provenance(created_by_skill="benchmark-comparison"))
+
+
+@dataclass(slots=True)
+class LeaderboardReport:
+    id: str
+    benchmark_id: str
+    rows: list[dict[str, object]] = field(default_factory=list)
+    source: str = "internal"
+    generated_at: str = ""
+    limitations: list[str] = field(default_factory=list)
+    provenance: Provenance = field(default_factory=lambda: Provenance(created_by_skill="leaderboard-report"))
+
+
+@dataclass(slots=True)
 class StatisticalTestPlan:
     id: str
     experiment_protocol_id: str
@@ -933,6 +1020,117 @@ class ExperimentWorkspace:
 
 
 @dataclass(slots=True)
+class ComputeEnvironment:
+    id: str
+    name: str
+    environment_type: str = "local"
+    available: bool = False
+    python_version: str = ""
+    cuda_available: bool = False
+    gpu_count: int = 0
+    cpu_count: int = 0
+    memory_gb: float = 0.0
+    docker_available: bool = False
+    slurm_available: bool = False
+    notes: list[str] = field(default_factory=list)
+    provenance: Provenance = field(default_factory=lambda: Provenance(created_by_skill="compute-environment"))
+
+
+@dataclass(slots=True)
+class ResourceRequest:
+    cpu_count: int = 1
+    memory_gb: float = 0.0
+    gpu_count: int = 0
+    wall_time_minutes: int = 0
+    disk_gb: float = 0.0
+    environment_type: str = "local"
+    provenance: Provenance = field(default_factory=lambda: Provenance(created_by_skill="resource-request"))
+
+
+@dataclass(slots=True)
+class ComputeCheckResult:
+    environment_id: str
+    status: str = "unavailable"
+    checks: dict[str, str] = field(default_factory=dict)
+    warnings: list[str] = field(default_factory=list)
+    blockers: list[str] = field(default_factory=list)
+    provenance: Provenance = field(default_factory=lambda: Provenance(created_by_skill="compute-check"))
+
+
+@dataclass(slots=True)
+class ExperimentJob:
+    id: str
+    workspace_id: str
+    manifest_id: str
+    command: str
+    environment_id: str
+    resource_request: ResourceRequest
+    status: str = "queued"
+    submitted_at: str = ""
+    started_at: str = ""
+    completed_at: str = ""
+    execution_id: str = ""
+    logs: list[str] = field(default_factory=list)
+    queue_id: str = ""
+    provenance: Provenance = field(default_factory=lambda: Provenance(created_by_skill="job-scheduler"))
+
+
+@dataclass(slots=True)
+class JobQueue:
+    id: str
+    project_id: str
+    jobs: list[ExperimentJob] = field(default_factory=list)
+    status: str = "idle"
+    provenance: Provenance = field(default_factory=lambda: Provenance(created_by_skill="job-queue"))
+
+
+@dataclass(slots=True)
+class JobRunnerResult:
+    job_id: str
+    status: str = "failed"
+    returncode: int | None = None
+    stdout_path: str = ""
+    stderr_path: str = ""
+    result_paths: list[str] = field(default_factory=list)
+    error: str = ""
+    provenance: Provenance = field(default_factory=lambda: Provenance(created_by_skill="job-runner"))
+
+
+@dataclass(slots=True)
+class ExperimentSweep:
+    id: str
+    workspace_id: str
+    name: str
+    base_manifest_id: str
+    parameters: dict[str, list[str]] = field(default_factory=dict)
+    generated_manifest_ids: list[str] = field(default_factory=list)
+    status: str = "planned"
+    provenance: Provenance = field(default_factory=lambda: Provenance(created_by_skill="experiment-sweep"))
+
+
+@dataclass(slots=True)
+class AblationPlan:
+    id: str
+    workspace_id: str
+    name: str
+    factors: list[str] = field(default_factory=list)
+    controls: list[str] = field(default_factory=list)
+    expected_comparisons: list[str] = field(default_factory=list)
+    generated_manifest_ids: list[str] = field(default_factory=list)
+    provenance: Provenance = field(default_factory=lambda: Provenance(created_by_skill="ablation-plan"))
+
+
+@dataclass(slots=True)
+class SeedPlan:
+    id: str
+    workspace_id: str
+    seeds: list[int] = field(default_factory=list)
+    rationale: str = ""
+    generated_manifest_ids: list[str] = field(default_factory=list)
+    provenance: Provenance = field(default_factory=lambda: Provenance(created_by_skill="seed-plan"))
+
+
+@dataclass(slots=True)
 class ExperimentRunManifest:
     id: str
     workspace_id: str
@@ -947,6 +1145,7 @@ class ExperimentRunManifest:
     expected_outputs: list[str] = field(default_factory=list)
     random_seed: int = 0
     environment: dict[str, str] = field(default_factory=dict)
+    resource_request: ResourceRequest = field(default_factory=ResourceRequest)
     created_at: str = ""
     provenance: Provenance = field(default_factory=lambda: Provenance(created_by_skill="experiment-manifest"))
 
@@ -979,6 +1178,69 @@ class ExperimentResultArtifact:
     summary: str = ""
     safe_to_commit: bool = False
     provenance: Provenance = field(default_factory=lambda: Provenance(created_by_skill="experiment-artifact"))
+
+
+@dataclass(slots=True)
+class ReplicationPackage:
+    id: str
+    workspace_id: str
+    execution_ids: list[str] = field(default_factory=list)
+    files: list[str] = field(default_factory=list)
+    manifest_path: str = ""
+    safe_to_share: bool = False
+    missing_requirements: list[str] = field(default_factory=list)
+    provenance: Provenance = field(default_factory=lambda: Provenance(created_by_skill="replication-package"))
+
+
+@dataclass(slots=True)
+class ReplicationManifest:
+    package_id: str
+    code_version: str = ""
+    dataset_records: list[DatasetRecord] = field(default_factory=list)
+    dataset_download_instructions: list[str] = field(default_factory=list)
+    environment: dict[str, str] = field(default_factory=dict)
+    commands: list[str] = field(default_factory=list)
+    expected_outputs: list[str] = field(default_factory=list)
+    result_hashes: dict[str, str] = field(default_factory=dict)
+    random_seeds: list[int] = field(default_factory=list)
+    limitations: list[str] = field(default_factory=list)
+    provenance: Provenance = field(default_factory=lambda: Provenance(created_by_skill="replication-manifest"))
+
+
+@dataclass(slots=True)
+class ReplicationVerificationResult:
+    package_id: str
+    status: str = "warning"
+    checks: dict[str, str] = field(default_factory=dict)
+    blockers: list[str] = field(default_factory=list)
+    provenance: Provenance = field(default_factory=lambda: Provenance(created_by_skill="replication-verifier"))
+
+
+@dataclass(slots=True)
+class ReproductionRecord:
+    id: str
+    package_id: str
+    status: str = "planned"
+    environment: str = "local"
+    started_at: str = ""
+    completed_at: str = ""
+    commands_run: list[str] = field(default_factory=list)
+    result_comparison: dict[str, str] = field(default_factory=dict)
+    errors: list[str] = field(default_factory=list)
+    provenance: Provenance = field(default_factory=lambda: Provenance(created_by_skill="reproduction-runner"))
+
+
+@dataclass(slots=True)
+class ReproducibilityMatrix:
+    workspace_id: str
+    package_id: str
+    environments: list[str] = field(default_factory=list)
+    reproduction_records: list[ReproductionRecord] = field(default_factory=list)
+    pass_count: int = 0
+    warning_count: int = 0
+    fail_count: int = 0
+    differences: list[str] = field(default_factory=list)
+    provenance: Provenance = field(default_factory=lambda: Provenance(created_by_skill="reproducibility-matrix"))
 
 
 @dataclass(slots=True)
@@ -1016,6 +1278,73 @@ class ResultSummary:
     failures: list[str] = field(default_factory=list)
     limitations: list[str] = field(default_factory=list)
     provenance: Provenance = field(default_factory=lambda: Provenance(created_by_skill="result-parser"))
+
+
+@dataclass(slots=True)
+class ResultRecord:
+    id: str
+    workspace_id: str
+    execution_id: str
+    benchmark_id: str = ""
+    dataset_id: str = ""
+    baseline_id: str = ""
+    metric_id: str = ""
+    split: str = ""
+    seed: int = 0
+    value: float = 0.0
+    confidence_interval: list[float] = field(default_factory=list)
+    run_type: str = ""
+    artifact_id: str = ""
+    provenance: Provenance = field(default_factory=lambda: Provenance(created_by_skill="result-database"))
+
+
+@dataclass(slots=True)
+class ResultTable:
+    id: str
+    workspace_id: str
+    rows: list[ResultRecord] = field(default_factory=list)
+    grouped_by: list[str] = field(default_factory=list)
+    generated_at: str = ""
+    provenance: Provenance = field(default_factory=lambda: Provenance(created_by_skill="result-database"))
+
+
+@dataclass(slots=True)
+class AggregateResult:
+    id: str
+    workspace_id: str
+    metric_id: str
+    baseline_id: str
+    mean: float = 0.0
+    std: float = 0.0
+    confidence_interval: list[float] = field(default_factory=list)
+    n: int = 0
+    seeds: list[int] = field(default_factory=list)
+    provenance: Provenance = field(default_factory=lambda: Provenance(created_by_skill="result-aggregation"))
+
+
+@dataclass(slots=True)
+class ErrorSlice:
+    id: str
+    workspace_id: str
+    execution_id: str
+    slice_name: str
+    filter_description: str = ""
+    sample_count: int = 0
+    metric_results: list[MetricResult] = field(default_factory=list)
+    examples: list[dict[str, object]] = field(default_factory=list)
+    provenance: Provenance = field(default_factory=lambda: Provenance(created_by_skill="slice-analysis"))
+
+
+@dataclass(slots=True)
+class ErrorAnalysisReport:
+    id: str
+    workspace_id: str
+    execution_id: str
+    top_error_types: list[str] = field(default_factory=list)
+    slices: list[ErrorSlice] = field(default_factory=list)
+    qualitative_examples: list[dict[str, object]] = field(default_factory=list)
+    limitations: list[str] = field(default_factory=list)
+    provenance: Provenance = field(default_factory=lambda: Provenance(created_by_skill="error-analysis"))
 
 
 @dataclass(slots=True)
@@ -1077,6 +1406,46 @@ class DatasetValidationResult:
     split_integrity: str = ""
     leakage_warnings: list[str] = field(default_factory=list)
     provenance: Provenance = field(default_factory=lambda: Provenance(created_by_skill="dataset-validation"))
+
+
+@dataclass(slots=True)
+class DatasetDownloadPlan:
+    id: str
+    dataset_id: str
+    urls: list[str] = field(default_factory=list)
+    estimated_size_bytes: int = 0
+    license: str = ""
+    requires_auth: bool = False
+    requires_manual_download: bool = False
+    destination: str = ""
+    safety_warnings: list[str] = field(default_factory=list)
+    consent_required: bool = False
+    provenance: Provenance = field(default_factory=lambda: Provenance(created_by_skill="dataset-download-plan"))
+
+
+@dataclass(slots=True)
+class DatasetDownloadRecord:
+    id: str
+    dataset_id: str
+    status: str = "planned"
+    local_path: str = ""
+    bytes_downloaded: int = 0
+    sha256: str = ""
+    started_at: str = ""
+    completed_at: str = ""
+    error: str = ""
+    provenance: Provenance = field(default_factory=lambda: Provenance(created_by_skill="dataset-download"))
+
+
+@dataclass(slots=True)
+class DatasetConsentRecord:
+    id: str
+    dataset_id: str
+    user: str = ""
+    consent_text: str = ""
+    accepted_terms: list[str] = field(default_factory=list)
+    accepted_at: str = ""
+    provenance: Provenance = field(default_factory=lambda: Provenance(created_by_skill="dataset-consent"))
 
 
 @dataclass(slots=True)
@@ -1557,6 +1926,7 @@ class ResearchProgramState:
     experiment_code_tasks: list[ExperimentCodeTask] = field(default_factory=list)
     experiment_repo_scaffolds: list[ExperimentRepoScaffold] = field(default_factory=list)
     experiment_workspaces: list[ExperimentWorkspace] = field(default_factory=list)
+    benchmark_suites: list[BenchmarkSuite] = field(default_factory=list)
     review_panels: list[ReviewPanel] = field(default_factory=list)
     review_queue: ReviewQueue | None = None
     claim_graph: ClaimGraph | None = None

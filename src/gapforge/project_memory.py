@@ -11,6 +11,7 @@ from typing import Any
 from gapforge.config import GapForgeConfig
 from gapforge.models import (
     BaselineCandidate,
+    BenchmarkSuite,
     Claim,
     ClaimGraph,
     CorpusPaperRecord,
@@ -61,6 +62,9 @@ PROJECT_ARTIFACTS = [
     "experiment_workspaces.json",
     "experiment_workspaces.md",
     "experiment_workspaces/",
+    "benchmark_suites.json",
+    "benchmark_suites.md",
+    "benchmark_suites/",
     "review_panels.json",
     "review_panel.md",
     "rebuttal_plan.md",
@@ -153,6 +157,7 @@ class ProjectMemoryManager:
         experiment_code_tasks = _load_list(root_dir / "experiment_code_tasks.json", ExperimentCodeTask)
         experiment_repo_scaffolds = _load_list(root_dir / "experiment_repo_scaffolds.json", ExperimentRepoScaffold)
         experiment_workspaces = _load_list(root_dir / "experiment_workspaces.json", ExperimentWorkspace)
+        benchmark_suites = _load_list(root_dir / "benchmark_suites.json", BenchmarkSuite)
         review_panels = _load_list(root_dir / "review_panels.json", ReviewPanel)
         review_queue = None
         review_queue_path = root_dir / "review_queue.json"
@@ -178,6 +183,7 @@ class ProjectMemoryManager:
             experiment_code_tasks=experiment_code_tasks,
             experiment_repo_scaffolds=experiment_repo_scaffolds,
             experiment_workspaces=experiment_workspaces,
+            benchmark_suites=benchmark_suites,
             review_panels=review_panels,
             review_queue=review_queue,
             claim_graph=claim_graph,
@@ -191,6 +197,7 @@ class ProjectMemoryManager:
         (root_dir / "reports").mkdir(parents=True, exist_ok=True)
         (root_dir / "campaigns").mkdir(parents=True, exist_ok=True)
         (root_dir / "experiment_workspaces").mkdir(parents=True, exist_ok=True)
+        (root_dir / "benchmark_suites").mkdir(parents=True, exist_ok=True)
         program.project.root_dir = str(root_dir)
         program.project.run_ids = _unique(program.run_ids or program.project.run_ids)
         program.project.active_topic_ids = _unique(program.project.active_topic_ids)
@@ -207,6 +214,7 @@ class ProjectMemoryManager:
         self._write_json(root_dir / "experiment_code_tasks.json", program.experiment_code_tasks)
         self._write_json(root_dir / "experiment_repo_scaffolds.json", program.experiment_repo_scaffolds)
         self._write_json(root_dir / "experiment_workspaces.json", program.experiment_workspaces)
+        self._write_json(root_dir / "benchmark_suites.json", program.benchmark_suites)
         self._write_json(root_dir / "review_panels.json", program.review_panels)
         self._write_json(root_dir / "review_queue.json", program.review_queue)
         self._write_json(root_dir / "claim_graph.json", program.claim_graph)
@@ -222,6 +230,7 @@ class ProjectMemoryManager:
         self._write_experiment_code_tasks_markdown(program, root_dir)
         self._write_experiment_repo_scaffolds_markdown(program, root_dir)
         self._write_experiment_workspaces_markdown(program, root_dir)
+        self._write_benchmark_suites_markdown(program, root_dir)
         self._write_review_panel_markdown(program, root_dir)
         self._write_review_queue_markdown(program, root_dir)
         if program.claim_graph is not None:
@@ -551,6 +560,29 @@ class ProjectMemoryManager:
                     f"- Root: `{workspace.root_dir}`",
                     f"- Created: {workspace.created_at or 'unknown'}",
                     f"- Updated: {workspace.updated_at or 'unknown'}",
+                    "",
+                ]
+            )
+        path.write_text(redact_text("\n".join(lines).rstrip() + "\n"), encoding="utf-8")
+
+    def _write_benchmark_suites_markdown(self, program: ResearchProgramState, root_dir: Path) -> None:
+        path = root_dir / "benchmark_suites.md"
+        if not program.benchmark_suites:
+            path.write_text("# Benchmark Suites\n\nNo benchmark suites created yet.\n", encoding="utf-8")
+            return
+        lines = ["# Benchmark Suites", ""]
+        for suite in program.benchmark_suites:
+            lines.extend(
+                [
+                    f"## `{suite.id}`",
+                    "",
+                    f"- Name: {suite.name}",
+                    f"- Source profile: `{suite.source_profile}`",
+                    f"- Benchmarks: {', '.join(f'`{item}`' for item in suite.benchmark_ids) or 'none'}",
+                    f"- Required tasks: {', '.join(f'`{item}`' for item in suite.required_tasks) or 'none'}",
+                    f"- Optional tasks: {', '.join(f'`{item}`' for item in suite.optional_tasks) or 'none'}",
+                    "",
+                    suite.description or "No description recorded.",
                     "",
                 ]
             )

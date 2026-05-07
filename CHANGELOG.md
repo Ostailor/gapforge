@@ -2,6 +2,40 @@
 
 All notable project changes should be recorded here.
 
+## 0.7.0
+
+GapForge v0.7 is the real benchmark execution and replication upgrade. It keeps the v5 literature gates and v6 empirical-claim gates intact while adding first-class benchmark artifacts, explicit dataset consent and cache handling, compute/job abstractions, benchmark canaries, replication packages, and a v7 release gate that separates fixture validation from opt-in real/local public benchmark validation.
+
+### Benchmarks, Data, and Compute
+
+- Added a benchmark registry with benchmark records, tasks, suites, cards, readiness checks, and fixture labeling.
+- Added external dataset download planning, cache management, explicit consent records, license/terms warnings, manual-download handling, download hashes, and cache reporting.
+- Added compute environment abstraction for local, Docker, GPU-local, Slurm, and custom environments with resource requests and availability checks that remain CI-safe.
+- Added job runner and scheduler abstractions with local execution, queue persistence, cancellation, Docker/Slurm unavailable reporting, and execution-record integration.
+- Added experiment sweeps, ablation plans, and seed plans so parameter changes and stochastic runs are explicit and controlled.
+
+### Results, Analysis, and Comparison
+
+- Added a result database and aggregation layer that normalizes parsed metric results, preserves run-type labels, aggregates across seeds/splits, exports CSV, and excludes failed runs from aggregates while listing them.
+- Added error analysis and slice analysis from prediction artifacts, with false-positive emphasis for low-FPR contexts and no fabricated examples.
+- Added benchmark comparison and leaderboard reports that separate baseline/proposed rows, smoke/pilot/main run types, internal/external sources, missing baselines, limitations, and anti-SOTA guardrails.
+- Added low-FPR power planner v2 with negative-sample sizing, zero-false-positive upper bounds, alpha target guidance, exact/binomial helpers, and underpowered-claim warnings.
+
+### Replication and Release Gates
+
+- Added safe-by-default replication package export, replication manifests, package verification, reproduction runner, and multi-environment reproducibility matrix.
+- Added benchmark canary profiles for fixture success, fixture failure, opt-in local public small benchmark, low-FPR underpowered warning, and replication package validation.
+- Added a v7 release gate requiring fixture benchmark success and failure paths, benchmark comparison, aggregation, error analysis, replication export/verification, low-FPR underpowered warning coverage, no fake results, and preserved smoke/pilot/main labels.
+- Added opt-in real/local public benchmark claim checks requiring an accepted real benchmark canary, dataset consent, artifact-backed results, and a replication package for the real benchmark workspace.
+- Added v7 eval fixtures/metrics, dashboard pages, Python API functions, documentation, and Codex-readable benchmark/replication skills.
+
+### Validation
+
+- Fixture benchmark gate passed locally with successful and failed benchmark canaries, result aggregation, error analysis, replication package export/verification, and low-FPR underpowered warning coverage.
+- Real benchmark validation was attempted and passed for the opt-in `local_public_small_benchmark` canary using the public UCI Iris dataset with explicit dataset consent, cached download, artifact-backed metrics and predictions, benchmark comparison, error analysis, and replication package verification.
+- `gapforge v7-release-gate --write-report --json --claim-real` passed with fixture gate true, real benchmark gate true, and no blockers.
+- No fake benchmark results or SOTA claims are accepted. The real/local public benchmark canary validates the benchmark-and-replication path; it is not a broad performance claim across large external benchmarks, GPU/cluster runs, or independent replication by another researcher.
+
 ## 0.6.0
 
 GapForge v0.6 is the experiment execution and empirical validation release. It keeps the v4 Codex workflow and v5 real-literature quality gates intact while adding durable experiment workspaces, artifact-backed result parsing, statistical analysis, reproducibility checks, empirical reviewer simulation, and honest paper-package exports.

@@ -199,6 +199,58 @@ Release notes must distinguish:
 
 If no executed experiment artifacts exist, record v0.6 empirical validation as not completed. Never fabricate a pass.
 
+## v0.7 Real Benchmark Execution Gate
+
+v0.7 must not claim real benchmark execution or replication readiness based only on fixture smoke, generated code, or Codex-written analysis. It must require at least one accepted real or benchmark-like non-fixture run, or mark real benchmark validation incomplete.
+
+Before tagging v0.7, the release process should require:
+
+```bash
+make ci
+make eval
+gapforge eval --v2 --write-report
+gapforge eval --v3 --write-report
+gapforge eval --v4 --write-report
+gapforge eval --v5 --write-report
+gapforge eval --v6 --write-report
+gapforge eval --v7 --write-report
+make v2-smoke
+make v3-smoke
+make v4-smoke
+make v6-smoke
+make v7-smoke
+gapforge v6-release-gate --write-report --json
+gapforge benchmark-canary-run --profile local_public_small_benchmark --real --accept-download
+gapforge v7-release-gate --write-report --json --claim-real
+```
+
+The v0.7 release gate should require:
+
+- deterministic CI remains passing
+- v5 literature gates and v6 empirical gates remain passing or limitations are explicitly documented
+- at least one real or benchmark-like non-fixture run exists
+- benchmark registry and benchmark card exist
+- dataset card, license, cache path, and checksum/version metadata exist
+- required baselines and metrics are recorded
+- compute mode, command, logs, return code, and result artifacts are recorded
+- comparison tables and error/slice analysis are generated
+- low-FPR claims include power/sample-size and confidence-interval warnings
+- failed jobs and missing baselines remain visible
+- replication package is exported
+- no fixture-only result is counted as real benchmark performance
+
+Release notes must distinguish:
+
+- fixture smoke
+- local benchmark
+- full benchmark
+- failed jobs
+- underpowered results
+- replication package
+- real benchmark acceptance status
+
+If external downloads, GPU, cluster execution, or independent replication are unavailable, record those as not-run or incomplete. Do not fake a benchmark pass.
+
 ## Tagging
 
 Use semantic version tags:
@@ -230,4 +282,5 @@ Release notes should include:
 - For v0.4, do not claim actual-run acceptance unless multiple real Codex/GPT-5.4 campaigns are accepted and the campaign release gate passes.
 - For v0.5, do not claim live-literature quality unless accepted live-source campaigns and expert reviews prove it.
 - For v0.6, do not claim empirical validation unless executed experiment artifacts, failed/negative path artifacts, statistical analysis, reproducibility checks, and result-claim links prove it.
+- For v0.7, do not claim real benchmark execution or replication unless a real or benchmark-like non-fixture run, compute logs, benchmark artifacts, comparison/error analysis, and replication package prove it.
 - Do not publish generated `runs/`, caches, or local environment artifacts as source.

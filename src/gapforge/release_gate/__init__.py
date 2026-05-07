@@ -15,6 +15,7 @@ from gapforge.release_gate.v06 import (
     V06WorkspaceEmpiricalAssessment,
     render_v06_release_gate_markdown,
 )
+from gapforge.release_gate.v07 import V07ReleaseGateEnforcer, V07ReleaseGateResult, render_v07_release_gate_markdown
 
 __all__ = [
     "ReleaseGateStatus",
@@ -27,8 +28,11 @@ __all__ = [
     "V06ReleaseGateEnforcer",
     "V06ReleaseGateResult",
     "V06WorkspaceEmpiricalAssessment",
+    "V07ReleaseGateEnforcer",
+    "V07ReleaseGateResult",
     "parse_release_gate",
     "render_v04_release_gate_markdown",
     "render_v05_release_gate_markdown",
     "render_v06_release_gate_markdown",
+    "render_v07_release_gate_markdown",
 ]

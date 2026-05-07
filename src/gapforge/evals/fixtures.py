@@ -66,6 +66,13 @@ V6_FIXTURE_NAMES = [
     "reproducible_result",
     "paper_package_result_labels",
 ]
+V7_FIXTURE_NAMES = [
+    "fixture_benchmark_success",
+    "fixture_benchmark_failure",
+    "low_fpr_underpowered_benchmark",
+    "replication_package_canary",
+    "fake_result_rejected",
+]
 
 
 @dataclass(slots=True)
@@ -92,9 +99,11 @@ class EvalFixture:
     is_v4: bool = False
     is_v5: bool = False
     is_v6: bool = False
+    is_v7: bool = False
     campaign_fixture: dict[str, Any] = field(default_factory=dict)
     real_literature_fixture: dict[str, Any] = field(default_factory=dict)
     experiment_fixture: dict[str, Any] = field(default_factory=dict)
+    benchmark_fixture: dict[str, Any] = field(default_factory=dict)
 
     @property
     def is_v2(self) -> bool:
@@ -127,6 +136,10 @@ def default_v6_fixture_root() -> Path:
     return Path.cwd() / "tests" / "fixtures" / "experiments_v6"
 
 
+def default_v7_fixture_root() -> Path:
+    return Path.cwd() / "tests" / "fixtures" / "benchmarks_v7"
+
+
 def list_fixtures(root: Path | None = None) -> list[str]:
     fixture_root = root or default_fixture_root()
     if not fixture_root.exists():
@@ -147,6 +160,9 @@ def load_fixture(name: str, root: Path | None = None) -> EvalFixture:
         v6_path = default_v6_fixture_root() / name
         if v6_path.exists():
             return load_v6_fixture(name, default_v6_fixture_root())
+        v7_path = default_v7_fixture_root() / name
+        if v7_path.exists():
+            return load_v7_fixture(name, default_v7_fixture_root())
         v3_path = default_v3_fixture_root() / name
         if v3_path.exists():
             return load_v3_fixture(name, default_v3_fixture_root())
@@ -375,6 +391,49 @@ def load_v6_fixture(name: str, root: Path | None = None) -> EvalFixture:
     )
 
 
+def load_v7_fixture(name: str, root: Path | None = None) -> EvalFixture:
+    fixture_root = root or default_v7_fixture_root()
+    path = fixture_root / name
+    if not path.exists():
+        raise FileNotFoundError(f"Unknown v7 eval fixture: {name}")
+    raw = _read_json(path / "fixture.json")
+    topic = str(raw.get("topic", name.replace("_", " ")))
+    papers = [
+        Paper(
+            id=f"paper-{name}",
+            title=f"Benchmark fixture paper for {topic}",
+            authors=["GapForge fixture"],
+            abstract="Synthetic offline fixture metadata for v0.7 benchmark and replication evaluation.",
+            year=2026,
+            source="fixture",
+        )
+    ]
+    return EvalFixture(
+        name=name,
+        topic=topic,
+        path=path,
+        papers=papers,
+        paper_notes=[],
+        known_good_gaps=[
+            Gap(
+                id=f"gap-{name}",
+                title=topic,
+                description="Offline v0.7 benchmark behavior fixture.",
+                supporting_paper_ids=[papers[0].id],
+                why_existing_work_does_not_solve_it="Fixture encodes benchmark, aggregation, and replication behavior only.",
+                minimum_experiment_needed="Use fixture benchmark execution records and replication artifacts.",
+                risk_that_gap_is_fake="This is synthetic fixture data and is not a real benchmark result.",
+                confidence="medium",
+            )
+        ],
+        known_bad_gaps=[],
+        duplicate_ideas=[],
+        expected_reviewer_objections=[],
+        is_v7=True,
+        benchmark_fixture=raw,
+    )
+
+
 def load_fixtures(names: list[str] | None = None, root: Path | None = None) -> list[EvalFixture]:
     selected = names or FIXTURE_NAMES
     return [load_fixture(name, root) for name in selected]
@@ -398,6 +457,11 @@ def load_v5_fixtures(names: list[str] | None = None, root: Path | None = None) -
 def load_v6_fixtures(names: list[str] | None = None, root: Path | None = None) -> list[EvalFixture]:
     selected = names or V6_FIXTURE_NAMES
     return [load_v6_fixture(name, root) for name in selected]
+
+
+def load_v7_fixtures(names: list[str] | None = None, root: Path | None = None) -> list[EvalFixture]:
+    selected = names or V7_FIXTURE_NAMES
+    return [load_v7_fixture(name, root) for name in selected]
 
 
 def _topic(path: Path) -> str:

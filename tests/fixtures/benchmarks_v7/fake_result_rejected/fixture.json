@@ -1,0 +1,62 @@
+{
+  "topic": "fixture fake benchmark result rejection",
+  "benchmark": {
+    "registered": true,
+    "fixture_labeled": true,
+    "dataset_ids": ["dataset-fake-result"],
+    "baseline_ids": ["baseline-fake-result"],
+    "metric_ids": ["false-positive-rate"]
+  },
+  "execution": {
+    "status": "complete",
+    "run_type": "smoke",
+    "result_artifacts": ["metrics.json"],
+    "logs": ["stdout.log", "stderr.log"],
+    "preserved": true
+  },
+  "failure_path_not_applicable": true,
+  "aggregation": {
+    "built": true,
+    "rows": [{"run_type": "smoke", "value": 0.0}],
+    "smoke_separated": true,
+    "failed_runs_excluded": true
+  },
+  "error_analysis": {
+    "ran": true,
+    "from_artifacts": true,
+    "failed_or_missing_predictions_visible": true,
+    "fabricated_examples": false
+  },
+  "comparison": {
+    "generated": true,
+    "missing_baselines_visible": true,
+    "smoke_main_separated": true,
+    "claims_sota_without_evidence": false
+  },
+  "replication": {
+    "exported": true,
+    "manifest": true,
+    "commands": true,
+    "seeds": true,
+    "hashes": true,
+    "restricted_data_included": false
+  },
+  "reproduction": {
+    "verification_attempted": true,
+    "status": "pass",
+    "differences_reported": true,
+    "overgeneralized_single_environment": false
+  },
+  "low_fpr": {
+    "underpowered": false,
+    "claim_overstated": false
+  },
+  "fake_result": {
+    "present": true,
+    "accepted": false,
+    "rejected": true
+  },
+  "v7_release_gate": {
+    "expected_fixture_pass": true
+  }
+}

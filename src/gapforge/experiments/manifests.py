@@ -6,7 +6,7 @@ import platform
 import sys
 from pathlib import Path
 
-from gapforge.models import ExperimentProtocol, ExperimentRunManifest, ExperimentWorkspace, Provenance
+from gapforge.models import ExperimentProtocol, ExperimentRunManifest, ExperimentWorkspace, Provenance, ResourceRequest
 from gapforge.state import utc_now_iso
 
 
@@ -23,6 +23,7 @@ def build_run_manifest(
     command: str = "",
     expected_outputs: list[str] | None = None,
     random_seed: int = 0,
+    resource_request: ResourceRequest | None = None,
     sequence: int = 1,
 ) -> ExperimentRunManifest:
     manifest_id = f"manifest-{run_type}-{sequence}"
@@ -42,6 +43,7 @@ def build_run_manifest(
         expected_outputs=outputs,
         random_seed=random_seed,
         environment=_default_environment(),
+        resource_request=resource_request or ResourceRequest(),
         created_at=utc_now_iso(),
         provenance=Provenance(
             created_by_skill="experiment-manifest",
@@ -64,6 +66,15 @@ def render_manifest_markdown(manifest: ExperimentRunManifest) -> str:
         f"- Command: `{manifest.command}`",
         f"- Random seed: {manifest.random_seed}",
         f"- Created at: {manifest.created_at or 'unknown'}",
+        "",
+        "## Resource Request",
+        "",
+        f"- Environment type: `{manifest.resource_request.environment_type}`",
+        f"- CPUs: {manifest.resource_request.cpu_count}",
+        f"- Memory GB: {manifest.resource_request.memory_gb}",
+        f"- GPUs: {manifest.resource_request.gpu_count}",
+        f"- Wall time minutes: {manifest.resource_request.wall_time_minutes}",
+        f"- Disk GB: {manifest.resource_request.disk_gb}",
         "",
         "## Datasets",
         "",
