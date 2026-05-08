@@ -1,0 +1,19 @@
+{
+  "id": "workspace-v0-6",
+  "project_id": "fixture-v0-6-project",
+  "campaign_id": "campaign-v0-5",
+  "direction_id": "direction-v0-6",
+  "experiment_protocol_id": "protocol-v0-6",
+  "root_dir": "projects/fixture-v0-6-project/experiment_workspaces/workspace-v0-6",
+  "status": "scaffolded",
+  "created_at": "2024-06-01T00:00:00+00:00",
+  "updated_at": "2024-06-01T00:00:00+00:00",
+  "gapforge_version": "v0.6",
+  "artifact_path": "results/missing_metrics.json",
+  "provenance": {
+    "created_by_skill": "fixture-v0.6",
+    "source_ids": ["fixture-v0-6-project", "direction-v0-6"],
+    "timestamp": "2024-06-01T00:00:00+00:00",
+    "reasoning_summary": "Synthetic experiment workspace fixture."
+  }
+}

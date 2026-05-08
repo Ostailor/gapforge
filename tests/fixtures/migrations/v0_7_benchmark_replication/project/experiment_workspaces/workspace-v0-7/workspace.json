@@ -1,0 +1,19 @@
+{
+  "id": "workspace-v0-7",
+  "project_id": "fixture-v0-7-project",
+  "campaign_id": "campaign-v0-7",
+  "direction_id": "direction-v0-7",
+  "experiment_protocol_id": "protocol-v0-7",
+  "root_dir": "projects/fixture-v0-7-project/experiment_workspaces/workspace-v0-7",
+  "status": "replication_planned",
+  "created_at": "2024-07-01T00:00:00+00:00",
+  "updated_at": "2024-07-01T00:00:00+00:00",
+  "gapforge_version": "v0.7",
+  "artifact_path": "replication_package/missing_results.json",
+  "provenance": {
+    "created_by_skill": "fixture-v0.7",
+    "source_ids": ["suite-v0-7"],
+    "timestamp": "2024-07-01T00:00:00+00:00",
+    "reasoning_summary": "Synthetic benchmark replication fixture."
+  }
+}

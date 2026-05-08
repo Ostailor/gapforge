@@ -1,0 +1,9 @@
+{
+  "package_id": "replication-v0-7",
+  "gapforge_version": "v0.7",
+  "code_version": "synthetic",
+  "dataset_download_instructions": ["No dataset is included in this fixture."],
+  "commands": ["python reproduce.py --dry-run"],
+  "expected_outputs": ["replication_package/missing_results.json"],
+  "random_seeds": [7]
+}

@@ -1,0 +1,6 @@
+{
+  "id": "manifest-v0-6-smoke",
+  "workspace_id": "workspace-v0-6",
+  "command": "python smoke.py",
+  "expected_outputs": ["results/missing_metrics.json"]
+}
