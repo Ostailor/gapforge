@@ -1,0 +1,10 @@
+{
+  "id": "v0_4_campaign",
+  "version": "v0.4",
+  "object_type": "campaign",
+  "primary_json": "project/campaigns/campaign-v0-4/campaign.json",
+  "description": "Minimal v0.4 campaign state tied to a project.",
+  "expected_warnings": [],
+  "generated_paths": ["projects/*/campaigns/*", "campaigns/*"],
+  "safe_to_commit": true
+}

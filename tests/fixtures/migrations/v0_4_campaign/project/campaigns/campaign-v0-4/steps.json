@@ -1,0 +1,9 @@
+[
+  {
+    "id": "step-v0-4-search",
+    "campaign_id": "campaign-v0-4",
+    "name": "search",
+    "step_type": "search",
+    "status": "pending"
+  }
+]

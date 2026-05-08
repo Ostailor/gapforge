@@ -1,0 +1,10 @@
+{
+  "id": "v0_6_experiment_workspace",
+  "version": "v0.6",
+  "object_type": "workspace",
+  "primary_json": "project/experiment_workspaces/workspace-v0-6/workspace.json",
+  "description": "Experiment workspace with a missing result artifact reference.",
+  "expected_warnings": ["missing result artifact is expected in this fixture"],
+  "generated_paths": ["**/experiment_workspaces/", "**/safe_bundles/"],
+  "safe_to_commit": true
+}

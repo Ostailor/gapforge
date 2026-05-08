@@ -20,8 +20,7 @@ def test_v1_readiness_missing_pilot_fails(tmp_path: Path) -> None:
     result = V1ReadinessGate(config).evaluate()
 
     assert result.passed is False
-    assert result.requirements["v09_pilot_outcome_accepted"] is False
-    assert result.requirements["external_human_pilot_review_exists"] is False
+    assert result.requirements["v09_pilot_accepted_as_direction_or_refusal"] is False
     assert result.recommended_next_version == "v0.9"
 
 
@@ -56,13 +55,14 @@ def test_v1_readiness_product_failure_blocks(tmp_path: Path) -> None:
 
 
 def test_v1_readiness_missing_migration_audit_blocks(tmp_path: Path) -> None:
-    config = _complete_v1_fixture(tmp_path, skip_audit="migration_audit_passed")
+    config = _complete_v1_fixture(tmp_path, skip_audit="compatibility_audit_v2_passed")
 
     result = V1ReadinessGate(config).evaluate()
 
     assert result.passed is False
-    assert result.requirements["migration_audit_passed"] is False
-    assert "Migration/backward compatibility audit has not passed." in result.blockers
+    assert result.requirements["compatibility_audit_v2_passed"] is False
+    assert "Migration/backward compatibility audit v2 has not passed." in result.blockers
+    assert "gapforge compatibility-audit --v2 --fixtures --local --write-report" in result.next_commands
 
 
 def test_v1_readiness_complete_fixture_passes_and_writes_report(tmp_path: Path) -> None:
@@ -81,6 +81,21 @@ def test_v1_readiness_complete_fixture_passes_and_writes_report(tmp_path: Path) 
     assert md_path.exists()
 
 
+def test_v1_readiness_accepts_v2_migration_audit_warning_status(tmp_path: Path) -> None:
+    config = _complete_v1_fixture(tmp_path)
+    release_dir = config.data_dir / "release_gate"
+    (release_dir / "migration_audit.json").write_text(
+        json.dumps({"passed": True, "status": "warning", "audit_version": 2, "warnings": ["generated local artifact"]}) + "\n",
+        encoding="utf-8",
+    )
+
+    result = V1ReadinessGate(config).evaluate()
+
+    assert result.passed is True
+    assert result.requirements["compatibility_audit_v2_passed"] is True
+    assert any("non-blocking warnings" in warning for warning in result.warnings)
+
+
 def test_v1_readiness_cli_json(tmp_path: Path) -> None:
     config = _complete_v1_fixture(tmp_path)
     env = {"PYTHONPATH": str(Path(__file__).resolve().parents[1] / "src")}
@@ -96,6 +111,24 @@ def test_v1_readiness_cli_json(tmp_path: Path) -> None:
 
     assert completed.returncode == 0, completed.stderr
     assert json.loads(completed.stdout)["recommended_next_version"] == "v1"
+
+
+def test_v1_readiness_next_commands_cli(tmp_path: Path) -> None:
+    config = _complete_v1_fixture(tmp_path, skip_audit="compatibility_audit_v2_passed")
+    env = {"PYTHONPATH": str(Path(__file__).resolve().parents[1] / "src")}
+
+    completed = subprocess.run(
+        [sys.executable, "-m", "gapforge.cli", "v1-readiness", "--next-commands"],
+        cwd=config.root,
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert completed.returncode == 1
+    assert "gapforge compatibility-audit --v2 --fixtures --local --write-report" in completed.stdout
+    assert "gapforge v1-readiness --write-report --json" in completed.stdout
 
 
 def _complete_v1_fixture(
@@ -122,7 +155,7 @@ def _write_release_prerequisites(config: GapForgeConfig) -> None:
 
 def _write_audits(config: GapForgeConfig, *, skip: str = "") -> None:
     filenames = {
-        "migration_audit_passed": "migration_audit.json",
+        "compatibility_audit_v2_passed": "migration_audit.json",
         "cli_audit_passed": "cli_audit.json",
         "docs_audit_passed": "docs_audit.json",
         "artifact_hygiene_audit_passed": "artifact_hygiene_audit.json",
@@ -132,7 +165,11 @@ def _write_audits(config: GapForgeConfig, *, skip: str = "") -> None:
     for name, filename in filenames.items():
         if name == skip:
             continue
-        (release_dir / filename).write_text('{"passed": true, "status": "pass"}\n', encoding="utf-8")
+        if name == "compatibility_audit_v2_passed":
+            payload = {"passed": True, "status": "pass", "audit_version": 2, "migration_failure_count": 0, "blockers": []}
+            (release_dir / filename).write_text(json.dumps(payload) + "\n", encoding="utf-8")
+        else:
+            (release_dir / filename).write_text('{"passed": true, "status": "pass"}\n', encoding="utf-8")
 
 
 def _write_full_project_report(config: GapForgeConfig) -> None:

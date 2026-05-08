@@ -225,6 +225,19 @@ v0.9 non-goals:
 
 The recommended v0.9 pilot topic is `low false-positive collusion detection in LLM multi-agent systems`. If the pilot ends in refusal, release notes should treat the refusal as successful only when the refusal is backed by live search records, closest-prior-work review, human quality review, and clear next evidence requirements.
 
+## v0.9.1 Migration Remediation Limits
+
+v0.9.0 was not v1-ready because the migration/backward compatibility audit failed. v0.9.1 fixes that blocker by adding historical fixtures, versioned migrators, backup snapshots, compatibility audit v2, and v1 readiness wiring. It does not prove publication readiness, broad external product validation, or migration of every private local artifact.
+
+Important limits:
+
+- migration does not regenerate missing PDFs, datasets, transcripts, prompt packs, caches, dashboards, or task outputs
+- ignored/generated unsafe local artifacts can remain warnings when they are not curated release evidence
+- missing artifact references remain visible warnings unless the referenced artifact is required curated evidence
+- unknown legacy fields are preserved under `_compatibility.unknown_fields` when practical, but ambiguous protected data still blocks
+- failed migrations must be repaired from backups or explicit migrator rules, not ignored
+- v1 must not be claimed until `gapforge v1-readiness --write-report --json` passes
+
 ## Operational Guidance
 
 Use strict mode and coverage assessment before interpreting outputs:

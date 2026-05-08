@@ -151,7 +151,18 @@ from gapforge.metrics.low_fpr_power import (
     render_low_fpr_check_markdown,
     render_low_fpr_plan_markdown,
 )
-from gapforge.migrations import CompatibilityAuditor, MigrationManager, render_compatibility_audit
+from gapforge.migrations import (
+    CompatibilityAuditor,
+    MigrationManager,
+    build_migration_blocker_report,
+    list_historical_migration_fixtures,
+    render_compatibility_audit,
+    render_compatibility_audit_v2,
+    render_migration_blocker_report,
+    render_migration_fixtures_list,
+    report_to_json,
+    write_migration_blocker_report,
+)
 from gapforge.models import (
     AgentTaskSpec,
     IndexManifest,
@@ -1248,6 +1259,8 @@ def build_parser() -> argparse.ArgumentParser:
     v1_readiness_parser.set_defaults(command="v1-readiness")
     v1_readiness_parser.add_argument("--write-report", action="store_true")
     v1_readiness_parser.add_argument("--json", action="store_true")
+    v1_readiness_parser.add_argument("--explain", action="store_true", help="Print detailed blockers, warnings, and next commands.")
+    v1_readiness_parser.add_argument("--next-commands", action="store_true", help="Print only the commands needed to unblock v1.")
 
     cli_audit_parser = subparsers.add_parser("cli-audit", help="Audit command grouping, help text, and v1 CLI discoverability.")
     cli_audit_parser.add_argument("--write-report", action="store_true")
@@ -1257,6 +1270,19 @@ def build_parser() -> argparse.ArgumentParser:
 
     compatibility_audit_parser = subparsers.add_parser("compatibility-audit", help="Audit older project/run load compatibility.")
     compatibility_audit_parser.add_argument("--json", action="store_true")
+    compatibility_audit_parser.add_argument("--fixtures", action="store_true", help="Include committed historical migration fixtures.")
+    compatibility_audit_parser.add_argument("--v2", action="store_true", help="Run the v1-ready compatibility audit.")
+    compatibility_audit_parser.add_argument("--local", action="store_true", help="Include local project/run state in the v2 audit.")
+    compatibility_audit_parser.add_argument("--write-report", action="store_true")
+
+    migration_blockers_parser = subparsers.add_parser(
+        "migration-blockers", help="Report precise v0.9.1 migration blockers without claiming v1 readiness."
+    )
+    migration_blockers_parser.add_argument("--json", action="store_true")
+    migration_blockers_parser.add_argument("--write-report", action="store_true")
+
+    migration_fixtures_list_parser = subparsers.add_parser("migration-fixtures-list", help="List committed historical migration fixtures.")
+    migration_fixtures_list_parser.add_argument("--json", action="store_true")
 
     migrate_project_parser = subparsers.add_parser("migrate-project", help="Back up and migrate a project to the latest schema.")
     migrate_project_parser.add_argument("--project-id", required=True)
@@ -1265,6 +1291,12 @@ def build_parser() -> argparse.ArgumentParser:
     migrate_run_parser = subparsers.add_parser("migrate-run", help="Back up and migrate a run to the latest schema.")
     migrate_run_parser.add_argument("--run-id", required=True)
     migrate_run_parser.add_argument("--to-version", default="latest")
+
+    migrate_all_parser = subparsers.add_parser("migrate-all", help="Back up and migrate all known persisted objects.")
+    migrate_all_mode = migrate_all_parser.add_mutually_exclusive_group(required=True)
+    migrate_all_mode.add_argument("--dry-run", action="store_true")
+    migrate_all_mode.add_argument("--apply", action="store_true")
+    migrate_all_parser.add_argument("--to-version", default="latest")
 
     subparsers.add_parser("migration-report", help="Print the latest compatibility audit and migration records.")
 
@@ -3416,6 +3448,9 @@ def _dispatch(
         v1_result = v1_gate.evaluate()
         if args.write_report:
             v1_gate.write_outputs(v1_result)
+        if args.next_commands:
+            print("\n".join(v1_result.next_commands))
+            return 0 if v1_result.passed else 1
         if args.json:
             print(json.dumps(v1_result.to_dict(), indent=2))
         else:
@@ -3430,12 +3465,41 @@ def _dispatch(
         print(render_docs_audit(docs_audit), end="")
         return 0 if docs_audit.passed else 1
     if args.command == "compatibility-audit":
-        audit = CompatibilityAuditor(config).audit(write=True)
+        if args.v2:
+            include_fixtures = args.fixtures or not args.local
+            include_local = args.local or not args.fixtures
+            audit_v2 = CompatibilityAuditor(config).audit_v2(
+                write=args.write_report,
+                include_fixtures=include_fixtures,
+                include_local=include_local,
+            )
+            if args.json:
+                print(json.dumps(to_plain(audit_v2), indent=2))
+            else:
+                print(render_compatibility_audit_v2(audit_v2), end="")
+            return 0 if audit_v2.status in {"pass", "warning"} else 1
+        audit = CompatibilityAuditor(config).audit(write=True, include_fixtures=args.fixtures)
         if args.json:
             print(json.dumps(to_plain(audit), indent=2))
         else:
             print(render_compatibility_audit(audit), end="")
         return 0 if not audit.migration_required and not audit.migration_failures else 1
+    if args.command == "migration-fixtures-list":
+        fixtures = list_historical_migration_fixtures(config)
+        if args.json:
+            print(json.dumps([fixture.to_dict() for fixture in fixtures], indent=2))
+        else:
+            print(render_migration_fixtures_list(fixtures), end="")
+        return 0 if fixtures else 1
+    if args.command == "migration-blockers":
+        migration_blocker_report = build_migration_blocker_report(config)
+        if args.write_report:
+            write_migration_blocker_report(config, migration_blocker_report)
+        if args.json:
+            print(report_to_json(migration_blocker_report), end="")
+        else:
+            print(render_migration_blocker_report(migration_blocker_report), end="")
+        return 0 if migration_blocker_report.passed else 1
     if args.command == "migrate-project":
         migration_record = MigrationManager(config).migrate_project(args.project_id, to_version=args.to_version)
         print(json.dumps(to_plain(migration_record), indent=2))
@@ -3444,6 +3508,11 @@ def _dispatch(
         migration_record = MigrationManager(config).migrate_run(args.run_id, to_version=args.to_version)
         print(json.dumps(to_plain(migration_record), indent=2))
         return 0 if migration_record.status == "migrated" else 1
+    if args.command == "migrate-all":
+        migration_records = MigrationManager(config).migrate_all(dry_run=args.dry_run, to_version=args.to_version)
+        print(json.dumps([to_plain(record) for record in migration_records], indent=2))
+        successful_statuses = {"planned", "migrated", "skipped", "warning"}
+        return 0 if all(record.status in successful_statuses for record in migration_records) else 1
     if args.command == "migration-report":
         print(MigrationManager(config).report(), end="")
         return 0

@@ -1,0 +1,10 @@
+{
+  "id": "v0_7_benchmark_replication",
+  "version": "v0.7",
+  "object_type": "workspace",
+  "primary_json": "project/experiment_workspaces/workspace-v0-7/workspace.json",
+  "description": "Benchmark and replication fixture with no dataset payloads.",
+  "expected_warnings": ["missing replication artifact is expected in this fixture"],
+  "generated_paths": ["**/experiment_workspaces/", "**/safe_bundles/"],
+  "safe_to_commit": true
+}

@@ -1,0 +1,10 @@
+{
+  "id": "v0_8_manuscript_package",
+  "version": "v0.8",
+  "object_type": "manuscript",
+  "primary_json": "project/manuscripts/manuscript-v0-8/manuscript.json",
+  "description": "Manuscript package fixture with synthetic section metadata.",
+  "expected_warnings": ["missing submission package artifact is expected in this fixture"],
+  "generated_paths": ["**/paper_packages/", "**/safe_bundles/"],
+  "safe_to_commit": true
+}

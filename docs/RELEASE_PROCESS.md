@@ -28,8 +28,9 @@ GAPFORGE_DISABLE_NETWORK=1 gapforge report --strict
 11. Record human review using `docs/REAL_RUN_REVIEW_CHECKLIST.md`.
 12. For v0.4 releases, complete the campaign process in `docs/V0_4_AGENTIC_CAMPAIGNS.md` and `docs/V0_4_REAL_RUN_ACCEPTANCE.md`.
 13. For v0.9 releases, complete the external pilot process in `docs/V0_9_EXTERNAL_PILOT.md`, acceptance criteria in `docs/V0_9_ACCEPTANCE_CRITERIA.md`, and v1 readiness gate in `docs/V0_9_V1_READINESS.md`.
-14. Commit with a message that records constraints, rejected alternatives if useful, confidence, scope risk, tested commands, and known gaps.
-15. Tag the release only after the checks pass.
+14. For v0.9.1 migration remediation, follow `docs/V0_9_1_MIGRATION_REMEDIATION.md` and `docs/V1_MIGRATION_AND_COMPATIBILITY.md`.
+15. Commit with a message that records constraints, rejected alternatives if useful, confidence, scope risk, tested commands, and known gaps.
+16. Tag the release only after the checks pass.
 
 ## v0.3 Validation Levels
 
@@ -342,7 +343,8 @@ gapforge campaign-report --campaign-id <campaign-id>
 gapforge real-literature-review --campaign-id <campaign-id> --reviewer "<expert>"
 gapforge real-literature-acceptance --campaign-id <campaign-id>
 gapforge v9-release-gate --project-id <project-id> --write-report --json
-gapforge v1-readiness --project-id <project-id> --write-report --json
+gapforge compatibility-audit --v2 --write-report
+gapforge v1-readiness --write-report --json
 ```
 
 The exact pilot command path may change during v0.9 CLI cleanup. If a listed command is missing or confusing, the release candidate must document the actual replacement path, update the README/runbook, and classify the issue as fixed, accepted scope, v0.9.1 required, or v1 blocker.
@@ -359,7 +361,7 @@ The v0.9 release gate should require:
 - any small real run has run records, logs, result artifacts, analysis, and review
 - fixture-only runs are labeled as workflow mechanics and never counted as real empirical success
 - artifact package, manuscript draft, reviewer/rebuttal plan, and external feedback records exist, or blocked/refusal artifacts explain why they do not
-- migration/backward compatibility from v0.8 state is audited
+- migration/backward compatibility from v0.1 through v0.9 state is audited with compatibility audit v2
 - CLI workflow cleanup and docs usability findings are fixed, accepted, or scheduled
 - artifact hygiene separates safe-to-commit, private, generated, cache-only, and reviewer-facing artifacts
 - v1 readiness is assessed as `ready`, `ready_with_explicit_scope`, or `not_ready`
@@ -379,6 +381,27 @@ Release notes must distinguish:
 - v1 readiness outcome
 
 If no real external pilot was completed, record `v0.9 external pilot not completed`. If the pilot exposes a narrow fixable blocker, record `v0.9 external pilot failed; v0.9.1 required`. Never use v0.9.1 to lower evidence standards or bypass the v1 readiness gate.
+
+## v0.9.1 Migration Remediation Gate
+
+v0.9.0 was not v1-ready because the migration/backward compatibility audit failed. v0.9.1 is the patch lane for that blocker only. It should not add new research features, weaken evidence gates, or claim v1 readiness by itself.
+
+Before tagging v0.9.1:
+
+```bash
+make ci
+gapforge compatibility-audit --v2 --write-report
+gapforge migrate-all --dry-run
+# Apply only after reviewing the dry run.
+gapforge migrate-all --apply
+gapforge migration-report
+gapforge compatibility-audit --v2 --write-report
+gapforge v1-readiness --write-report --json
+```
+
+The compatibility audit must distinguish curated compatibility evidence from messy local generated artifacts. Ignored/generated unsafe local artifacts can be warnings when they are not curated release evidence. Fixture failures, current-schema load failures, protected-data loss risk, missing backup behavior, and unsafe curated evidence are blockers.
+
+If migration fails, restore from `data/migrations/backups/`, inspect `data/migrations/records/`, add an explicit version marker or dedicated migrator, and rerun the dry run plus v2 audit. Do not claim v1 until `gapforge v1-readiness --write-report --json` passes.
 
 ## Tagging
 

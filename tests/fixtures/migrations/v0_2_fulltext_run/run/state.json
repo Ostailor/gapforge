@@ -1,0 +1,50 @@
+{
+  "run_id": "fixture-v0-2-fulltext-run",
+  "topic": {
+    "text": "synthetic v0.2 fulltext topic",
+    "slug": "synthetic-v0-2-fulltext-topic",
+    "created_at": "2024-02-01T00:00:00+00:00"
+  },
+  "run_dir": "runs/fixture-v0-2-fulltext-run",
+  "config": {
+    "schema_version": 1,
+    "gapforge_version": "v0.2"
+  },
+  "papers": [
+    {
+      "id": "paper-v0-2",
+      "title": "Synthetic Full Text Paper",
+      "authors": ["Fixture Author"],
+      "abstract": "Small synthetic metadata record.",
+      "year": 2024,
+      "source": "fixture"
+    }
+  ],
+  "paper_artifacts": [
+    {
+      "id": "artifact-v0-2-text",
+      "paper_id": "paper-v0-2",
+      "artifact_type": "text",
+      "local_path": "artifacts/missing_fulltext.txt",
+      "status": "missing",
+      "provenance": {
+        "created_by_skill": "fixture-v0.2",
+        "source_ids": ["paper-v0-2"],
+        "timestamp": "2024-02-01T00:00:00+00:00",
+        "reasoning_summary": "Reference intentionally missing to test warning-only behavior."
+      }
+    }
+  ],
+  "paper_sections": [],
+  "claims": [],
+  "gaps": [],
+  "experiments": [],
+  "provenance": [
+    {
+      "created_by_skill": "fixture-v0.2",
+      "source_ids": ["paper-v0-2"],
+      "timestamp": "2024-02-01T00:00:00+00:00",
+      "reasoning_summary": "Synthetic full-text migration fixture."
+    }
+  ]
+}

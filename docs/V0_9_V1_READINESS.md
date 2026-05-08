@@ -48,8 +48,11 @@ Do not call v1 until the readiness gate passes.
 
 ### Migration and Compatibility
 
-- v0.8 project, manuscript, artifact evaluation, rebuttal, and submission package state remains readable or has a documented migration.
+- v0.1 through v0.9 run, project, campaign, workspace, benchmark/replication, manuscript, and pilot state remains readable or has a documented migration.
+- Compatibility audit v2 passes and writes release-gate evidence.
+- Backups are created before applied migrations mutate state.
 - No migration drops claim links, evidence, citations, blockers, failed-run records, or human decisions.
+- Unknown legacy fields are preserved under a compatibility namespace or produce explicit warnings.
 - Deprecated commands have replacements, warnings, or compatibility shims.
 - Release process explains how to validate compatibility before tagging v1.
 
@@ -68,7 +71,9 @@ v1 is blocked if any of these are true:
 - the pilot has neither a defensible direction nor evidence-backed refusal
 - novelty or empirical success is overclaimed
 - fixture-only evidence is presented as real empirical validation
-- migration from v0.8 state is unsafe or untested
+- migration from historical state is unsafe or untested
+- compatibility audit v2 is missing or failed
+- a migration can drop claims, evidence, results, manuscript objects, review records, blockers, or provenance
 - external feedback is absent
 - CLI golden path is too unclear for another user to follow
 - artifact hygiene cannot distinguish safe and unsafe outputs
@@ -104,3 +109,19 @@ When not ready:
 - migration/backward compatibility audit
 - CLI/docs usability audit
 - known limitations update
+
+## Migration Commands
+
+Use the v2 compatibility audit before claiming readiness:
+
+```bash
+gapforge compatibility-audit --v2 --write-report
+gapforge migrate-all --dry-run
+gapforge migrate-all --apply
+gapforge migration-report
+gapforge v1-readiness --write-report --json
+```
+
+Warnings are allowed only when they are non-blocking, such as ignored/generated local artifacts that are not curated evidence or unknown legacy fields preserved under `_compatibility.unknown_fields`. Fixture failures, current-schema load failures, missing backups, protected-data loss risk, and unsafe curated release evidence block v1.
+
+See `docs/V0_9_1_MIGRATION_REMEDIATION.md` and `docs/V1_MIGRATION_AND_COMPATIBILITY.md`.

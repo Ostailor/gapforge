@@ -2460,6 +2460,23 @@ class CompatibilityAudit:
 
 
 @dataclass(slots=True)
+class CompatibilityAuditV2:
+    id: str
+    target_version: str
+    fixture_results: list[dict[str, Any]] = field(default_factory=list)
+    local_project_results: list[dict[str, Any]] = field(default_factory=list)
+    local_run_results: list[dict[str, Any]] = field(default_factory=list)
+    migration_required_count: int = 0
+    migration_pass_count: int = 0
+    migration_warning_count: int = 0
+    migration_failure_count: int = 0
+    blockers: list[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
+    status: str = "fail"
+    provenance: Provenance = field(default_factory=lambda: Provenance(created_by_skill="compatibility-audit-v2"))
+
+
+@dataclass(slots=True)
 class CLICommandAudit:
     command_count: int = 0
     command_groups: dict[str, list[str]] = field(default_factory=dict)

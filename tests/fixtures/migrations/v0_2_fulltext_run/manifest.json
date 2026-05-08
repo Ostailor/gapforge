@@ -1,0 +1,10 @@
+{
+  "id": "v0_2_fulltext_run",
+  "version": "v0.2",
+  "object_type": "run",
+  "primary_json": "run/state.json",
+  "description": "Run with synthetic full-text metadata and a missing text artifact reference.",
+  "expected_warnings": ["missing full-text artifact is expected in this fixture"],
+  "generated_paths": ["runs/*", "**/artifacts/papers/**/*.pdf"],
+  "safe_to_commit": true
+}

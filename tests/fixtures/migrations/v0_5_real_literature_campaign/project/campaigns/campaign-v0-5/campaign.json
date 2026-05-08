@@ -1,0 +1,19 @@
+{
+  "id": "campaign-v0-5",
+  "project_id": "fixture-v0-5-project",
+  "topic": "synthetic v0.5 real literature topic",
+  "title": "Synthetic v0.5 Real Literature Campaign",
+  "status": "reviewed",
+  "mode": "deterministic",
+  "source_profile": "real_literature_fixture",
+  "budget_id": "small",
+  "created_at": "2024-05-01T00:00:00+00:00",
+  "updated_at": "2024-05-01T00:00:00+00:00",
+  "gapforge_version": "v0.5",
+  "provenance": {
+    "created_by_skill": "fixture-v0.5",
+    "source_ids": ["fixture-v0-5-project"],
+    "timestamp": "2024-05-01T00:00:00+00:00",
+    "reasoning_summary": "Synthetic real-literature campaign fixture."
+  }
+}

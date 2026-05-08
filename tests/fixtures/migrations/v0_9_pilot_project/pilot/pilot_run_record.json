@@ -1,0 +1,20 @@
+{
+  "id": "pilot-v0-9",
+  "pilot_id": "low_fpr_collusion",
+  "project_id": "fixture-v0-9-pilot-project",
+  "status": "refusal_ready",
+  "outcome_type": "correct_refusal",
+  "artifact_paths": {
+    "pilot_report": "pilot_report.md"
+  },
+  "blockers": ["research_refusal: synthetic source coverage blocks novelty claim"],
+  "created_at": "2024-09-01T00:00:00+00:00",
+  "updated_at": "2024-09-01T00:00:00+00:00",
+  "gapforge_version": "v0.9",
+  "provenance": {
+    "created_by_skill": "fixture-v0.9",
+    "source_ids": ["fixture-v0-9-pilot-project"],
+    "timestamp": "2024-09-01T00:00:00+00:00",
+    "reasoning_summary": "Synthetic pilot fixture."
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "id": "campaign-v0-4",
+  "project_id": "fixture-v0-4-project",
+  "topic": "synthetic v0.4 campaign topic",
+  "title": "Synthetic v0.4 Campaign",
+  "status": "planned",
+  "mode": "deterministic",
+  "source_profile": "fixture",
+  "budget_id": "small",
+  "created_at": "2024-04-01T00:00:00+00:00",
+  "updated_at": "2024-04-01T00:00:00+00:00",
+  "gapforge_version": "v0.4",
+  "provenance": {
+    "created_by_skill": "fixture-v0.4",
+    "source_ids": ["fixture-v0-4-project"],
+    "timestamp": "2024-04-01T00:00:00+00:00",
+    "reasoning_summary": "Synthetic campaign fixture."
+  }
+}

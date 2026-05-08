@@ -15,6 +15,7 @@ GapForge v0.4 adds campaign-level Codex/GPT-5.4 actual-run workflows on top of t
 - **v0.7**: real benchmark execution and replication layer. v0.7 distinguishes fixture smoke, local benchmark, full benchmark, failed jobs, underpowered runs, benchmark comparison, replication packages, and real/local public benchmark validation.
 - **v0.8**: manuscript, artifact evaluation, and reviewer-rebuttal layer. v0.8 distinguishes manuscript-ready, submission-ready, and camera-ready while requiring claim, citation, result, artifact, blinding, and human-review traceability.
 - **v0.9**: external pilot and v1-readiness layer. v0.9 runs one real topic through the full workflow and accepts either a defensible direction or an evidence-backed refusal, with migration, CLI, docs, artifact hygiene, external feedback, and v1-readiness gates.
+- **v0.9.1**: migration remediation patch. v0.9.0 was not v1-ready because the migration/backward compatibility audit failed; v0.9.1 adds historical fixtures, versioned migrators, backup snapshots, and compatibility audit v2 without adding research features.
 
 ## Why Not Just Summarization?
 
@@ -373,6 +374,8 @@ The v0.9 docs are:
 - `docs/V0_9_ACCEPTANCE_CRITERIA.md`
 - `docs/V0_9_EXTERNAL_PILOT.md`
 - `docs/V0_9_V1_READINESS.md`
+- `docs/V0_9_1_MIGRATION_REMEDIATION.md`
+- `docs/V1_MIGRATION_AND_COMPATIBILITY.md`
 - `docs/V0_9_FAILURE_MODES.md`
 - `docs/pilots/low_fpr_collusion/PILOT_SPEC.md`
 - `docs/pilots/low_fpr_collusion/ACCEPTANCE_CRITERIA.md`
@@ -385,7 +388,7 @@ Core boundary:
 - no research direction should be forced when novelty, coverage, or feasibility is weak
 - small real runs require run records, logs, result artifacts, analysis, and review before supporting empirical claims
 - external reviewer or pilot feedback is required
-- migration/backward compatibility from v0.8 state must be audited
+- migration/backward compatibility from v0.1 through v0.9 state must be audited with compatibility audit v2
 - CLI/docs usability and artifact hygiene issues found during the pilot must be fixed, scoped, or recorded
 - v1 cannot be claimed until the v1 readiness gate passes
 
@@ -406,13 +409,19 @@ gapforge idea-gate --pilot-id <pilot-id>
 gapforge pilot-outcome --pilot-id <pilot-id>
 gapforge pilot-review --pilot-id <pilot-id> --accept-outcome --reviewer-role external_reviewer
 gapforge pilot-report --pilot-id <pilot-id>
-gapforge compatibility-audit
+gapforge compatibility-audit --v2 --write-report
+gapforge migrate-all --dry-run
+# Review the planned MigrationRecord output before applying.
+gapforge migrate-all --apply
+gapforge migration-report
 gapforge cli-audit --write-report
 gapforge docs-audit --write-report
 gapforge v1-readiness --write-report --json
 ```
 
 If the v0.9 CLI surface is incomplete, the pilot must record the gap as a CLI cleanup blocker rather than pretending the command exists in a validated release path.
+
+v1 readiness must not be claimed from the pilot alone. The v2 compatibility audit must pass, and warning-only generated local artifacts are acceptable only when they are ignored and not curated release evidence.
 
 ### v0.5 Live Literature Campaign Workflow
 

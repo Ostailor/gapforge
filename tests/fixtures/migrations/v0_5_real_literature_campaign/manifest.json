@@ -1,0 +1,10 @@
+{
+  "id": "v0_5_real_literature_campaign",
+  "version": "v0.5",
+  "object_type": "campaign",
+  "primary_json": "project/campaigns/campaign-v0-5/campaign.json",
+  "description": "Real-literature campaign fixture with synthetic review artifact.",
+  "expected_warnings": [],
+  "generated_paths": ["projects/*/campaigns/*", "data/*"],
+  "safe_to_commit": true
+}

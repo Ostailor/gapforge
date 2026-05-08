@@ -7,6 +7,7 @@ import shutil
 from pathlib import Path
 
 from gapforge.config import GapForgeConfig
+from gapforge.migrations import CompatibilityAuditor
 from gapforge.models import IdeaGateAssessment, PilotRunRecord, Provenance, to_plain
 from gapforge.pilots import ExternalPilotReviewManager, PilotStore
 from gapforge.release_gate.v09 import V09ReleaseGateEnforcer
@@ -20,6 +21,7 @@ def main() -> int:
     _write_release_prerequisites(config)
     record = _write_accepted_refusal_pilot(config)
     _write_audits(config)
+    CompatibilityAuditor(config).audit_v2(write=True, include_fixtures=False, include_local=True)
 
     v1_gate = V1ReadinessGate(config)
     v1_result = v1_gate.evaluate()
@@ -127,7 +129,7 @@ def _write_idea_gate(config: GapForgeConfig, pilot_id: str) -> None:
 def _write_audits(config: GapForgeConfig) -> None:
     release_dir = config.data_dir / "release_gate"
     release_dir.mkdir(parents=True, exist_ok=True)
-    for name in ["migration_audit", "cli_audit", "docs_audit", "artifact_hygiene_audit"]:
+    for name in ["cli_audit", "docs_audit", "artifact_hygiene_audit"]:
         (release_dir / f"{name}.json").write_text(
             json.dumps({"passed": True, "status": "pass", "scope": "v9-smoke"}) + "\n",
             encoding="utf-8",

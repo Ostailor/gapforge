@@ -1,0 +1,10 @@
+{
+  "id": "v0_1_run",
+  "version": "v0.1",
+  "object_type": "run",
+  "primary_json": "run/state.json",
+  "description": "Earliest run state with only topic, lists, and provenance.",
+  "expected_warnings": [],
+  "generated_paths": ["runs/*", "data/*"],
+  "safe_to_commit": true
+}

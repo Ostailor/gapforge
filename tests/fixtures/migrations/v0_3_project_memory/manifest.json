@@ -1,0 +1,10 @@
+{
+  "id": "v0_3_project_memory",
+  "version": "v0.3",
+  "object_type": "project",
+  "primary_json": "project/project.json",
+  "description": "Project memory root before several current project fields were required.",
+  "expected_warnings": [],
+  "generated_paths": ["projects/*", "runs/*"],
+  "safe_to_commit": true
+}

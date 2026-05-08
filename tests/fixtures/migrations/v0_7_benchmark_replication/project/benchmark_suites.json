@@ -1,0 +1,10 @@
+[
+  {
+    "id": "suite-v0-7",
+    "name": "Synthetic v0.7 Benchmark Suite",
+    "gapforge_version": "v0.7",
+    "benchmark_ids": ["benchmark-v0-7"],
+    "required_tasks": ["task-v0-7"],
+    "source_profile": "fixture"
+  }
+]

@@ -1,0 +1,33 @@
+{
+  "manuscript": {
+    "id": "manuscript-v0-8",
+    "project_id": "fixture-v0-8-project",
+    "campaign_id": "campaign-v0-8",
+    "direction_id": "direction-v0-8",
+    "workspace_id": "workspace-v0-8",
+    "title": "Synthetic v0.8 Manuscript",
+    "status": "drafted",
+    "created_at": "2024-08-01T00:00:00+00:00",
+    "updated_at": "2024-08-01T00:00:00+00:00"
+  },
+  "sections": [
+    {
+      "id": "section-v0-8-abstract",
+      "manuscript_id": "manuscript-v0-8",
+      "section_type": "abstract",
+      "title": "Abstract",
+      "content_path": "sections/abstract.md",
+      "status": "drafted"
+    }
+  ],
+  "artifact_path": "submission/missing_package.md",
+  "gapforge_version": "v0.8",
+  "provenance": [
+    {
+      "created_by_skill": "fixture-v0.8",
+      "source_ids": ["manuscript-v0-8"],
+      "timestamp": "2024-08-01T00:00:00+00:00",
+      "reasoning_summary": "Synthetic manuscript fixture."
+    }
+  ]
+}

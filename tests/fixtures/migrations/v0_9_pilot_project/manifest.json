@@ -1,0 +1,10 @@
+{
+  "id": "v0_9_pilot_project",
+  "version": "v0.9",
+  "object_type": "pilot",
+  "primary_json": "pilot/pilot_run_record.json",
+  "description": "External pilot fixture with accepted correct refusal metadata.",
+  "expected_warnings": [],
+  "generated_paths": ["data/*", "projects/*"],
+  "safe_to_commit": true
+}
