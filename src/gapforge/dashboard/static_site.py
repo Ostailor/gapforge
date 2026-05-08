@@ -45,6 +45,7 @@ from gapforge.models import (
 from gapforge.project_memory import ProjectMemoryManager
 from gapforge.release_gate.v08 import V08ReleaseGateEnforcer
 from gapforge.release_gate.v2 import V2ReleaseGateEnforcer, render_v2_release_gate_markdown
+from gapforge.release_gate.v21 import V21ReleaseGateEnforcer, render_v21_release_gate_markdown
 from gapforge.state import ResearchStateManager
 
 PAGES = [
@@ -115,6 +116,19 @@ IDEA_PAGES = [
     ("v2_release_gate.html", "v2 Release Gate"),
 ]
 
+SELECTED_IDEA_PAGES = [
+    ("selected_idea.html", "Selected Idea"),
+    ("benchmark_spec.html", "Benchmark Spec"),
+    ("threat_model.html", "Threat Model"),
+    ("trace_dataset.html", "Trace Dataset"),
+    ("monitors.html", "Monitors"),
+    ("sequential_metrics.html", "Sequential Metrics"),
+    ("smoke_results.html", "Smoke Results"),
+    ("reviewer_blockers.html", "Reviewer Blockers"),
+    ("selected_manuscript.html", "Selected Manuscript"),
+    ("v21_release_gate.html", "v2.1 Release Gate"),
+]
+
 
 @dataclass(slots=True)
 class DashboardResult:
@@ -138,7 +152,14 @@ class StaticDashboardBuilder:
         context = _DashboardContext.from_run(state)
         return _write_dashboard(Path(state.run_dir) / "dashboard", context)
 
-    def build_project(self, project_id: str, *, include_manuscripts: bool = False, include_ideas: bool = False) -> DashboardResult:
+    def build_project(
+        self,
+        project_id: str,
+        *,
+        include_manuscripts: bool = False,
+        include_ideas: bool = False,
+        include_selected_idea: bool = False,
+    ) -> DashboardResult:
         program = self.project_manager.load_project(project_id)
         states = [self.state_manager.load_run(run_id) for run_id in program.run_ids]
         context = _DashboardContext.from_project(
@@ -146,6 +167,7 @@ class StaticDashboardBuilder:
             states,
             include_manuscripts=include_manuscripts,
             include_ideas=include_ideas,
+            include_selected_idea=include_selected_idea,
             config=self.config,
         )
         return _write_dashboard(Path(program.project.root_dir) / "dashboard", context)
@@ -189,7 +211,9 @@ class _DashboardContext:
         experiments: dict[str, list[dict[str, Any]]] | None = None,
         manuscripts: dict[str, Any] | None = None,
         ideas: dict[str, Any] | None = None,
+        selected_idea: dict[str, Any] | None = None,
         ideas_enabled: bool = False,
+        selected_idea_enabled: bool = False,
     ) -> None:
         self.title = title
         self.subtitle = subtitle
@@ -212,7 +236,9 @@ class _DashboardContext:
         self.experiments = experiments or _empty_experiment_context()
         self.manuscripts = manuscripts or _empty_manuscript_context()
         self.ideas = ideas or _empty_idea_context()
+        self.selected_idea = selected_idea or _empty_selected_idea_context()
         self.ideas_enabled = ideas_enabled
+        self.selected_idea_enabled = selected_idea_enabled
 
     @classmethod
     def from_run(cls, state: ResearchRunState) -> _DashboardContext:
@@ -247,6 +273,7 @@ class _DashboardContext:
         *,
         include_manuscripts: bool = False,
         include_ideas: bool = False,
+        include_selected_idea: bool = False,
         config: GapForgeConfig | None = None,
     ) -> _DashboardContext:
         coverage_reports = [state.source_coverage for state in states if state.source_coverage is not None]
@@ -288,7 +315,11 @@ class _DashboardContext:
             if include_manuscripts and config is not None
             else _empty_manuscript_context(),
             ideas=_load_idea_context(program.project.id, config) if include_ideas and config is not None else _empty_idea_context(),
+            selected_idea=_load_selected_idea_context(program.project.id, config)
+            if include_selected_idea and config is not None
+            else _empty_selected_idea_context(),
             ideas_enabled=include_ideas,
+            selected_idea_enabled=include_selected_idea,
         )
 
     @classmethod
@@ -420,6 +451,21 @@ def _write_dashboard(root: Path, context: _DashboardContext) -> DashboardResult:
                 "v2_release_gate.html": _render_v2_release_gate_page(context),
             }
         )
+    if context.selected_idea_enabled:
+        pages.update(
+            {
+                "selected_idea.html": _render_selected_idea_page(context),
+                "benchmark_spec.html": _render_selected_benchmark_spec_page(context),
+                "threat_model.html": _render_selected_threat_model_page(context),
+                "trace_dataset.html": _render_selected_trace_dataset_page(context),
+                "monitors.html": _render_selected_monitors_page(context),
+                "sequential_metrics.html": _render_selected_sequential_metrics_page(context),
+                "smoke_results.html": _render_selected_smoke_results_page(context),
+                "reviewer_blockers.html": _render_selected_reviewer_blockers_page(context),
+                "selected_manuscript.html": _render_selected_manuscript_page(context),
+                "v21_release_gate.html": _render_selected_v21_release_gate_page(context),
+            }
+        )
     written = []
     for filename, body in pages.items():
         path = root / filename
@@ -483,7 +529,12 @@ def _page(context: _DashboardContext, current: str, body: str) -> str:
 
 
 def _pages_for_context(context: _DashboardContext) -> list[tuple[str, str]]:
-    return [*PAGES, *IDEA_PAGES] if context.ideas_enabled else PAGES
+    pages = [*PAGES]
+    if context.ideas_enabled:
+        pages.extend(IDEA_PAGES)
+    if context.selected_idea_enabled:
+        pages.extend(SELECTED_IDEA_PAGES)
+    return pages
 
 
 def _render_index(context: _DashboardContext) -> str:
@@ -2473,6 +2524,351 @@ def _render_v2_release_gate_page(context: _DashboardContext) -> str:
     return "<pre>" + _e(render_v2_release_gate_markdown(result)) + "</pre>"
 
 
+def _render_selected_idea_page(context: _DashboardContext) -> str:
+    selected = _dict(context.selected_idea["selected_project"])
+    lock = _dict(context.selected_idea["lock"])
+    snapshot = _dict(context.selected_idea["snapshot"])
+    score = _dict(snapshot.get("selected_score"))
+    return "\n".join(
+        [
+            "<h2>Selected Idea Execution</h2>",
+            '<div class="grid">',
+            _metric("Project status", selected.get("status", "missing")),
+            _metric("Source idea", selected.get("source_idea_id", lock.get("idea_id", "missing"))),
+            _metric("Contribution type", selected.get("target_contribution_type", "missing")),
+            _metric("Locked by", lock.get("locked_by", "missing")),
+            "</div>",
+            "<h2>Canonical Research Target</h2>",
+            _kv_table(
+                [
+                    ("Title", selected.get("title", "not recorded")),
+                    ("Research question", selected.get("research_question", "not recorded")),
+                    ("Contribution statement", selected.get("contribution_statement", "not recorded")),
+                    ("Lock reason", lock.get("lock_reason", "not recorded")),
+                    ("Locked at", lock.get("created_at", selected.get("locked_at", "not recorded"))),
+                    ("Tournament score", score.get("total_score", "not recorded")),
+                    ("Accepted reviews", ", ".join(str(item) for item in _as_list(lock.get("accepted_review_ids"))) or "none recorded"),
+                    ("Blocked mutations", ", ".join(str(item) for item in _as_list(lock.get("blocked_mutations"))) or "none recorded"),
+                ]
+            ),
+            "<h2>Benchmark Maturity</h2>",
+            _selected_maturity_table(context),
+        ]
+    )
+
+
+def _render_selected_benchmark_spec_page(context: _DashboardContext) -> str:
+    spec = _dict(context.selected_idea["spec"])
+    if not spec:
+        return "<p>No selected benchmark specification is available.</p>"
+    return "\n".join(
+        [
+            "<h2>Formal Benchmark Specification</h2>",
+            _kv_table(
+                [
+                    ("Benchmark ID", spec.get("id", "")),
+                    ("Project ID", spec.get("project_id", "")),
+                    ("Title", spec.get("title", "")),
+                    ("Research question", spec.get("research_question", "")),
+                    ("Goal", spec.get("benchmark_goal", "")),
+                    ("Target FPR levels", ", ".join(str(item) for item in _as_list(spec.get("target_fpr_levels")))),
+                    ("Sequential setting", spec.get("sequential_setting", "")),
+                    ("Observability modes", ", ".join(str(item) for item in _as_list(spec.get("observability_modes")))),
+                    ("Required baselines", ", ".join(str(item) for item in _as_list(spec.get("required_baselines")))),
+                ]
+            ),
+            "<h2>Distributions</h2>",
+            _kv_table(
+                [
+                    ("Honest null distribution", _dict(spec.get("honest_agent_distribution")).get("description", "missing")),
+                    ("Honest null required", _dict(spec.get("honest_agent_distribution")).get("required", False)),
+                    ("Collusive alternative distribution", _dict(spec.get("collusive_agent_distribution")).get("description", "missing")),
+                ]
+            ),
+            "<h2>Metrics</h2>",
+            _list([str(item) for item in _as_list(spec.get("metrics"))]),
+            "<h2>Statistical Requirements</h2>",
+            _list([str(item) for item in _as_list(spec.get("statistical_requirements"))]),
+            "<h2>Limitations</h2>",
+            _list([str(item) for item in _as_list(spec.get("limitations"))], css_class="warning"),
+        ]
+    )
+
+
+def _render_selected_threat_model_page(context: _DashboardContext) -> str:
+    threat = _dict(context.selected_idea["threat_model"])
+    task_rows = [
+        [
+            _code(str(task.get("id", ""))),
+            _e(task.get("name", "")),
+            _e(task.get("task_type", "")),
+            _e("; ".join(str(item) for item in _as_list(task.get("labels")))),
+            _e("; ".join(str(item) for item in _as_list(task.get("expected_failure_modes")))),
+        ]
+        for task in _dict_items(context.selected_idea["task_families"])
+    ]
+    if not threat:
+        threat_body = "<p>No selected benchmark threat model is available.</p>"
+    else:
+        threat_body = _kv_table(
+            [
+                ("Threat model ID", threat.get("id", "")),
+                ("Agent count", threat.get("agent_count", "")),
+                ("Communication allowed", threat.get("communication_allowed", "")),
+                ("Adaptive adversary", threat.get("adaptive_adversary", "")),
+                ("Adversary knowledge", threat.get("adversary_knowledge", "")),
+                ("Honest baseline definition", threat.get("honest_baseline_definition", "")),
+                ("Collusive behavior definition", threat.get("collusive_behavior_definition", "")),
+                ("Observable signals", ", ".join(str(item) for item in _as_list(threat.get("observable_signals")))),
+                ("Hidden-channel assumptions", "; ".join(str(item) for item in _as_list(threat.get("hidden_channel_assumptions")))),
+            ]
+        )
+    return "\n".join(
+        [
+            "<h2>Threat Model</h2>",
+            threat_body,
+            "<h2>Task Families</h2>",
+            _table(["ID", "Name", "Type", "Labels", "Expected Failure Modes"], task_rows),
+            "<h2>Limitations</h2>",
+            _list([str(item) for item in _as_list(threat.get("limitations"))], css_class="warning") if threat else _list([]),
+        ]
+    )
+
+
+def _render_selected_trace_dataset_page(context: _DashboardContext) -> str:
+    datasets = _dict_items(context.selected_idea["trace_datasets"])
+    traces = _dict_items(context.selected_idea["trace_records"])
+    rows = [
+        [
+            _code(str(dataset.get("id", ""))),
+            _e(dataset.get("split", "")),
+            str(len(_as_list(dataset.get("trace_ids")))),
+            _e(", ".join(str(item) for item in _as_list(dataset.get("scenario_ids")))),
+            _e(_label_balance_text(_dict(dataset.get("label_balance")))),
+            _e("; ".join(str(item) for item in _as_list(dataset.get("limitations")))),
+        ]
+        for dataset in datasets
+    ]
+    mode_counts = _count_dict(str(trace.get("observability_mode", "")) for trace in traces)
+    type_counts = _count_dict(str(trace.get("trace_type", "")) for trace in traces)
+    return "\n".join(
+        [
+            '<div class="grid">',
+            _metric("Datasets", len(datasets)),
+            _metric("Traces", len(traces)),
+            _metric("Smoke datasets", sum(1 for item in datasets if item.get("split") == "smoke")),
+            _metric("Synthetic traces", sum(1 for item in traces if bool(_dict(item.get("metadata")).get("synthetic")))),
+            "</div>",
+            "<h2>Datasets</h2>",
+            _table(["Dataset", "Split", "Trace Count", "Scenarios", "Label Balance", "Limitations"], rows),
+            "<h2>Observability Modes</h2>",
+            _kv_table(sorted(mode_counts.items())),
+            "<h2>Trace Types</h2>",
+            _kv_table(sorted(type_counts.items())),
+        ]
+    )
+
+
+def _render_selected_monitors_page(context: _DashboardContext) -> str:
+    baselines = _dict_items(context.selected_idea["monitor_baselines"])
+    runs = _dict_items(context.selected_idea["monitor_runs"])
+    run_counts = _count_dict(str(run.get("monitor_id", "")) for run in runs)
+    rows = [
+        [
+            _code(str(baseline.get("id", ""))),
+            _e(baseline.get("name", "")),
+            _e(baseline.get("baseline_type", "")),
+            _e(baseline.get("input_mode", "")),
+            _e(str(_dict(baseline.get("parameters")).get("required", False))),
+            str(run_counts.get(str(baseline.get("id", "")), 0)),
+            _e("; ".join(str(item) for item in _as_list(baseline.get("limitations")))),
+        ]
+        for baseline in baselines
+    ]
+    run_rows = [
+        [
+            _code(str(run.get("id", ""))),
+            _code(str(run.get("monitor_id", ""))),
+            _code(str(run.get("dataset_id", ""))),
+            str(run.get("prediction_count", 0)),
+            str(run.get("alert_count", 0)),
+            _e("; ".join(str(item) for item in _as_list(run.get("limitations")))),
+        ]
+        for run in runs
+    ]
+    return "\n".join(
+        [
+            '<div class="grid">',
+            _metric("Baselines", len(baselines)),
+            _metric("Required baselines", sum(1 for item in baselines if _dict(item.get("parameters")).get("required", False))),
+            _metric("Monitor runs", len(runs)),
+            "</div>",
+            "<h2>Baseline Registry</h2>",
+            _table(["ID", "Name", "Type", "Input Mode", "Required", "Run Count", "Limitations"], rows),
+            "<h2>Smoke Predictions</h2>",
+            _table(["Run", "Monitor", "Dataset", "Predictions", "Alerts", "Limitations"], run_rows),
+        ]
+    )
+
+
+def _render_selected_sequential_metrics_page(context: _DashboardContext) -> str:
+    plan = _dict(context.selected_idea["metric_plan"])
+    results = _dict_items(context.selected_idea["metric_results"])
+    result_rows = [
+        [
+            _code(str(result.get("metric_name", ""))),
+            _e(result.get("run_type", "")),
+            f"{float(result.get('value', 0.0)):.6g}",
+            str(result.get("sample_size", 0)),
+            str(result.get("negative_trace_count", 0)),
+            str(result.get("positive_trace_count", 0)),
+            _e("; ".join(str(item) for item in _as_list(result.get("limitations")))),
+        ]
+        for result in results
+    ]
+    return "\n".join(
+        [
+            "<h2>Sequential Metric Plan</h2>",
+            _kv_table(
+                [
+                    ("Plan ID", plan.get("id", "missing")),
+                    ("Target alpha levels", ", ".join(str(item) for item in _as_list(plan.get("target_alpha_levels")))),
+                    ("Stopping rule", plan.get("stopping_rule", "missing")),
+                    ("Required negative counts", _label_balance_text(_dict(plan.get("required_negative_counts")))),
+                ]
+            ),
+            "<h2>Power and Multiple-Testing Notes</h2>",
+            _list([str(item) for item in [*_as_list(plan.get("multiple_testing_notes")), *_as_list(plan.get("power_notes"))]]),
+            "<h2>Metric Results</h2>",
+            _table(["Metric", "Run Type", "Value", "Sample", "Negative Traces", "Positive Traces", "Limitations"], result_rows),
+        ]
+    )
+
+
+def _render_selected_smoke_results_page(context: _DashboardContext) -> str:
+    summaries = _dict_items(context.selected_idea["result_summaries"])
+    run_results = _dict_items(context.selected_idea["run_results"])
+    executions = _dict_items(context.selected_idea["executions"])
+    run_rows = [
+        [
+            _code(str(result.get("id", ""))),
+            _e(result.get("run_type", "")),
+            _code(str(result.get("dataset_id", ""))),
+            str(result.get("metric_result_count", "")),
+            _e(result.get("smoke_label", "")),
+            _e("; ".join(str(item) for item in _as_list(result.get("warnings")))),
+        ]
+        for result in run_results
+    ]
+    execution_rows = [
+        [
+            _code(str(item.get("id", ""))),
+            _code(str(item.get("manifest_id", ""))),
+            _e(item.get("status", "")),
+            str(item.get("returncode", "")),
+            _e("; ".join(str(path) for path in _as_list(item.get("result_paths")))),
+        ]
+        for item in executions
+    ]
+    return "\n".join(
+        [
+            "<h2>Smoke / Pilot / Main Status</h2>",
+            _selected_maturity_table(context),
+            "<h2>Run Results</h2>",
+            _table(["Run", "Type", "Dataset", "Metric Results", "Smoke Label", "Warnings"], run_rows),
+            "<h2>Executions</h2>",
+            _table(["Execution", "Manifest", "Status", "Return Code", "Result Paths"], execution_rows),
+            "<h2>Parsed Result Summaries</h2>",
+            _table(
+                ["Run Type", "Dataset", "Trace Count", "Artifact Backed", "Warnings/Limitations"],
+                [
+                    [
+                        _e(summary.get("run_type", summary.get("split", ""))),
+                        _code(str(summary.get("dataset_id", ""))),
+                        str(summary.get("trace_count", "")),
+                        _e(summary.get("artifact_backed", "")),
+                        _e("; ".join(str(item) for item in [*_as_list(summary.get("warnings")), *_as_list(summary.get("limitations"))])),
+                    ]
+                    for summary in summaries
+                ],
+            ),
+        ]
+    )
+
+
+def _render_selected_reviewer_blockers_page(context: _DashboardContext) -> str:
+    panel = _dict(context.selected_idea["review_panel"])
+    reports = _dict_items(panel.get("reviewer_reports"))
+    rows = [
+        [
+            _code(str(report.get("reviewer_id", ""))),
+            _e(report.get("role", "")),
+            str(report.get("score", "")),
+            _e(report.get("confidence", "")),
+            _e("; ".join(str(item) for item in _as_list(report.get("weaknesses")))),
+            _e("; ".join(str(item) for item in _as_list(report.get("fatal_flaws")))),
+            _e("; ".join(str(item) for item in _as_list(report.get("required_fixes")))),
+        ]
+        for report in reports
+    ]
+    return "\n".join(
+        [
+            '<div class="grid">',
+            _metric("Publishability", panel.get("publishability_assessment", "missing")),
+            _metric("Reviewer risk", panel.get("reviewer_risk_score", "missing")),
+            _metric("Fatal blockers", len(_as_list(panel.get("fatal_blockers")))),
+            _metric("Required fixes", len(_as_list(panel.get("required_fixes")))),
+            "</div>",
+            "<h2>Fatal Blockers</h2>",
+            _list([str(item) for item in _as_list(panel.get("fatal_blockers"))], css_class="warning"),
+            "<h2>Required Fixes</h2>",
+            _list([str(item) for item in _as_list(panel.get("required_fixes"))]),
+            "<h2>Reviewer Reports</h2>",
+            _table(["Reviewer", "Role", "Score", "Confidence", "Weaknesses", "Fatal Flaws", "Required Fixes"], rows),
+        ]
+    )
+
+
+def _render_selected_manuscript_page(context: _DashboardContext) -> str:
+    manuscript = _dict(context.selected_idea["manuscript"])
+    package = _dict(context.selected_idea["paper_package"])
+    sections = _dict(manuscript.get("sections"))
+    return "\n".join(
+        [
+            "<h2>Selected Manuscript Package</h2>",
+            _kv_table(
+                [
+                    ("Manuscript ID", manuscript.get("id", "missing")),
+                    ("Title", manuscript.get("title", "missing")),
+                    ("Maturity statement", manuscript.get("maturity_statement", "missing")),
+                    ("Smoke labels", ", ".join(str(item) for item in _as_list(manuscript.get("smoke_labels")))),
+                    ("Paper package", package.get("id", "missing")),
+                    ("Package readiness", package.get("readiness", "missing")),
+                ]
+            ),
+            "<h2>Reviewer Blockers Carried Into Manuscript</h2>",
+            _list([str(item) for item in _as_list(manuscript.get("reviewer_blockers"))], css_class="warning"),
+            "<h2>Prominent Limitations</h2>",
+            _list([str(item) for item in _as_list(manuscript.get("limitations"))], css_class="warning"),
+            "<h2>Sections</h2>",
+            _table(
+                ["Section", "Preview"],
+                [[_e(name), _e(str(text)[:260])] for name, text in sections.items()],
+            ),
+        ]
+    )
+
+
+def _render_selected_v21_release_gate_page(context: _DashboardContext) -> str:
+    result = _dict(context.selected_idea["v21_release_gate"])
+    markdown = str(context.selected_idea.get("v21_release_gate_markdown") or "")
+    if markdown:
+        return "<pre>" + _e(markdown) + "</pre>"
+    if not result:
+        return "<p>No v2.1 release gate report is available.</p>"
+    return "<pre>" + _e(json.dumps(result, indent=2)) + "</pre>"
+
+
 def _run_artifact_links(state: ResearchRunState) -> list[tuple[str, str]]:
     names = [
         "run_report.md",
@@ -2608,6 +3004,88 @@ def _empty_idea_context() -> dict[str, Any]:
         "metrics": None,
         "release_gate": None,
     }
+
+
+def _empty_selected_idea_context() -> dict[str, Any]:
+    return {
+        "selected_project": {},
+        "lock": {},
+        "snapshot": {},
+        "spec": {},
+        "threat_model": {},
+        "task_families": [],
+        "trace_datasets": [],
+        "trace_records": [],
+        "scenarios": [],
+        "monitor_baselines": [],
+        "monitor_runs": [],
+        "metric_plan": {},
+        "metric_results": [],
+        "workspaces": [],
+        "manifests": [],
+        "executions": [],
+        "run_results": [],
+        "result_summaries": [],
+        "review_panel": {},
+        "fix_list": "",
+        "manuscript": {},
+        "paper_package": {},
+        "v21_release_gate": {},
+        "v21_release_gate_markdown": "",
+    }
+
+
+def _load_selected_idea_context(project_id: str, config: GapForgeConfig) -> dict[str, Any]:
+    context = _empty_selected_idea_context()
+    try:
+        program = ProjectMemoryManager(config).load_project(project_id)
+    except (FileNotFoundError, json.JSONDecodeError, TypeError, ValueError):
+        return context
+    project_dir = Path(program.project.root_dir)
+    ideas_dir = project_dir / "ideas"
+    benchmark_dir = project_dir / "selected_benchmark"
+    context["selected_project"] = _read_json_safely(ideas_dir / "selected_idea_project.json")
+    context["lock"] = _read_json_safely(ideas_dir / "selected_idea_lock.json")
+    context["snapshot"] = _read_json_safely(ideas_dir / "selected_idea_snapshot.json")
+    context["spec"] = _read_json_safely(benchmark_dir / "spec.json")
+    context["threat_model"] = _read_json_safely(benchmark_dir / "threat_model.json")
+    context["task_families"] = _read_json_list_safely(benchmark_dir / "task_families.json")
+    context["monitor_baselines"] = _read_json_list_safely(benchmark_dir / "monitor_baselines.json")
+    context["metric_plan"] = _read_json_safely(benchmark_dir / "metric_plan.json")
+    context["review_panel"] = _read_json_safely(benchmark_dir / "reviews" / "selected_benchmark_review_panel.json")
+    context["fix_list"] = _read_text_safely(benchmark_dir / "reviews" / "fix_list.md")
+    context["manuscript"] = _read_json_safely(benchmark_dir / "manuscript" / "selected_benchmark_manuscript.json")
+    context["paper_package"] = _read_json_safely(benchmark_dir / "paper_package" / "paper_package.json")
+    for dataset_dir in sorted((benchmark_dir / "trace_datasets").glob("*")):
+        if not dataset_dir.is_dir():
+            continue
+        _append_json_safely(context["trace_datasets"], dataset_dir / "dataset.json")
+        context["trace_records"].extend(_read_json_list_safely(dataset_dir / "traces.json"))
+        context["scenarios"].extend(_read_json_list_safely(dataset_dir / "scenarios.json"))
+        context["metric_results"].extend(_read_json_list_safely(dataset_dir / "sequential_metrics.json"))
+        for run_path in sorted((dataset_dir / "monitor_predictions").glob("*/run.json")):
+            _append_json_safely(context["monitor_runs"], run_path)
+    workspace_root = project_dir / "experiment_workspaces"
+    for workspace_dir in sorted(workspace_root.glob("*")):
+        selected_config = _read_json_safely(workspace_dir / "configs" / "selected_benchmark_workspace.json")
+        if not selected_config:
+            continue
+        workspace = _read_json_safely(workspace_dir / "workspace.json")
+        if workspace:
+            context["workspaces"].append({**workspace, "selected_benchmark_config": selected_config})
+        context["manifests"].extend(_read_json_files_safely(workspace_dir / "manifests", "*.json"))
+        context["executions"].extend(_read_json_files_safely(workspace_dir / "runs", "*.json"))
+        context["run_results"].extend(_read_json_files_safely(workspace_dir / "results", "*_run_result.json"))
+        context["result_summaries"].extend(_read_json_files_safely(workspace_dir / "results", "*_summary.json"))
+        context["result_summaries"].extend(_read_json_files_safely(workspace_dir / "reports", "result_summary_*.json"))
+    try:
+        result = V21ReleaseGateEnforcer(config).evaluate()
+        if not result.project_id or result.project_id == project_id:
+            context["v21_release_gate"] = result.to_dict()
+            context["v21_release_gate_markdown"] = render_v21_release_gate_markdown(result)
+    except (FileNotFoundError, json.JSONDecodeError, TypeError, ValueError):
+        context["v21_release_gate"] = _read_json_safely(config.data_dir / "release_gate" / "v21_release_gate_latest.json")
+    return context
 
 
 def _load_idea_context(project_id: str, config: GapForgeConfig) -> dict[str, Any]:
@@ -2915,6 +3393,49 @@ def _read_json_if_exists(path: Path) -> dict[str, Any]:
         return {}
     raw = json.loads(path.read_text(encoding="utf-8"))
     return raw if isinstance(raw, dict) else {}
+
+
+def _read_json_safely(path: Path) -> dict[str, Any]:
+    try:
+        return _read_json_if_exists(path)
+    except (OSError, json.JSONDecodeError, TypeError, ValueError):
+        return {}
+
+
+def _read_json_list_safely(path: Path) -> list[dict[str, Any]]:
+    try:
+        raw = _read_json_value_if_exists(path)
+    except (OSError, json.JSONDecodeError, TypeError, ValueError):
+        return []
+    if isinstance(raw, list):
+        return [item for item in raw if isinstance(item, dict)]
+    if isinstance(raw, dict):
+        return [raw]
+    return []
+
+
+def _read_json_files_safely(root: Path, pattern: str) -> list[dict[str, Any]]:
+    if not root.exists():
+        return []
+    records: list[dict[str, Any]] = []
+    for path in sorted(root.glob(pattern)):
+        _append_json_safely(records, path)
+    return records
+
+
+def _append_json_safely(records: list[dict[str, Any]], path: Path) -> None:
+    record = _read_json_safely(path)
+    if record:
+        records.append(record)
+
+
+def _read_text_safely(path: Path) -> str:
+    if not path.exists():
+        return ""
+    try:
+        return path.read_text(encoding="utf-8")
+    except OSError:
+        return ""
 
 
 def _read_json_value_if_exists(path: Path) -> Any:
@@ -3239,6 +3760,79 @@ def _table(headers: list[str], rows: list[list[str]]) -> str:
     return f"<table><thead><tr>{header_html}</tr></thead><tbody>{''.join(row_html)}</tbody></table>"
 
 
+def _kv_table(rows: list[tuple[object, object]]) -> str:
+    return _table(["Field", "Value"], [[_e(key), _e(value)] for key, value in rows])
+
+
+def _label_balance_text(values: dict[str, Any]) -> str:
+    return ", ".join(f"{key}: {value}" for key, value in sorted(values.items())) or "none recorded"
+
+
+def _count_dict(items: Any) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for item in items:
+        if not item:
+            continue
+        counts[item] = counts.get(item, 0) + 1
+    return counts
+
+
+def _selected_maturity_table(context: _DashboardContext) -> str:
+    selected = context.selected_idea
+    spec = _dict(selected["spec"])
+    datasets = _dict_items(selected["trace_datasets"])
+    run_results = _dict_items(selected["run_results"])
+    review_panel = _dict(selected["review_panel"])
+    manuscript = _dict(selected["manuscript"])
+    paper_package = _dict(selected["paper_package"])
+    gate = _dict(selected["v21_release_gate"])
+    statuses = [
+        (
+            "Selected idea",
+            "locked" if _dict(selected["lock"]) and _dict(selected["selected_project"]) else "missing",
+            "Locked v2 idea is canonical.",
+        ),
+        ("Benchmark spec", "ready" if spec else "missing", "Formal spec, task families, and distributions."),
+        (
+            "Smoke",
+            "complete" if any(item.get("run_type") == "smoke" for item in run_results) else "not run",
+            "Synthetic, underpowered wiring check only.",
+        ),
+        (
+            "Pilot",
+            "configured" if any(item.get("split") == "pilot" for item in datasets) else "not run",
+            "Needs larger synthetic or curated fixture sample before stronger analysis.",
+        ),
+        ("Main", "not started", "No final scientific or deployment-validity result claimed."),
+        (
+            "Reviewer",
+            str(review_panel.get("publishability_assessment", "missing")),
+            _reviewer_status_note(review_panel),
+        ),
+        (
+            "Manuscript",
+            "drafted" if manuscript and paper_package else "missing",
+            "Manuscript package must preserve smoke and limitation labels.",
+        ),
+        ("v2.1 gate", str(gate.get("status", "not evaluated")), "Release gate inspects fake results and overclaims."),
+    ]
+    return _table(["Level", "Status", "Meaning"], [[_e(level), _e(status), _e(note)] for level, status, note in statuses])
+
+
+def _reviewer_status_note(review_panel: dict[str, Any]) -> str:
+    fatal_count = len(_as_list(review_panel.get("fatal_blockers")))
+    fix_count = len(_as_list(review_panel.get("required_fixes")))
+    return f"{fatal_count} fatal blockers; {fix_count} fixes."
+
+
+def _selected_metric_report_line(item: dict[str, Any]) -> str:
+    metric_name = item.get("metric_name", "")
+    value = item.get("value", "")
+    run_type = item.get("run_type", "")
+    sample_size = item.get("sample_size", "")
+    return f"- `{metric_name}`: value {value}, run `{run_type}`, sample {sample_size}"
+
+
 def _list(items: list[str], *, css_class: str = "") -> str:
     if not items:
         return "<p>None recorded.</p>"
@@ -3268,3 +3862,142 @@ def dashboard_manifest(result: DashboardResult) -> str:
         },
         indent=2,
     )
+
+
+def write_selected_idea_full_report(config: GapForgeConfig, project_id: str) -> Path:
+    """Write the selected-idea execution report next to selected-benchmark artifacts."""
+
+    program = ProjectMemoryManager(config).load_project(project_id)
+    report = render_selected_idea_full_report(config, project_id)
+    path = Path(program.project.root_dir) / "selected_benchmark" / "reports" / "selected_idea_full_report.md"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(report, encoding="utf-8")
+    return path
+
+
+def render_selected_idea_full_report(config: GapForgeConfig, project_id: str) -> str:
+    context = _load_selected_idea_context(project_id, config)
+    selected = _dict(context["selected_project"])
+    lock = _dict(context["lock"])
+    spec = _dict(context["spec"])
+    threat = _dict(context["threat_model"])
+    datasets = _dict_items(context["trace_datasets"])
+    baselines = _dict_items(context["monitor_baselines"])
+    metrics = _dict_items(context["metric_results"])
+    runs = _dict_items(context["run_results"])
+    panel = _dict(context["review_panel"])
+    manuscript = _dict(context["manuscript"])
+    gate = _dict(context["v21_release_gate"])
+    lines = [
+        "# Selected Idea Full Report",
+        "",
+        "## Selected Idea",
+        "",
+        f"- Project ID: `{project_id}`",
+        f"- Source idea ID: `{selected.get('source_idea_id', lock.get('idea_id', 'missing'))}`",
+        f"- Title: {selected.get('title', 'missing')}",
+        f"- Status: `{selected.get('status', 'missing')}`",
+        f"- Research question: {selected.get('research_question', 'missing')}",
+        f"- Lock reason: {lock.get('lock_reason', 'missing')}",
+        "",
+        "## Benchmark Maturity",
+        "",
+    ]
+    lines.extend(_selected_maturity_markdown(context))
+    lines.extend(
+        [
+            "",
+            "## Benchmark Specification",
+            "",
+            f"- Benchmark ID: `{spec.get('id', 'missing')}`",
+            f"- Goal: {spec.get('benchmark_goal', 'missing')}",
+            f"- Observability modes: {', '.join(str(item) for item in _as_list(spec.get('observability_modes'))) or 'missing'}",
+            f"- Honest null required: {_dict(spec.get('honest_agent_distribution')).get('required', False)}",
+            f"- Target FPR levels: {', '.join(str(item) for item in _as_list(spec.get('target_fpr_levels'))) or 'missing'}",
+            "",
+            "## Threat Model",
+            "",
+            f"- Threat model ID: `{threat.get('id', 'missing')}`",
+            f"- Honest baseline definition: {threat.get('honest_baseline_definition', 'missing')}",
+            f"- Collusive behavior definition: {threat.get('collusive_behavior_definition', 'missing')}",
+            f"- Observable signals: {', '.join(str(item) for item in _as_list(threat.get('observable_signals'))) or 'missing'}",
+            "",
+            "## Trace Datasets",
+            "",
+        ]
+    )
+    lines.extend(
+        [
+            f"- `{dataset.get('id', '')}`: split `{dataset.get('split', '')}`, traces {len(_as_list(dataset.get('trace_ids')))}, "
+            f"labels {_label_balance_text(_dict(dataset.get('label_balance')))}"
+            for dataset in datasets
+        ]
+        or ["- none"]
+    )
+    lines.extend(["", "## Monitors", ""])
+    lines.extend(
+        [f"- `{item.get('id', '')}`: {item.get('name', '')} ({item.get('baseline_type', '')})" for item in baselines] or ["- none"]
+    )
+    lines.extend(["", "## Sequential Metrics", ""])
+    lines.extend([_selected_metric_report_line(item) for item in metrics] or ["- none"])
+    lines.extend(["", "## Smoke / Pilot / Main Status", ""])
+    lines.extend(
+        [f"- `{item.get('id', '')}`: {item.get('run_type', '')}, smoke label `{item.get('smoke_label', '')}`" for item in runs]
+        or ["- none"]
+    )
+    lines.extend(
+        [
+            "- Smoke outputs are synthetic, underpowered, and cannot support strong low-FPR claims.",
+            "- Pilot status is separate from smoke status.",
+            "- Main benchmark status is not started unless a later main run is explicitly recorded.",
+            "",
+            "## Reviewer Blockers",
+            "",
+        ]
+    )
+    lines.extend([f"- FATAL: {item}" for item in _as_list(panel.get("fatal_blockers"))] or ["- No fatal blockers recorded."])
+    lines.extend([f"- FIX: {item}" for item in _as_list(panel.get("required_fixes"))])
+    lines.extend(
+        [
+            "",
+            "## Manuscript Package",
+            "",
+            f"- Manuscript ID: `{manuscript.get('id', 'missing')}`",
+            f"- Maturity: {manuscript.get('maturity_statement', 'missing')}",
+            f"- Smoke labels: {', '.join(str(item) for item in _as_list(manuscript.get('smoke_labels'))) or 'missing'}",
+            "",
+            "## v2.1 Release Gate",
+            "",
+            f"- Status: `{gate.get('status', 'not evaluated')}`",
+            f"- Recommended next version: `{gate.get('recommended_next_version', 'unknown')}`",
+        ]
+    )
+    blockers = _as_list(gate.get("blockers"))
+    warnings = _as_list(gate.get("warnings"))
+    lines.extend(["", "### Gate Blockers", ""])
+    lines.extend([f"- {item}" for item in blockers] or ["- none"])
+    lines.extend(["", "### Gate Warnings", ""])
+    lines.extend([f"- {item}" for item in warnings] or ["- none"])
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def _selected_maturity_markdown(context: dict[str, Any]) -> list[str]:
+    spec = _dict(context["spec"])
+    lock = _dict(context["lock"])
+    selected_project = _dict(context["selected_project"])
+    datasets = _dict_items(context["trace_datasets"])
+    runs = _dict_items(context["run_results"])
+    panel = _dict(context["review_panel"])
+    manuscript = _dict(context["manuscript"])
+    package = _dict(context["paper_package"])
+    gate = _dict(context["v21_release_gate"])
+    return [
+        f"- Selected idea: {'locked' if lock and selected_project else 'missing'}",
+        f"- Benchmark spec: {'ready' if spec else 'missing'}",
+        f"- Smoke: {'complete' if any(item.get('run_type') == 'smoke' for item in runs) else 'not run'}",
+        f"- Pilot: {'configured' if any(item.get('split') == 'pilot' for item in datasets) else 'not run'}",
+        "- Main: not started",
+        f"- Reviewer: {panel.get('publishability_assessment', 'missing')}",
+        f"- Manuscript: {'drafted' if manuscript and package else 'missing'}",
+        f"- v2.1 release gate: {gate.get('status', 'not evaluated')}",
+    ]

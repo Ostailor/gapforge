@@ -31,6 +31,15 @@ v0.4 campaign skills:
 - `campaign-reviewer-panel`
 - `real-run-acceptance`
 
+v2.1 selected benchmark skills:
+
+- `selected-idea-project`
+- `sequential-specificity-benchmark`
+- `trace-generator`
+- `sequential-audit-metrics`
+- `monitor-baselines`
+- `selected-benchmark-review`
+
 Shared rules:
 
 - Do not hallucinate citations, results, venues, datasets, metrics, quotes, or bibliography entries.
@@ -46,3 +55,4 @@ Shared rules:
 - Distinguish deterministic, fake-agent, task-pack/manual-handoff, and direct Codex modes.
 - Never count fake-agent outputs as actual Codex/GPT-5.4 acceptance.
 - Never import agent output before validation.
+- For v2.1, remember: synthetic smoke benchmark is not a final research result; low-FPR claims require power; every result claim must be artifact-backed; no fake results.

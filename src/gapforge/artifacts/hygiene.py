@@ -28,6 +28,7 @@ REQUIRED_GITIGNORE_PATTERNS = {
     "**/llm_transcripts.md": "Markdown LLM transcripts",
     "**/dashboard/": "generated dashboards",
     "**/safe_bundles/": "safe bundle exports",
+    "docs/releases/*-latest.md": "generated release-gate report mirrors",
     ".gapforge_cache/": "source and retrieval cache",
     "artifacts/papers/": "downloaded paper artifacts",
 }

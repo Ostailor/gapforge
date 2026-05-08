@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from gapforge.models import ExperimentExecutionRecord, ExperimentRunManifest, ExperimentWorkspace, Provenance
-from gapforge.state import utc_now_iso
+from gapforge.state import slugify, utc_now_iso
 
 
 def build_execution_record(
@@ -25,7 +25,7 @@ def build_execution_record(
     started_at = now if status in {"running", "complete", "failed", "skipped"} else ""
     completed_at = now if status in {"complete", "failed", "skipped"} else ""
     return ExperimentExecutionRecord(
-        id=f"execution-{manifest.id}-{sequence}",
+        id=f"execution-{slugify(workspace.id)}-{manifest.id}-{sequence}",
         workspace_id=workspace.id,
         manifest_id=manifest.id,
         status=status,

@@ -127,6 +127,14 @@ class EvalScores:
     human_feedback_integration: float | None = None
     research_agenda_quality: float | None = None
     idea_yield_gate_correctness: float | None = None
+    benchmark_spec_completeness: float | None = None
+    threat_model_quality: float | None = None
+    trace_generator_validity: float | None = None
+    baseline_suite_completeness: float | None = None
+    sequential_metric_correctness: float | None = None
+    underpowered_claim_rejection: float | None = None
+    reviewer_blocker_quality: float | None = None
+    selected_benchmark_release_gate_correctness: float | None = None
 
     def overall(self) -> float:
         positive = [
@@ -287,6 +295,22 @@ class EvalScores:
             self.human_feedback_integration,
             self.research_agenda_quality,
             self.idea_yield_gate_correctness,
+        ]
+        present = [value for value in values if value is not None]
+        if not present:
+            return None
+        return round(sum(present) / len(present), 3)
+
+    def v21_overall(self) -> float | None:
+        values = [
+            self.benchmark_spec_completeness,
+            self.threat_model_quality,
+            self.trace_generator_validity,
+            self.baseline_suite_completeness,
+            self.sequential_metric_correctness,
+            self.underpowered_claim_rejection,
+            self.reviewer_blocker_quality,
+            self.selected_benchmark_release_gate_correctness,
         ]
         present = [value for value in values if value is not None]
         if not present:
@@ -1768,6 +1792,180 @@ def idea_yield_gate_correctness(fixture: dict[str, object]) -> float:
     return round(sum(1 for item in checks if item) / len(checks), 3)
 
 
+def benchmark_spec_completeness(fixture: dict[str, object]) -> float:
+    spec = _dict(fixture.get("benchmark_spec"))
+    if not bool(spec.get("exists")):
+        return 0.0
+    modes = {str(item) for item in _list(spec.get("observability_modes"))}
+    checks = [
+        bool(spec.get("id")),
+        bool(spec.get("project_id")),
+        bool(spec.get("title")),
+        "low false-positive" in str(spec.get("research_question", "")).lower()
+        or "low-fpr" in str(spec.get("research_question", "")).lower(),
+        bool(spec.get("benchmark_goal")),
+        len(_list(spec.get("target_fpr_levels"))) >= 2,
+        bool(spec.get("sequential_setting")),
+        {"transcript-visible", "action-only"} <= modes,
+        bool(_dict(spec.get("honest_agent_distribution")).get("required")),
+        bool(_dict(spec.get("collusive_agent_distribution"))),
+        bool(_list(spec.get("task_families"))),
+        bool(_list(spec.get("monitor_inputs"))),
+        bool(_list(spec.get("monitor_outputs"))),
+        bool(_list(spec.get("required_baselines"))),
+        bool(_list(spec.get("metrics"))),
+        bool(_list(spec.get("statistical_requirements"))),
+        bool(_list(spec.get("limitations"))),
+    ]
+    return round(sum(1 for item in checks if item) / len(checks), 3)
+
+
+def threat_model_quality(fixture: dict[str, object]) -> float:
+    threat = _dict(fixture.get("threat_model"))
+    if not bool(threat.get("exists")):
+        return 0.0
+    checks = [
+        _int(threat.get("agent_count")) >= 2,
+        threat.get("communication_allowed") in {True, False},
+        bool(threat.get("hidden_channel_assumptions")),
+        bool(_list(threat.get("observable_signals"))),
+        bool(threat.get("adversary_knowledge")),
+        threat.get("adaptive_adversary") in {True, False},
+        bool(threat.get("honest_baseline_definition")),
+        bool(threat.get("collusive_behavior_definition")),
+        bool(_list(threat.get("limitations"))),
+    ]
+    return round(sum(1 for item in checks if item) / len(checks), 3)
+
+
+def trace_generator_validity(fixture: dict[str, object]) -> float:
+    traces = _dict(fixture.get("trace_generator"))
+    if not bool(traces.get("exists")):
+        return 0.0
+    modes = {str(item) for item in _list(traces.get("observability_modes"))}
+    checks = [
+        bool(traces.get("synthetic_label")),
+        _int(traces.get("honest_trace_count")) > 0,
+        _int(traces.get("collusive_trace_count")) > 0,
+        {"transcript-visible", "action-only"} <= modes,
+        bool(traces.get("honest_hard_negatives")),
+        bool(traces.get("explicit_collusion_labels")),
+        bool(traces.get("ambiguous_excluded_from_main_metric")),
+        bool(_list(traces.get("limitations"))),
+        not bool(traces.get("claims_real_deployment_validity")),
+    ]
+    return round(sum(1 for item in checks if item) / len(checks), 3)
+
+
+def baseline_suite_completeness(fixture: dict[str, object]) -> float:
+    suite = _dict(fixture.get("baseline_suite"))
+    if not bool(suite.get("exists")):
+        return 0.0
+    baseline_types = {str(item) for item in _list(suite.get("baseline_types"))}
+    required = {
+        "random_detector",
+        "frequency_threshold_detector",
+        "lexical_overlap_detector",
+        "repeated_action_detector",
+        "statistical_anomaly_detector",
+    }
+    required_score = len(required & baseline_types) / len(required)
+    checks = [
+        bool(suite.get("random_runs")),
+        bool(suite.get("threshold_runs")),
+        bool(suite.get("action_only_mode_works")),
+        bool(suite.get("transcript_visible_mode_works")),
+        bool(suite.get("llm_judge_disabled_in_ci")),
+        bool(suite.get("oracle_analysis_only")),
+        bool(suite.get("missing_baselines_block_readiness")),
+    ]
+    return round((0.55 * required_score) + (0.45 * sum(1 for item in checks if item) / len(checks)), 3)
+
+
+def sequential_metric_correctness(fixture: dict[str, object]) -> float:
+    metrics = _dict(fixture.get("sequential_metrics"))
+    if not bool(metrics.get("plan_exists")):
+        return 0.0
+    present = {str(item) for item in _list(metrics.get("metric_names"))}
+    required = {
+        "per_step_false_positive_rate",
+        "per_episode_false_positive_rate",
+        "family_wise_false_alarm_probability",
+        "time_to_detection",
+        "detection_delay",
+        "true_positive_rate_at_fixed_false_positive_budget",
+        "specificity_at_alpha",
+        "sequential_calibration_error",
+        "abstention_uncertain_rate",
+        "zero_false_positive_upper_bound",
+    }
+    metric_score = len(required & present) / len(required)
+    checks = [
+        bool(metrics.get("computed_from_predictions")),
+        bool(metrics.get("exact_binomial_ci")),
+        bool(metrics.get("zero_false_positive_upper_bound")),
+        bool(metrics.get("sequential_multiple_testing_warning")),
+        bool(metrics.get("required_negative_counts")),
+        bool(metrics.get("underpowered_warning")),
+    ]
+    return round((0.55 * metric_score) + (0.45 * sum(1 for item in checks if item) / len(checks)), 3)
+
+
+def underpowered_claim_rejection(fixture: dict[str, object]) -> float:
+    claims = _dict(fixture.get("claims"))
+    if not bool(claims.get("underpowered_smoke")):
+        return 1.0 if not bool(claims.get("strong_low_fpr_claim_from_smoke")) else 0.0
+    checks = [
+        bool(claims.get("underpowered_warning")),
+        bool(claims.get("smoke_labels_visible")),
+        bool(claims.get("synthetic_limitations_visible")),
+        not bool(claims.get("deployment_validity_overclaim")),
+    ]
+    if bool(claims.get("strong_low_fpr_claim_from_smoke")):
+        checks.append(bool(claims.get("strong_low_fpr_claim_blocked")))
+    else:
+        checks.append(True)
+    if bool(claims.get("fake_result_present")):
+        checks.append(bool(claims.get("fake_result_rejected")))
+    else:
+        checks.append(True)
+    return round(sum(1 for item in checks if item) / len(checks), 3)
+
+
+def reviewer_blocker_quality(fixture: dict[str, object]) -> float:
+    panel = _dict(fixture.get("reviewer_panel"))
+    if not bool(panel.get("generated")):
+        return 0.0
+    roles = _list(panel.get("roles"))
+    required_fixes = _list(panel.get("required_fixes"))
+    fatal_blockers = _list(panel.get("fatal_blockers"))
+    checks = [
+        len(roles) >= 6,
+        bool(required_fixes) or bool(fatal_blockers),
+        str(panel.get("publishability_assessment")) in {"not_publishable", "major_revision", "blocked", "smoke_only"},
+        bool(panel.get("reviewer_risk_score_reported")),
+        bool(panel.get("synthetic_limitations_major_if_overclaimed")),
+        bool(panel.get("underpowered_low_fpr_major_or_fatal")),
+        bool(panel.get("novelty_uncertainty_visible")),
+        not bool(panel.get("hides_blockers")),
+    ]
+    if bool(panel.get("missing_honest_null_distribution")):
+        checks.append(any("null" in str(item).lower() or "honest" in str(item).lower() for item in fatal_blockers))
+    if bool(panel.get("missing_baseline")):
+        checks.append(any("baseline" in str(item).lower() for item in [*fatal_blockers, *required_fixes]))
+    return round(sum(1 for item in checks if item) / len(checks), 3)
+
+
+def selected_benchmark_release_gate_correctness(fixture: dict[str, object]) -> float:
+    expected = _dict(fixture.get("v21_release_gate"))
+    expected_pass = bool(expected.get("expected_pass"))
+    computed_pass = _computed_v21_release_gate(fixture)
+    if expected_pass:
+        return 1.0 if computed_pass else 0.0
+    expected_blockers = _list(expected.get("expected_blockers"))
+    return round((0.7 * int(computed_pass is False)) + (0.3 * int(bool(expected_blockers))), 3)
+
+
 def _tokens(text: str) -> list[str]:
     return re.findall(r"[a-z0-9-]+", text.lower())
 
@@ -1884,6 +2082,38 @@ def _computed_v8_release_gate(fixture: dict[str, object]) -> bool:
             not bool(_dict(fixture.get("anonymization")).get("leak_expected")),
             not bool(_dict(fixture.get("rebuttal")).get("open_blockers_expected")),
             not bool(_dict(fixture.get("artifact_evaluation")).get("missing_expected")),
+        ]
+    )
+
+
+def _computed_v21_release_gate(fixture: dict[str, object]) -> bool:
+    selected = _dict(fixture.get("selected_idea"))
+    workspace = _dict(fixture.get("workspace"))
+    manuscript = _dict(fixture.get("manuscript"))
+    claims = _dict(fixture.get("claims"))
+    return all(
+        [
+            bool(selected.get("v2_release_gate_passes")),
+            bool(selected.get("locked")),
+            bool(selected.get("project_exists")),
+            benchmark_spec_completeness(fixture) >= 0.9,
+            threat_model_quality(fixture) >= 0.85,
+            trace_generator_validity(fixture) >= 0.85,
+            baseline_suite_completeness(fixture) >= 0.85,
+            sequential_metric_correctness(fixture) >= 0.85,
+            bool(workspace.get("exists")),
+            bool(workspace.get("smoke_run_completed")),
+            bool(workspace.get("result_artifacts_parsed")),
+            not bool(claims.get("underpowered_smoke")) or bool(claims.get("underpowered_warning")),
+            reviewer_blocker_quality(fixture) >= 0.8,
+            bool(manuscript.get("generated")),
+            bool(manuscript.get("paper_package_generated")),
+            bool(manuscript.get("smoke_labeled")),
+            bool(manuscript.get("limitations_prominent")),
+            bool(manuscript.get("reviewer_blockers_included")),
+            not bool(claims.get("fake_result_present")),
+            not bool(claims.get("deployment_validity_overclaim")),
+            not bool(claims.get("strong_low_fpr_claim_from_smoke")),
         ]
     )
 

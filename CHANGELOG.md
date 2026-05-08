@@ -2,6 +2,95 @@
 
 All notable project changes should be recorded here.
 
+## 2.1.0
+
+GapForge v2.1.0 is the Selected Idea Execution release. It freezes the human-accepted v2 selected idea, `idea-sequential-specificity-benchmark-for-low-fpr-collusion-audits`, and operationalizes it as a runnable synthetic benchmark smoke path for the sequential specificity research target.
+
+### Selected Idea Execution
+
+- Added selected idea locking and a durable selected project record so future v2.1 work cannot silently drift to a different idea while preserving rejected ideas, tournament score, human review IDs, and provenance.
+- Added the canonical research project for `Sequential specificity benchmark for low-FPR collusion audits`, including the research question: "Can a sequential benchmark evaluate collusion monitors at operationally meaningful low false-positive rates?"
+- Added the formal sequential specificity benchmark specification with target FPR levels, sequential audit setting, transcript-visible and action-only observability modes, honest-agent null distribution, collusive-agent alternative distribution, required baselines, metrics, statistical requirements, and limitations.
+- Added an explicit collusion threat model and benchmark task families covering benign coordination hard negatives, staged collusive coordination, and observability-mode contrast.
+- Added a synthetic trace generator with scenario definitions, labels, smoke/pilot datasets, transcript-visible and action-only traces, honest/collusive/ambiguous labels, and clear synthetic limitations.
+- Added sequential audit metrics for per-step and per-episode FPR, family-wise false alarm probability, time-to-detection, detection delay, TPR at fixed false-positive budget, specificity at alpha, sequential calibration error, abstention/uncertain rate, exact/binomial confidence intervals, and zero-false-positive upper bounds.
+- Added the sequential metric plan and low-FPR audit check so smoke evidence is marked underpowered unless negative-trace counts are sufficient.
+- Added monitor baseline suite records and smoke execution support for random, threshold/frequency, lexical overlap, repeated-action, statistical anomaly, optional disabled LLM judge, and analysis-only oracle placeholders.
+- Added selected benchmark workspace generation, smoke manifest generation, smoke runner, result parser, report generator, and artifact-backed smoke outputs.
+- Added Codex/GPT-5.4 benchmark implementation task packs for trace generation, monitor baselines, sequential metrics, smoke runner, benchmark debugging, and report improvement with fake-result and outside-workspace patch rejection.
+- Added a selected benchmark reviewer panel with benchmark-validity, statistics/low-FPR, AI-safety relevance, baseline/reproducibility, skeptical novelty, and area-chair roles.
+- Added selected benchmark manuscript and paper package generation that labels smoke results, includes limitations prominently, and preserves reviewer blockers.
+- Added the v2.1 release gate requiring the v2 release gate, selected idea lock/project, benchmark spec, threat model, trace generator, baseline suite, metric plan, workspace, completed smoke run, parsed result artifacts, underpowered warning when applicable, reviewer panel, manuscript package, and no fake results or premature validity claims.
+
+### API, Dashboard, Evals, Docs, and Skills
+
+- Exposed v2.1 workflows through `gapforge.api` for selected idea locking, project creation, benchmark spec creation, trace generation, baseline creation, smoke runs, sequential metrics, review, manuscript generation, and the v2.1 release gate.
+- Added selected idea dashboard/report pages for the selected idea, benchmark spec, threat model, trace dataset, monitors, sequential metrics, smoke results, reviewer blockers, selected manuscript, and v2.1 release gate.
+- Added v2.1 eval fixtures and metrics covering complete smoke benchmark, missing honest null distribution, underpowered low-FPR overclaim, missing baseline, fake result blocking, manuscript smoke labels, reviewer publishability blockers, and release-gate correctness.
+- Added v2.1 docs for roadmap, selected idea, benchmark spec, acceptance criteria, release process, known limitations, and README maturity statements.
+- Added Codex-readable skills for selected idea projects, sequential specificity benchmarks, trace generation, sequential audit metrics, monitor baselines, and selected benchmark review.
+
+### Release Outcome
+
+- Selected idea: `idea-sequential-specificity-benchmark-for-low-fpr-collusion-audits`.
+- Benchmark maturity: runnable synthetic smoke benchmark path with artifact-backed results, reviewer critique, and manuscript-shaped package.
+- Smoke run status: passed as `synthetic_underpowered_smoke_only`.
+- Result artifacts: selected project, benchmark spec, threat model, task families, trace dataset, monitor baselines, metric plan, workspace, smoke result summary, reviewer panel, manuscript package, full selected idea report, and v2.1 release-gate reports were generated under ignored local artifact directories.
+- Reviewer blockers: the reviewer panel keeps the release non-publishable because underpowered low-FPR evidence cannot support pilot/main or publication claims.
+- Pilot/main remaining work: expand honest null and collusive alternative distributions, preregister target alpha/sample-size gates, run full baseline comparisons, resolve reviewer blockers, complete prior-work recall and related-work matrix, and only then evaluate pilot/main scientific claims.
+
+### Validation
+
+- `make ci`
+- `make eval`
+- `gapforge eval --v2 --write-report`
+- `gapforge eval --v3 --write-report`
+- `gapforge eval --v4 --write-report`
+- `gapforge eval --v5 --write-report`
+- `gapforge eval --v6 --write-report`
+- `gapforge eval --v7 --write-report`
+- `gapforge eval --v8 --write-report`
+- `gapforge eval --v9 --write-report`
+- `gapforge eval --v2-ideas --write-report`
+- `gapforge eval --v21 --write-report`
+- `make v2-smoke`
+- `make v3-smoke`
+- `make v4-smoke`
+- `make v6-smoke`
+- `make v7-smoke`
+- `make v8-smoke`
+- `make v9-smoke`
+- `gapforge v1-readiness --write-report --json`
+- `gapforge v2-release-gate --write-report --json`
+- `gapforge v21-release-gate --write-report --json`
+
+### Non-Claims and Limitations
+
+- v2.1.0 does not claim a final scientific result, real-world collusion benchmark validity, monitor superiority, deployment validity, publication readiness, or resolved novelty.
+- Synthetic smoke traces are fixture/scaffold evidence only and do not represent real deployment behavior.
+- Low-FPR claims remain underpowered at smoke scale; zero false positives are reported with an upper confidence bound instead of as proof of operational specificity.
+- Generated unsafe artifacts remain ignored and must not be committed as release source.
+
+## 2.0.1
+
+GapForge v2.0.1 is a CI fixture tracking patch for the post-v2.0 clean-checkout issue where historical migration fixture JSONs were omitted by broad generated-artifact ignore rules.
+
+### Scope
+
+- Tracked the historical migration fixture JSONs required by clean GitHub checkout CI.
+- Kept the patch limited to CI fixture availability and release hygiene documentation.
+- No product behavior changed.
+- No idea-discovery claims changed.
+- The v2.0 selected idea remains the same: `idea-sequential-specificity-benchmark-for-low-fpr-collusion-audits`.
+- No unsafe generated artifacts were committed.
+
+### Validation
+
+- `make ci`
+- `gapforge compatibility-audit --v2 --fixtures --write-report`
+- `gapforge v2-release-gate --write-report --json`
+- GitHub Actions CI passed on clean checkout for commit `f2c543568e66e1d9a8bbc369c3825a81cd55a869`.
+
 ## 2.0.0
 
 GapForge v2.0.0 is the Idea Discovery Engine release. It keeps the v1 evidence gates intact while changing the default behavior from evaluating or refusing the first obvious direction to actively searching across portfolios of defensible idea candidates.

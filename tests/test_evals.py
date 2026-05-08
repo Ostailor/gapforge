@@ -17,6 +17,7 @@ from gapforge.evals.fixtures import (
     V7_FIXTURE_NAMES,
     V8_FIXTURE_NAMES,
     V9_FIXTURE_NAMES,
+    V21_FIXTURE_NAMES,
     list_fixtures,
     load_fixture,
     load_v2_idea_fixture,
@@ -27,14 +28,17 @@ from gapforge.evals.fixtures import (
     load_v7_fixture,
     load_v8_fixture,
     load_v9_fixture,
+    load_v21_fixture,
 )
 from gapforge.evals.metrics import (
     actual_run_gate_correctness,
     agent_output_validation_strictness,
     anonymization_safety,
     artifact_eval_package_score,
+    baseline_suite_completeness,
     benchmark_execution_integrity,
     benchmark_failure_path_preservation,
+    benchmark_spec_completeness,
     canonicalization_quality,
     citation_validity_score,
     direction_maturity_accuracy,
@@ -62,14 +66,20 @@ from gapforge.evals.metrics import (
     result_aggregation_quality,
     result_claim_honesty_score,
     retrieval_relevance_at_k,
+    reviewer_blocker_quality,
     reviewer_panel_quality,
     rollback_safety,
     search_strategy_completeness,
+    selected_benchmark_release_gate_correctness,
+    sequential_metric_correctness,
     source_policy_compliance,
     statistical_caution_score,
     stop_reason_correctness,
     submission_package_completeness,
+    threat_model_quality,
     topic_portfolio_diversity,
+    trace_generator_validity,
+    underpowered_claim_rejection,
     unsupported_claim_rate,
     v5_release_gate_correctness,
     v6_release_gate_correctness,
@@ -255,6 +265,26 @@ def test_v9_eval_fixtures_are_complete_and_offline() -> None:
         assert payload["docs_audit"]
         assert payload["artifact_hygiene"]
         assert payload["v9_release_gate"]
+
+
+def test_v21_eval_fixtures_are_complete_and_offline() -> None:
+    for name in V21_FIXTURE_NAMES:
+        fixture = load_v21_fixture(name)
+        payload = fixture.selected_benchmark_fixture
+        assert fixture.is_v21
+        assert fixture.topic
+        assert fixture.papers
+        assert payload["selected_idea"]
+        assert payload["benchmark_spec"]
+        assert payload["threat_model"]
+        assert payload["trace_generator"]
+        assert payload["baseline_suite"]
+        assert payload["sequential_metrics"]
+        assert payload["workspace"]
+        assert payload["claims"]
+        assert payload["reviewer_panel"]
+        assert payload["manuscript"]
+        assert payload["v21_release_gate"]
 
 
 def test_run_evals_single_fixture_writes_report(tmp_path: Path) -> None:
@@ -537,6 +567,20 @@ def test_run_v9_evals_includes_pilot_metrics_offline(tmp_path: Path, monkeypatch
     assert "artifact_hygiene_score" in text
 
 
+def test_run_v21_evals_includes_selected_benchmark_metrics_offline(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("GAPFORGE_DISABLE_NETWORK", "1")
+
+    report = run_evals(v21=True, output_dir=tmp_path, write_report=True)
+
+    assert len(report.results) == len(V21_FIXTURE_NAMES)
+    assert all(result.scores.benchmark_spec_completeness is not None for result in report.results)
+    assert all(result.scores.selected_benchmark_release_gate_correctness is not None for result in report.results)
+    text = (tmp_path / "eval_report.md").read_text(encoding="utf-8")
+    assert "### v2.1 Selected Benchmark Scores" in text
+    assert "v2.1 Selected Benchmark overall score" in text
+    assert "underpowered_claim_rejection" in text
+
+
 def test_v9_accepted_direction_and_refusal_pass() -> None:
     direction = run_evals(fixture="accepted_direction", v9=True, write_report=False).results[0]
     refusal = run_evals(fixture="accepted_refusal", v9=True, write_report=False).results[0]
@@ -629,6 +673,59 @@ def test_eval_cli_v2_ideas_fixture_and_report(tmp_path: Path) -> None:
     assert (tmp_path / "eval_report.md").exists()
     assert "Overall score" in report.stdout
     assert "v2 Idea Discovery" in (tmp_path / "eval_report.md").read_text(encoding="utf-8")
+
+
+def test_eval_cli_v21_fixture_and_report(tmp_path: Path) -> None:
+    env = {**os.environ, "GAPFORGE_DISABLE_NETWORK": "1"}
+    env["PYTHONPATH"] = str(Path.cwd() / "src")
+    env["GAPFORGE_ROOT"] = str(tmp_path)
+
+    single = subprocess.run(
+        [sys.executable, "-m", "gapforge.cli", "eval", "--fixture", "complete_smoke_benchmark", "--v21"],
+        cwd=Path.cwd(),
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    report = subprocess.run(
+        [sys.executable, "-m", "gapforge.cli", "eval", "--v21", "--write-report"],
+        cwd=Path.cwd(),
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert single.returncode == 0, single.stderr
+    assert report.returncode == 0, report.stderr
+    assert (tmp_path / "eval_report.md").exists()
+    text = (tmp_path / "eval_report.md").read_text(encoding="utf-8")
+    assert "Overall score" in report.stdout
+    assert "v2.1 Selected Benchmark" in text
+    assert "complete_smoke_benchmark" in text
+
+
+def test_v21_selected_benchmark_fixture_metrics() -> None:
+    complete = load_v21_fixture("complete_smoke_benchmark").selected_benchmark_fixture
+    overclaim = load_v21_fixture("underpowered_low_fpr_overclaim").selected_benchmark_fixture
+    missing_baseline_fixture = load_v21_fixture("missing_baseline").selected_benchmark_fixture
+    fake = load_v21_fixture("fake_result_blocked").selected_benchmark_fixture
+    reviewer = load_v21_fixture("reviewer_blocks_publishability").selected_benchmark_fixture
+
+    assert benchmark_spec_completeness(complete) == 1.0
+    assert threat_model_quality(complete) == 1.0
+    assert trace_generator_validity(complete) == 1.0
+    assert baseline_suite_completeness(complete) == 1.0
+    assert sequential_metric_correctness(complete) == 1.0
+    assert selected_benchmark_release_gate_correctness(complete) == 1.0
+    assert underpowered_claim_rejection(overclaim) < 1.0
+    assert selected_benchmark_release_gate_correctness(overclaim) == 1.0
+    assert baseline_suite_completeness(missing_baseline_fixture) < 0.85
+    assert selected_benchmark_release_gate_correctness(missing_baseline_fixture) == 1.0
+    assert underpowered_claim_rejection(fake) == 1.0
+    assert selected_benchmark_release_gate_correctness(fake) == 1.0
+    assert reviewer_blocker_quality(reviewer) == 1.0
 
 
 def test_v2_duplicate_ideas_are_rejected_by_dossier_aware_novelty_gate() -> None:

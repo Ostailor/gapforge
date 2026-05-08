@@ -30,8 +30,9 @@ GAPFORGE_DISABLE_NETWORK=1 gapforge report --strict
 13. For v0.9 releases, complete the external pilot process in `docs/V0_9_EXTERNAL_PILOT.md`, acceptance criteria in `docs/V0_9_ACCEPTANCE_CRITERIA.md`, and v1 readiness gate in `docs/V0_9_V1_READINESS.md`.
 14. For v0.9.1 migration remediation, follow `docs/V0_9_1_MIGRATION_REMEDIATION.md` and `docs/V1_MIGRATION_AND_COMPATIBILITY.md`.
 15. For v2 releases, complete the Idea Discovery Engine process in `docs/V2_ROADMAP.md`, `docs/V2_ACCEPTANCE_CRITERIA.md`, `docs/V2_IDEA_DISCOVERY.md`, `docs/V2_IDEA_YIELD_METRICS.md`, `docs/V2_RESEARCH_AGENDA_MODE.md`, and `docs/V2_HUMAN_FEEDBACK.md`.
-16. Commit with a message that records constraints, rejected alternatives if useful, confidence, scope risk, tested commands, and known gaps.
-17. Tag the release only after the checks pass.
+16. For v2.1 releases, complete the selected-idea execution process in `docs/V2_1_ROADMAP.md`, `docs/V2_1_SELECTED_IDEA.md`, `docs/V2_1_BENCHMARK_SPEC.md`, and `docs/V2_1_ACCEPTANCE_CRITERIA.md`.
+17. Commit with a message that records constraints, rejected alternatives if useful, confidence, scope risk, tested commands, and known gaps.
+18. Tag the release only after the checks pass.
 
 ## v0.3 Validation Levels
 
@@ -469,6 +470,85 @@ Release notes must distinguish:
 
 If at least one candidate is accepted, release notes may say `v2 idea discovery passed with accepted candidate`. If no candidate is accepted, release notes must say either `v2 idea discovery failed; v2.0.1 required` or `v2 idea discovery failed; v2.1 planning required`. `gapforge v2-release-gate --allow-agenda-only` is permitted only for an explicit `idea_discovery_incomplete` warning pass. Do not claim v2 success from a fallback agenda.
 
+## v2.1 Selected Idea Execution Gate
+
+v2.1 must not claim selected-idea execution success based only on roadmap prose, generated benchmark scaffolding, synthetic fixture definitions, or manuscript text. It must require a runnable benchmark smoke path for the frozen v2.0 selected idea.
+
+v2 found candidate idea `idea-sequential-specificity-benchmark-for-low-fpr-collusion-audits`; v2.1 executes that selected idea. The synthetic smoke benchmark is not a final research result. Low-FPR claims require power, benchmark validity limitations must remain explicit, and next steps toward pilot/main benchmark must be recorded before stronger claims are made.
+
+Selected idea:
+
+- Idea ID: `idea-sequential-specificity-benchmark-for-low-fpr-collusion-audits`
+- Title: `Sequential specificity benchmark for low-FPR collusion audits`
+
+Before tagging v2.1, the release process should require:
+
+```bash
+make ci
+make eval
+gapforge v1-readiness --write-report --json
+gapforge v2-release-gate --write-report --json
+gapforge selected-idea-lock --idea-id idea-sequential-specificity-benchmark-for-low-fpr-collusion-audits
+gapforge selected-idea-project-create --idea-id idea-sequential-specificity-benchmark-for-low-fpr-collusion-audits
+gapforge selected-benchmark-spec --project-id <selected-project-id>
+gapforge threat-model --benchmark-id <benchmark-id>
+gapforge benchmark-task-families --benchmark-id <benchmark-id>
+gapforge generate-traces --benchmark-id <benchmark-id> --count 100 --split smoke
+gapforge selected-monitor-baselines --benchmark-id <benchmark-id>
+gapforge run-monitor-baseline --benchmark-id <benchmark-id> --monitor random
+gapforge run-monitor-baseline --benchmark-id <benchmark-id> --monitor threshold
+gapforge sequential-metric-plan --benchmark-id <benchmark-id>
+gapforge selected-benchmark-workspace --benchmark-id <benchmark-id>
+gapforge selected-benchmark-run --workspace-id <workspace-id> --run-type smoke
+gapforge selected-benchmark-review --benchmark-id <benchmark-id>
+gapforge selected-benchmark-manuscript --benchmark-id <benchmark-id>
+gapforge selected-benchmark-paper-package --benchmark-id <benchmark-id>
+gapforge dashboard --project-id <selected-project-id> --include-selected-idea
+gapforge selected-idea-full-report --project-id <selected-project-id>
+gapforge v21-release-gate --write-report --json
+```
+
+Equivalent scripts may use the `gapforge.api` wrappers for the same steps. The release candidate must still keep the same evidence requirements and must not replace a missing artifact with prose.
+
+The v2.1 release gate should require:
+
+- deterministic CI remains passing
+- v1 readiness and v2 selected-candidate evidence remain available
+- selected idea freeze exists and no silent pivot occurred
+- formal benchmark specification exists
+- threat model and observability assumptions exist
+- honest-agent baseline distribution is defined
+- collusive-agent scenario distribution is defined
+- hard-negative benign scenarios are represented
+- sequential audit protocol is specified
+- low-FPR specificity metrics are computed over audit windows
+- baseline monitors run and record allowed inputs, thresholds, and failures
+- power/sample-size plan classifies smoke, pilot, main, and underpowered states
+- experiment workspace exists with benchmark, dataset, baseline, metric, manifest, and run records
+- smoke benchmark path generates tasks, runs monitors, writes result artifacts, parses metrics, and writes analysis
+- result analysis is artifact-backed and labels smoke outputs as smoke outputs
+- reviewer critique attacks novelty, threat model, benchmark validity, baselines, statistics, and manuscript claims
+- manuscript package update links benchmark claims to artifacts and labels missing work
+- generated reports, runs, projects, caches, transcripts, dashboards, PDFs, and large artifacts remain excluded from source unless explicitly curated and safe
+
+Release notes must distinguish:
+
+- selected idea freeze status
+- benchmark specification status
+- threat model and observability assumptions
+- smoke versus pilot versus main benchmark status
+- honest-agent and collusive-agent scenario coverage
+- baseline monitor coverage
+- sequential specificity metric status
+- power/sample-size status
+- experiment workspace and smoke execution status
+- result artifact and analysis status
+- reviewer critique findings
+- manuscript package status
+- unsupported claims and remaining risks
+
+If the runnable smoke path is missing, release notes must say `v2.1 selected idea execution incomplete; benchmark smoke path not ready`. If smoke runs exist, release notes may say `v2.1 selected idea execution passed with runnable benchmark smoke path`, but must not claim final scientific results, real-world collusion benchmark validity, monitor superiority, or publication readiness.
+
 ## Tagging
 
 Use semantic version tags:
@@ -507,4 +587,6 @@ Release notes should include:
 - Do not claim v1 readiness unless the v1 readiness gate passes as `ready` or `ready_with_explicit_scope`.
 - For v2, do not claim idea-discovery success unless at least one idea candidate is accepted by the v2 release gate.
 - For v2, if no idea candidate is accepted, record explicit idea-discovery failure and plan v2.0.1 or v2.1 instead of claiming success.
+- For v2.1, do not claim selected-idea execution success unless the selected idea is frozen and a runnable benchmark smoke path produces result artifacts, analysis, reviewer critique, and a manuscript package update.
+- For v2.1, do not claim final scientific results, real-world benchmark validity, monitor superiority, or publication readiness from synthetic fixtures or smoke runs.
 - Do not publish generated `runs/`, caches, or local environment artifacts as source.

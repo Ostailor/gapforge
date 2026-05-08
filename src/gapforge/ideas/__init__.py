@@ -54,6 +54,13 @@ from gapforge.ideas.novelty_loop import (
 )
 from gapforge.ideas.preferences import IdeaPreferenceManager
 from gapforge.ideas.reports import render_idea_bank_markdown, render_idea_discovery_report, render_idea_report_markdown
+from gapforge.ideas.selected_project import (
+    SelectedIdeaLock,
+    SelectedIdeaProject,
+    SelectedIdeaProjectManager,
+    render_selected_idea_status,
+    validate_selected_idea_project_status,
+)
 from gapforge.ideas.store import IdeaStore
 from gapforge.ideas.topic_portfolio import TopicPortfolio, TopicPortfolioGenerator, TopicVariant, render_topic_portfolio_markdown
 from gapforge.ideas.tournament import IdeaTournamentRunner
@@ -109,6 +116,9 @@ __all__ = [
     "IdeaYieldMetrics",
     "ResearchAgenda",
     "ResearchAgendaManager",
+    "SelectedIdeaLock",
+    "SelectedIdeaProject",
+    "SelectedIdeaProjectManager",
     "TopicPortfolio",
     "TopicPortfolioGenerator",
     "TopicVariant",
@@ -120,10 +130,12 @@ __all__ = [
     "render_idea_report_markdown",
     "render_idea_yield_report",
     "render_research_agenda_markdown",
+    "render_selected_idea_status",
     "render_constructive_gap_report",
     "render_mutation_report",
     "render_topic_portfolio_markdown",
     "render_transfer_report",
     "validate_constructive_gap_candidate",
     "validate_transfer_pattern",
+    "validate_selected_idea_project_status",
 ]

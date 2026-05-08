@@ -23,6 +23,10 @@ GapForge v2 planning docs:
 - [v2 idea yield metrics](docs/V2_IDEA_YIELD_METRICS.md)
 - [v2 research agenda mode](docs/V2_RESEARCH_AGENDA_MODE.md)
 - [v2 human feedback](docs/V2_HUMAN_FEEDBACK.md)
+- [v2.1 selected idea execution roadmap](docs/V2_1_ROADMAP.md)
+- [v2.1 selected idea](docs/V2_1_SELECTED_IDEA.md)
+- [v2.1 benchmark specification](docs/V2_1_BENCHMARK_SPEC.md)
+- [v2.1 acceptance criteria](docs/V2_1_ACCEPTANCE_CRITERIA.md)
 
 GapForge is intentionally skeptical. It can recommend a direction only when evidence gates support one, and it can refuse when literature coverage, novelty evidence, or empirical support is insufficient. It is not an exhaustive autonomous literature reviewer, and it must not fabricate citations, experimental results, venue acceptance, publication readiness, or novelty claims. Deterministic and offline-safe paths remain the default.
 
@@ -40,6 +44,8 @@ GapForge is intentionally skeptical. It can recommend a direction only when evid
 - **v0.9.1**: migration remediation patch. v0.9.0 was not v1-ready because the migration/backward compatibility audit failed; v0.9.1 adds historical fixtures, versioned migrators, backup snapshots, and compatibility audit v2 without adding research features.
 - **v1.0.0**: stable evidence-gated release. v1.0.0 passes the v1 readiness gate after v4-v9 evidence, compatibility audit v2, CLI/docs audits, artifact hygiene checks, and an accepted correct-refusal external pilot.
 - **v2.0.0**: Idea Discovery Engine release line. v2 actively searches across topic portfolios for defensible idea candidates using mutation, constructive gap creation, cross-domain transfer, Codex/GPT-5.4 synthesis tasks, active search control, novelty/counterevidence loops, idea tournaments, human feedback, research agenda fallback, and idea yield metrics. The v2 gate requires at least one accepted idea candidate or explicit idea-discovery failure routed to v2.0.1 or v2.1 planning.
+- **v2.0.1**: CI fixture tracking patch. v2.0.1 keeps historical migration fixture JSONs available in clean checkouts without changing product behavior, idea-discovery claims, or the v2.0 selected idea.
+- **v2.1.0**: Selected Idea Execution release. v2.1 freezes the accepted v2.0 idea `idea-sequential-specificity-benchmark-for-low-fpr-collusion-audits` and turns it into a benchmark specification, threat model, task/data generator, baseline suite, sequential specificity metrics, power plan, experiment workspace, smoke benchmark run, result analysis, reviewer critique, and manuscript package update. The smoke path is runnable and artifact-backed, but remains synthetic and underpowered.
 
 ## Why Not Just Summarization?
 
@@ -647,6 +653,56 @@ Readiness terms are strict:
 - **Camera-ready**: post-review/rebuttal blockers are addressed. It does not imply venue acceptance unless an external acceptance record exists.
 
 Manuscript citations must resolve to known `Paper` records. Result claims must link execution/result artifacts. Reviewer rebuttals must cite evidence or request fixes; they must not invent answers.
+
+## v2.1 Selected Idea Execution
+
+v2.1 is the Selected Idea Execution release for the accepted v2.0 candidate:
+
+- Idea ID: `idea-sequential-specificity-benchmark-for-low-fpr-collusion-audits`
+- Title: `Sequential specificity benchmark for low-FPR collusion audits`
+
+The v2.1 path is benchmark-first. It should define and smoke-run a concrete research artifact before any stronger claim is allowed:
+
+- benchmark specification
+- threat model and observability assumptions
+- honest-agent baseline distribution
+- collusive-agent scenario distribution
+- hard-negative benign scenarios
+- sequential audit protocol
+- low-FPR specificity metrics
+- honest baseline monitors
+- power and sample-size plan
+- experiment workspace and runnable smoke manifest
+- result artifacts, analysis, reviewer critique, and manuscript package update
+
+v2.1 must distinguish smoke, pilot, and main benchmark levels. Smoke runs prove only that the benchmark path runs and writes artifacts. They do not prove real-world collusion benchmark validity, final scientific results, method superiority, or publication readiness.
+
+Current maturity statement: v2 found candidate idea `idea-sequential-specificity-benchmark-for-low-fpr-collusion-audits`; v2.1 executes that selected idea as a benchmark artifact workflow. The synthetic smoke benchmark is not a final research result, low-FPR claims require power, and benchmark validity limitations remain open until pilot/main evidence and review exist.
+
+Scriptable v2.1 path:
+
+```python
+from gapforge import api
+
+selected_project = api.create_selected_idea_project("<accepted-idea-id>")
+spec = api.create_selected_benchmark_spec(selected_project.project_id)
+api.generate_traces(spec.id, count=100, split="smoke")
+api.create_monitor_baselines(spec.id)
+smoke = api.run_selected_benchmark_smoke(spec.id)
+api.compute_sequential_metrics(smoke.dataset_id)
+api.selected_benchmark_review(spec.id)
+api.selected_benchmark_manuscript(spec.id)
+api.v21_release_gate(write_report=True)
+```
+
+Next steps toward pilot/main benchmark: expand the honest null and collusive alternative distributions, preregister target alpha levels and sample sizes, run all required baselines, resolve reviewer blockers, and keep smoke versus pilot versus main status visible in dashboards and release notes.
+
+Planning docs:
+
+- [docs/V2_1_ROADMAP.md](docs/V2_1_ROADMAP.md)
+- [docs/V2_1_SELECTED_IDEA.md](docs/V2_1_SELECTED_IDEA.md)
+- [docs/V2_1_BENCHMARK_SPEC.md](docs/V2_1_BENCHMARK_SPEC.md)
+- [docs/V2_1_ACCEPTANCE_CRITERIA.md](docs/V2_1_ACCEPTANCE_CRITERIA.md)
 
 ## Active v0.3 Loop
 

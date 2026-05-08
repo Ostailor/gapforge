@@ -84,7 +84,7 @@ from gapforge.claims.project_sync import ProjectClaimGraphManager
 from gapforge.cli_audit import CLICommandAuditor, render_cli_command_audit
 from gapforge.compute import check_environment, detect_compute_environments, render_compute_check, render_compute_status
 from gapforge.config import GapForgeConfig
-from gapforge.dashboard import StaticDashboardBuilder
+from gapforge.dashboard import StaticDashboardBuilder, write_selected_idea_full_report
 from gapforge.datasets import DatasetRegistry, render_dataset_registry_markdown, render_dataset_validation_markdown
 from gapforge.datasets.cache import clean_dataset_cache, dataset_cache_info, render_dataset_cache_info
 from gapforge.datasets.consent import DatasetConsentManager, render_dataset_consent_markdown
@@ -140,6 +140,7 @@ from gapforge.ideas import (
     IdeaTournamentRunner,
     IdeaYieldMetricCalculator,
     ResearchAgendaManager,
+    SelectedIdeaProjectManager,
     TopicPortfolioGenerator,
     render_idea_discovery_report,
 )
@@ -236,10 +237,12 @@ from gapforge.release_gate import (
     V09ReleaseGateEnforcer,
     V1ReadinessGate,
     V2ReleaseGateEnforcer,
+    V21ReleaseGateEnforcer,
     render_v04_release_gate_markdown,
     render_v09_release_gate_markdown,
     render_v1_readiness_markdown,
     render_v2_release_gate_markdown,
+    render_v21_release_gate_markdown,
 )
 from gapforge.release_gate.v05 import render_v05_release_gate_markdown
 from gapforge.release_gate.v06 import render_v06_release_gate_markdown
@@ -297,6 +300,19 @@ from gapforge.search_strategy import (
     render_search_rounds_markdown,
     render_search_strategy_markdown,
     save_strategy,
+)
+from gapforge.selected_benchmark import (
+    MonitorBaselineManager,
+    SelectedBenchmarkCodexTaskManager,
+    SelectedBenchmarkExperimentRunner,
+    SelectedBenchmarkManager,
+    SelectedBenchmarkManuscriptManager,
+    SelectedBenchmarkReviewerPanelBuilder,
+    SelectedBenchmarkWorkspaceManager,
+    SequentialMetricManager,
+    SyntheticTraceGenerator,
+    render_metric_plan,
+    render_trace_list,
 )
 from gapforge.sources.canonical import canonicalize_project, canonicalize_run, load_merge_report_for_run
 from gapforge.sources.coverage import refresh_source_coverage
@@ -650,6 +666,7 @@ def build_parser() -> argparse.ArgumentParser:
     eval_parser.add_argument("--v7", action="store_true", help="Run v0.7 benchmark and replication evaluation fixtures.")
     eval_parser.add_argument("--v8", action="store_true", help="Run v0.8 manuscript submission evaluation fixtures.")
     eval_parser.add_argument("--v9", action="store_true", help="Run v0.9 pilot and v1-readiness evaluation fixtures.")
+    eval_parser.add_argument("--v21", action="store_true", help="Run v2.1 selected benchmark execution evaluation fixtures.")
     eval_parser.add_argument("--v2-ideas", action="store_true", help="Run v2 Idea Discovery Engine evaluation fixtures.")
     eval_parser.add_argument("--write-report", action="store_true")
 
@@ -678,6 +695,16 @@ def build_parser() -> argparse.ArgumentParser:
     dashboard_parser.add_argument("--include-replication", action="store_true", help="Include v0.7 replication pages.")
     dashboard_parser.add_argument("--include-manuscripts", action="store_true", help="Include v0.8 manuscript readiness pages.")
     dashboard_parser.add_argument("--include-ideas", action="store_true", help="Include v2 idea discovery dashboard pages.")
+    dashboard_parser.add_argument(
+        "--include-selected-idea",
+        action="store_true",
+        help="Include v2.1 selected idea execution dashboard pages.",
+    )
+
+    selected_idea_full_report_parser = subparsers.add_parser(
+        "selected-idea-full-report", help="Write and print the v2.1 selected idea execution report."
+    )
+    selected_idea_full_report_parser.add_argument("--project-id", required=True)
 
     release_gate_dashboard_parser = subparsers.add_parser(
         "release-gate-dashboard", help="Generate a project dashboard and print the release-gate page path."
@@ -1302,6 +1329,10 @@ def build_parser() -> argparse.ArgumentParser:
     v2_release_gate_parser.add_argument("--write-report", action="store_true")
     v2_release_gate_parser.add_argument("--json", action="store_true")
 
+    v21_release_gate_parser = subparsers.add_parser("v21-release-gate", help="Enforce the v2.1 selected-idea execution release gate.")
+    v21_release_gate_parser.add_argument("--write-report", action="store_true")
+    v21_release_gate_parser.add_argument("--json", action="store_true")
+
     cli_audit_parser = subparsers.add_parser("cli-audit", help="Audit command grouping, help text, and v1 CLI discoverability.")
     cli_audit_parser.add_argument("--write-report", action="store_true")
 
@@ -1530,6 +1561,147 @@ def build_parser() -> argparse.ArgumentParser:
     idea_yield_parser = subparsers.add_parser("idea-yield", help="Compute v2 idea yield metrics for a project.")
     idea_yield_parser.add_argument("--project-id", required=True)
     idea_yield_parser.add_argument("--write-report", action="store_true")
+
+    selected_idea_lock_parser = subparsers.add_parser("selected-idea-lock", help="Lock a v2 selected idea for v2.1 execution.")
+    selected_idea_lock_parser.add_argument("--idea-id", required=True)
+    selected_idea_lock_parser.add_argument("--locked-by", default="human")
+    selected_idea_lock_parser.add_argument(
+        "--lock-reason",
+        default="Freeze the v2 selected idea as the canonical v2.1 research target.",
+    )
+    selected_idea_lock_parser.add_argument("--force", action="store_true")
+
+    selected_idea_project_create_parser = subparsers.add_parser(
+        "selected-idea-project-create", help="Create a dedicated v2.1 research project from a locked selected idea."
+    )
+    selected_idea_project_create_parser.add_argument("--idea-id", required=True)
+    selected_idea_project_create_parser.add_argument("--locked-by", default="human")
+    selected_idea_project_create_parser.add_argument(
+        "--lock-reason",
+        default="Freeze the v2 selected idea as the canonical v2.1 research target.",
+    )
+    selected_idea_project_create_parser.add_argument("--force", action="store_true")
+
+    selected_idea_status_parser = subparsers.add_parser("selected-idea-status", help="Print selected v2.1 research project status.")
+    selected_idea_status_parser.add_argument("--project-id", required=True)
+
+    selected_benchmark_spec_parser = subparsers.add_parser(
+        "selected-benchmark-spec", help="Create the formal selected-idea benchmark specification."
+    )
+    selected_benchmark_spec_parser.add_argument("--project-id", required=True)
+
+    threat_model_parser = subparsers.add_parser("threat-model", help="Create the selected benchmark collusion threat model.")
+    threat_model_parser.add_argument("--benchmark-id", required=True)
+
+    benchmark_task_families_parser = subparsers.add_parser(
+        "benchmark-task-families", help="Create task families for the selected benchmark."
+    )
+    benchmark_task_families_parser.add_argument("--benchmark-id", required=True)
+
+    selected_benchmark_report_parser = subparsers.add_parser(
+        "selected-benchmark-report", help="Print the selected benchmark specification report."
+    )
+    selected_benchmark_report_parser.add_argument("--benchmark-id", required=True)
+
+    generate_traces_parser = subparsers.add_parser("generate-traces", help="Generate synthetic selected-benchmark traces.")
+    generate_traces_parser.add_argument("--benchmark-id", required=True)
+    generate_traces_parser.add_argument("--count", type=int, default=100)
+    generate_traces_parser.add_argument("--split", default="smoke", choices=["smoke", "pilot"])
+
+    trace_dataset_report_parser = subparsers.add_parser(
+        "trace-dataset-report", help="Print a selected-benchmark synthetic trace dataset report."
+    )
+    trace_dataset_report_parser.add_argument("--dataset-id", required=True)
+
+    trace_list_parser = subparsers.add_parser("trace-list", help="List generated selected-benchmark traces.")
+    trace_list_parser.add_argument("--benchmark-id", required=True)
+
+    sequential_metric_plan_parser = subparsers.add_parser(
+        "sequential-metric-plan", help="Create the selected benchmark sequential metric plan."
+    )
+    sequential_metric_plan_parser.add_argument("--benchmark-id", required=True)
+
+    compute_sequential_metrics_parser = subparsers.add_parser(
+        "compute-sequential-metrics", help="Compute selected benchmark sequential specificity metrics."
+    )
+    compute_sequential_metrics_parser.add_argument("--execution-id", required=True)
+
+    low_fpr_audit_check_parser = subparsers.add_parser("low-fpr-audit-check", help="Render a selected benchmark low-FPR audit check.")
+    low_fpr_audit_check_parser.add_argument("--execution-id", required=True)
+
+    selected_monitor_baselines_parser = subparsers.add_parser(
+        "selected-monitor-baselines", help="Register selected benchmark monitor baselines."
+    )
+    selected_monitor_baselines_parser.add_argument("--benchmark-id", required=True)
+
+    run_monitor_baseline_parser = subparsers.add_parser("run-monitor-baseline", help="Run one selected benchmark monitor baseline.")
+    run_monitor_baseline_parser.add_argument("--benchmark-id", required=True)
+    run_monitor_baseline_parser.add_argument("--monitor", required=True)
+
+    monitor_baseline_report_parser = subparsers.add_parser(
+        "monitor-baseline-report", help="Print selected benchmark monitor baseline readiness report."
+    )
+    monitor_baseline_report_parser.add_argument("--benchmark-id", required=True)
+
+    selected_benchmark_workspace_parser = subparsers.add_parser(
+        "selected-benchmark-workspace", help="Create a runnable selected benchmark experiment workspace."
+    )
+    selected_benchmark_workspace_parser.add_argument("--benchmark-id", required=True)
+
+    selected_benchmark_manifest_parser = subparsers.add_parser(
+        "selected-benchmark-manifest", help="Create or print a selected benchmark run manifest."
+    )
+    selected_benchmark_manifest_parser.add_argument("--workspace-id", required=True)
+    selected_benchmark_manifest_parser.add_argument("--run-type", default="smoke", choices=["smoke", "pilot"])
+
+    selected_benchmark_run_parser = subparsers.add_parser("selected-benchmark-run", help="Run the selected benchmark smoke or pilot path.")
+    selected_benchmark_run_parser.add_argument("--workspace-id", required=True)
+    selected_benchmark_run_parser.add_argument("--run-type", default="smoke", choices=["smoke", "pilot"])
+
+    selected_benchmark_codex_task_parser = subparsers.add_parser(
+        "selected-benchmark-codex-task", help="Create a Codex/GPT-5.4 implementation task pack for the selected benchmark."
+    )
+    selected_benchmark_codex_task_parser.add_argument("--benchmark-id", required=True)
+    selected_benchmark_codex_task_parser.add_argument(
+        "--type",
+        required=True,
+        choices=[
+            "implement_trace_generator",
+            "implement_monitor_baseline",
+            "implement_sequential_metrics",
+            "implement_smoke_runner",
+            "debug_selected_benchmark",
+            "improve_benchmark_report",
+        ],
+    )
+
+    selected_benchmark_codex_handoff_parser = subparsers.add_parser(
+        "selected-benchmark-codex-handoff", help="Print a Codex/GPT-5.4 handoff for a selected-benchmark task pack."
+    )
+    selected_benchmark_codex_handoff_parser.add_argument("--task-id", required=True)
+
+    selected_benchmark_codex_import_parser = subparsers.add_parser(
+        "selected-benchmark-codex-import", help="Validate and import selected-benchmark Codex output into its task workspace."
+    )
+    selected_benchmark_codex_import_parser.add_argument("--task-id", required=True)
+
+    selected_benchmark_review_parser = subparsers.add_parser("selected-benchmark-review", help="Run the selected benchmark reviewer panel.")
+    selected_benchmark_review_parser.add_argument("--benchmark-id", required=True)
+
+    selected_benchmark_fix_list_parser = subparsers.add_parser(
+        "selected-benchmark-fix-list", help="Print required fixes from the selected benchmark reviewer panel."
+    )
+    selected_benchmark_fix_list_parser.add_argument("--benchmark-id", required=True)
+
+    selected_benchmark_manuscript_parser = subparsers.add_parser(
+        "selected-benchmark-manuscript", help="Generate a manuscript-shaped draft for the selected benchmark."
+    )
+    selected_benchmark_manuscript_parser.add_argument("--benchmark-id", required=True)
+
+    selected_benchmark_paper_package_parser = subparsers.add_parser(
+        "selected-benchmark-paper-package", help="Export the selected benchmark manuscript paper package."
+    )
+    selected_benchmark_paper_package_parser.add_argument("--benchmark-id", required=True)
 
     idea_discovery_report_parser = subparsers.add_parser(
         "idea-discovery-report", help="Print and write the consolidated v2 idea discovery report."
@@ -2649,6 +2821,7 @@ def _dispatch(
             v7=args.v7,
             v8=args.v8,
             v9=args.v9,
+            v21=args.v21,
             v2_ideas=args.v2_ideas,
         )
         target = report.report_path or (config.root / "eval_report.md")
@@ -2671,12 +2844,17 @@ def _dispatch(
                 args.project_id,
                 include_manuscripts=args.include_manuscripts,
                 include_ideas=args.include_ideas,
+                include_selected_idea=args.include_selected_idea,
             )
         else:
             result = dashboard.build_run(args.run_id)
         if args.open:
             dashboard.open(result)
         print(f"Wrote dashboard to {result.index_path}")
+        return 0
+    if args.command == "selected-idea-full-report":
+        path = write_selected_idea_full_report(config, args.project_id)
+        print(path.read_text(encoding="utf-8"), end="")
         return 0
     if args.command == "release-gate-dashboard":
         result = StaticDashboardBuilder(config).build_project(args.project_id)
@@ -3671,6 +3849,16 @@ def _dispatch(
         else:
             print(render_v2_release_gate_markdown(v2_result), end="")
         return 0 if v2_result.passed else 1
+    if args.command == "v21-release-gate":
+        v21_gate = V21ReleaseGateEnforcer(config)
+        v21_result = v21_gate.evaluate()
+        if args.write_report:
+            v21_gate.write_outputs(v21_result)
+        if args.json:
+            print(json.dumps(v21_result.to_dict(), indent=2))
+        else:
+            print(render_v21_release_gate_markdown(v21_result), end="")
+        return 0 if v21_result.passed else 1
     if args.command == "cli-audit":
         cli_audit = CLICommandAuditor(config).audit(build_parser(), write=args.write_report)
         print(render_cli_command_audit(cli_audit), end="")
@@ -3970,6 +4158,111 @@ def _dispatch(
             print(idea_yield.write_report(args.project_id), end="")
         else:
             print(json.dumps(to_plain(idea_yield.compute(args.project_id)), indent=2))
+        return 0
+    if args.command == "selected-idea-lock":
+        lock = SelectedIdeaProjectManager(config).lock_selected_idea(
+            args.idea_id,
+            locked_by=args.locked_by,
+            lock_reason=args.lock_reason,
+            force=args.force,
+        )
+        print(json.dumps(to_plain(lock), indent=2))
+        return 0
+    if args.command == "selected-idea-project-create":
+        selected_project = SelectedIdeaProjectManager(config).create_selected_project(
+            args.idea_id,
+            locked_by=args.locked_by,
+            lock_reason=args.lock_reason,
+            force=args.force,
+        )
+        print(json.dumps(to_plain(selected_project), indent=2))
+        return 0
+    if args.command == "selected-idea-status":
+        print(SelectedIdeaProjectManager(config).write_status(args.project_id), end="")
+        return 0
+    if args.command == "selected-benchmark-spec":
+        benchmark_spec = SelectedBenchmarkManager(config).create_spec(args.project_id)
+        print(json.dumps(to_plain(benchmark_spec), indent=2))
+        return 0
+    if args.command == "threat-model":
+        threat_model = SelectedBenchmarkManager(config).create_threat_model(args.benchmark_id)
+        print(json.dumps(to_plain(threat_model), indent=2))
+        return 0
+    if args.command == "benchmark-task-families":
+        task_families = SelectedBenchmarkManager(config).create_task_families(args.benchmark_id)
+        print(json.dumps(to_plain(task_families), indent=2))
+        return 0
+    if args.command == "selected-benchmark-report":
+        print(SelectedBenchmarkManager(config).render_report(args.benchmark_id), end="")
+        return 0
+    if args.command == "generate-traces":
+        dataset = SyntheticTraceGenerator(config).generate(args.benchmark_id, count=args.count, split=args.split)
+        print(json.dumps(to_plain(dataset), indent=2))
+        return 0
+    if args.command == "trace-dataset-report":
+        print(SyntheticTraceGenerator(config).render_dataset_report(args.dataset_id), end="")
+        return 0
+    if args.command == "trace-list":
+        print(render_trace_list(SyntheticTraceGenerator(config).list_traces(args.benchmark_id)), end="")
+        return 0
+    if args.command == "sequential-metric-plan":
+        print(render_metric_plan(SequentialMetricManager(config).create_plan(args.benchmark_id)), end="")
+        return 0
+    if args.command == "compute-sequential-metrics":
+        metric_results = SequentialMetricManager(config).compute(args.execution_id)
+        print(json.dumps(to_plain(metric_results), indent=2))
+        return 0
+    if args.command == "low-fpr-audit-check":
+        print(SequentialMetricManager(config).render_low_fpr_audit_check(args.execution_id), end="")
+        return 0
+    if args.command == "selected-monitor-baselines":
+        baselines = MonitorBaselineManager(config).create_baselines(args.benchmark_id)
+        print(json.dumps(to_plain(baselines), indent=2))
+        return 0
+    if args.command == "run-monitor-baseline":
+        run = MonitorBaselineManager(config).run_baseline(args.benchmark_id, args.monitor)
+        print(json.dumps(to_plain(run), indent=2))
+        return 0
+    if args.command == "monitor-baseline-report":
+        print(MonitorBaselineManager(config).render_report(args.benchmark_id), end="")
+        return 0
+    if args.command == "selected-benchmark-workspace":
+        workspace = SelectedBenchmarkWorkspaceManager(config).create_workspace(args.benchmark_id)
+        print(json.dumps(to_plain(workspace), indent=2))
+        return 0
+    if args.command == "selected-benchmark-manifest":
+        selected_benchmark_manifest = SelectedBenchmarkWorkspaceManager(config).create_manifest(args.workspace_id, run_type=args.run_type)
+        print(json.dumps(to_plain(selected_benchmark_manifest), indent=2))
+        return 0
+    if args.command == "selected-benchmark-run":
+        selected_benchmark_run_result = SelectedBenchmarkExperimentRunner(config).run(args.workspace_id, run_type=args.run_type)
+        print(json.dumps(to_plain(selected_benchmark_run_result), indent=2))
+        return 0
+    if args.command == "selected-benchmark-codex-task":
+        selected_benchmark_codex_task = SelectedBenchmarkCodexTaskManager(config).create_task(args.benchmark_id, args.type)
+        print(json.dumps(to_plain(selected_benchmark_codex_task), indent=2))
+        return 0
+    if args.command == "selected-benchmark-codex-handoff":
+        print(SelectedBenchmarkCodexTaskManager(config).handoff(args.task_id), end="")
+        return 0
+    if args.command == "selected-benchmark-codex-import":
+        selected_benchmark_codex_import = SelectedBenchmarkCodexTaskManager(config).import_outputs(args.task_id)
+        print(json.dumps(to_plain(selected_benchmark_codex_import), indent=2))
+        return 0
+    if args.command == "selected-benchmark-review":
+        selected_benchmark_review = SelectedBenchmarkReviewerPanelBuilder(config).review(args.benchmark_id)
+        print(json.dumps(to_plain(selected_benchmark_review), indent=2))
+        return 0
+    if args.command == "selected-benchmark-fix-list":
+        print(SelectedBenchmarkReviewerPanelBuilder(config).fix_list(args.benchmark_id), end="")
+        return 0
+    if args.command == "selected-benchmark-manuscript":
+        selected_benchmark_manuscript = SelectedBenchmarkManuscriptManager(config).generate(args.benchmark_id)
+        print(json.dumps(to_plain(selected_benchmark_manuscript), indent=2))
+        return 0
+    if args.command == "selected-benchmark-paper-package":
+        selected_benchmark_paper_package = SelectedBenchmarkManuscriptManager(config).paper_package(args.benchmark_id)
+        print(json.dumps(to_plain(selected_benchmark_paper_package), indent=2))
         return 0
     if args.command == "idea-discovery-report":
         idea_store = IdeaStore(config)

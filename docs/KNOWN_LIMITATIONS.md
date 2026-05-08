@@ -277,6 +277,37 @@ Current operational limits:
 - Cross-domain transfer without supporting evidence is a search request, not an idea candidate.
 - Agenda-only fallback is honest incompleteness for v2.0 unless explicitly allowed with warning release notes.
 
+## v2.1 Selected Idea Execution Limits
+
+v2 found candidate idea `idea-sequential-specificity-benchmark-for-low-fpr-collusion-audits`. v2.1 executes that selected idea as the Selected Idea Execution release. It should turn the accepted v2.0 candidate into a benchmark artifact path, not into a final scientific claim.
+
+The synthetic smoke benchmark is not a final research result. Low-FPR claims require power, benchmark validity limitations remain open, and next steps toward pilot/main benchmark must be visible before any stronger claim is made.
+
+v2.1 must still preserve these limits:
+
+- selected idea execution does not reopen idea discovery by default
+- benchmark scaffolding is not publication readiness
+- a benchmark specification is not an executed benchmark
+- a smoke run validates wiring and artifact persistence only
+- synthetic fixtures do not prove real-world collusion benchmark validity
+- honest-agent and collusive-agent distributions are design assumptions until externally reviewed
+- low-FPR specificity estimates require adequate sample size, sequential correction, and uncertainty reporting before supporting strong claims
+- baseline monitors must be reported honestly, including weak or failed baselines
+- result analysis must derive from recorded artifacts, not generated prose
+- manuscript package updates must label smoke outputs, missing evidence, and reviewer objections
+- v1 prior-work gates and v2 accepted-candidate provenance must not be weakened to make execution look easier
+
+v2.1 non-goals:
+
+- claiming final scientific results from smoke runs
+- claiming synthetic fixture validity for real deployments
+- inventing datasets, baselines, metrics, citations, reviewer feedback, or empirical results
+- treating a runnable benchmark path as evidence of monitor superiority
+- marking the manuscript submission-ready without traceability, result artifacts, critique resolution, and human review
+- silently replacing the selected v2.0 idea with a different idea
+
+The v2.1 release gate should require a runnable smoke benchmark path with generated tasks, baseline monitor execution, sequential specificity metrics, result artifacts, analysis, critique, and manuscript package updates. If the smoke path is missing, v2.1 is incomplete.
+
 ## Operational Guidance
 
 Use strict mode and coverage assessment before interpreting outputs:

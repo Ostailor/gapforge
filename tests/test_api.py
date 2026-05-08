@@ -255,6 +255,33 @@ def test_api_v2_idea_discovery_workflow_and_release_gate(tmp_path: Path) -> None
     assert gate.selected_idea_id == tournament.selected_candidate_id
 
 
+def test_api_selected_benchmark_v21_workflow(tmp_path: Path) -> None:
+    config, selected_project_id = _api_selected_idea_project(tmp_path)
+
+    spec = api.create_selected_benchmark_spec(selected_project_id, config=config)
+    dataset = api.generate_traces(spec.id, count=10, split="smoke", config=config)
+    baselines = api.create_monitor_baselines(spec.id, config=config)
+    smoke = api.run_selected_benchmark_smoke(spec.id, config=config)
+    metrics = api.compute_sequential_metrics(dataset.id, config=config)
+    review = api.selected_benchmark_review(spec.id, config=config)
+    package = api.selected_benchmark_manuscript(spec.id, config=config)
+    gate = api.v21_release_gate(write_report=True, config=config)
+
+    assert spec.project_id == selected_project_id
+    assert spec.honest_agent_distribution["required"] is True
+    assert dataset.split == "smoke"
+    assert dataset.label_balance["honest"] > 0
+    assert any(baseline.baseline_type == "random_detector" for baseline in baselines)
+    assert smoke.run_type == "smoke"
+    assert smoke.metric_result_count > 0
+    assert any(result.metric_name == "per_episode_false_positive_rate" for result in metrics)
+    assert review.benchmark_id == spec.id
+    assert package.benchmark_id == spec.id
+    assert gate.passed is True
+    assert gate.benchmark_id == spec.id
+    assert (config.data_dir / "release_gate" / "v21_release_gate_latest.json").exists()
+
+
 def test_api_create_draft_and_traceability_manuscript(tmp_path: Path) -> None:
     config, manuscript_id, execution_id, artifact_ids = _api_manuscript_fixture(tmp_path)
 
@@ -660,6 +687,34 @@ def _api_experiment_project(config: GapForgeConfig):
     )
     project_manager.save_project(program)
     return program
+
+
+def _api_selected_idea_project(tmp_path: Path) -> tuple[GapForgeConfig, str]:
+    config = GapForgeConfig.from_cwd(tmp_path)
+    root_topic = "low false-positive collusion detection in LLM multi-agent systems"
+    project = api.create_project(root_topic, description=root_topic, config=config)
+    ProjectMemoryManager(config).use_project(project.project.id)
+    _write_api_v1_pass(config)
+    api.generate_topic_portfolio(project_id=project.project.id, root_topic=root_topic, config=config)
+    api.create_idea_bank(project.project.id, root_topic, config=config)
+    generated = api.generate_ideas(project_id=project.project.id, max_candidates=8, config=config)
+    mutation = api.mutate_idea(generated.candidates[0].id, strategy="method_to_benchmark", config=config)
+    api.generate_constructive_gaps(project_id=project.project.id, config=config)
+    api.transfer_ideas(project_id=project.project.id, config=config)
+    api.run_idea_novelty(idea_id=mutation.candidate.id, top_k=3, config=config)
+    tournament = api.run_idea_tournament(project.project.id, top_k=8, config=config)
+    api.add_idea_feedback(
+        tournament.selected_candidate_id,
+        "accept",
+        reviewer="api-v21-fixture",
+        rationale="Accept the API-selected candidate for v2.1 benchmark execution.",
+        config=config,
+    )
+    api.idea_yield(project.project.id, write_report=True, config=config)
+    _write_api_codex_task_marker(config, project.project.id)
+    gate = api.v2_release_gate(write_report=True, config=config)
+    selected_project = api.create_selected_idea_project(gate.selected_idea_id, locked_by="api-fixture", config=config)
+    return config, selected_project.project_id
 
 
 def _api_experiment_workspace(tmp_path: Path) -> tuple[GapForgeConfig, str, str, str, str]:

@@ -15,6 +15,7 @@ from gapforge.evals.fixtures import (
     V7_FIXTURE_NAMES,
     V8_FIXTURE_NAMES,
     V9_FIXTURE_NAMES,
+    V21_FIXTURE_NAMES,
     EvalFixture,
     load_fixtures,
     load_v2_idea_fixtures,
@@ -25,6 +26,7 @@ from gapforge.evals.fixtures import (
     load_v7_fixtures,
     load_v8_fixtures,
     load_v9_fixtures,
+    load_v21_fixtures,
 )
 from gapforge.evals.metrics import (
     EvalScores,
@@ -34,9 +36,11 @@ from gapforge.evals.metrics import (
     anonymization_safety,
     artifact_eval_package_score,
     artifact_hygiene_score,
+    baseline_suite_completeness,
     benchmark_comparison_honesty,
     benchmark_execution_integrity,
     benchmark_failure_path_preservation,
+    benchmark_spec_completeness,
     campaign_decision_quality,
     campaign_report_honesty,
     canonicalization_quality,
@@ -98,18 +102,24 @@ from gapforge.evals.metrics import (
     result_claim_honesty_score,
     retrieval_relevance_at_k,
     review_queue_quality,
+    reviewer_blocker_quality,
     reviewer_objection_quality_score,
     reviewer_panel_quality,
     rollback_safety,
     search_strategy_completeness,
     section_grounding_score,
+    selected_benchmark_release_gate_correctness,
+    sequential_metric_correctness,
     source_coverage_transparency_score,
     source_policy_compliance,
     statistical_caution_score,
     stop_reason_correctness,
     submission_package_completeness,
+    threat_model_quality,
     topic_portfolio_diversity,
     tournament_selection_quality,
+    trace_generator_validity,
+    underpowered_claim_rejection,
     unsupported_claim_rate,
     v1_readiness_gate_correctness,
     v5_release_gate_correctness,
@@ -160,6 +170,7 @@ class EvalReport:
     v7: bool = False
     v8: bool = False
     v9: bool = False
+    v21: bool = False
     report_path: Path | None = None
 
     @property
@@ -188,6 +199,7 @@ def run_evals(
     v7: bool = False,
     v8: bool = False,
     v9: bool = False,
+    v21: bool = False,
     v2_ideas: bool = False,
 ) -> EvalReport:
     selected = (
@@ -196,6 +208,8 @@ def run_evals(
         else (
             V2_IDEA_FIXTURE_NAMES
             if v2_ideas
+            else V21_FIXTURE_NAMES
+            if v21
             else V8_FIXTURE_NAMES
             if v8
             else V9_FIXTURE_NAMES
@@ -215,7 +229,9 @@ def run_evals(
             else None
         )
     )
-    if v9:
+    if v21:
+        fixtures = load_v21_fixtures(selected, fixture_root)
+    elif v9:
         fixtures = load_v9_fixtures(selected, fixture_root)
     elif v2_ideas:
         fixtures = load_v2_idea_fixtures(selected, fixture_root)
@@ -245,6 +261,7 @@ def run_evals(
         v7=v7 or any(item.is_v7 for item in fixtures),
         v8=v8 or any(item.is_v8 for item in fixtures),
         v9=v9 or any(item.is_v9 for item in fixtures),
+        v21=v21 or any(item.is_v21 for item in fixtures),
     )
     if write_report:
         path = (output_dir or Path.cwd()) / "eval_report.md"
@@ -287,6 +304,10 @@ def render_eval_report(report: EvalReport) -> str:
         v9_scores = [score for result in report.results if (score := result.scores.v9_overall()) is not None]
         v9_overall = round(sum(v9_scores) / len(v9_scores), 3) if v9_scores else 0.0
         lines.extend([f"v0.9 overall score: **{v9_overall:.3f}**", ""])
+    if report.v21:
+        v21_scores = [score for result in report.results if (score := result.scores.v21_overall()) is not None]
+        v21_overall = round(sum(v21_scores) / len(v21_scores), 3) if v21_scores else 0.0
+        lines.extend([f"v2.1 Selected Benchmark overall score: **{v21_overall:.3f}**", ""])
     if report.v2_ideas:
         v2_idea_scores = [score for result in report.results if (score := result.scores.v2_ideas_overall()) is not None]
         v2_idea_overall = round(sum(v2_idea_scores) / len(v2_idea_scores), 3) if v2_idea_scores else 0.0
@@ -456,6 +477,23 @@ def render_eval_report(report: EvalReport) -> str:
                     "",
                 ]
             )
+        if scores.v21_overall() is not None:
+            lines.extend(
+                [
+                    "### v2.1 Selected Benchmark Scores",
+                    "",
+                    f"- benchmark_spec_completeness: {scores.benchmark_spec_completeness:.3f}",
+                    f"- threat_model_quality: {scores.threat_model_quality:.3f}",
+                    f"- trace_generator_validity: {scores.trace_generator_validity:.3f}",
+                    f"- baseline_suite_completeness: {scores.baseline_suite_completeness:.3f}",
+                    f"- sequential_metric_correctness: {scores.sequential_metric_correctness:.3f}",
+                    f"- underpowered_claim_rejection: {scores.underpowered_claim_rejection:.3f}",
+                    f"- reviewer_blocker_quality: {scores.reviewer_blocker_quality:.3f}",
+                    f"- selected_benchmark_release_gate_correctness: {scores.selected_benchmark_release_gate_correctness:.3f}",
+                    f"- fixture_v21_overall: {scores.v21_overall():.3f}",
+                    "",
+                ]
+            )
         if scores.v2_ideas_overall() is not None:
             lines.extend(
                 [
@@ -615,6 +653,16 @@ def _evaluate_fixture(fixture: EvalFixture) -> FixtureEvalResult:
         scores.docs_audit_score = docs_audit_score(pilot_fixture)
         scores.artifact_hygiene_score = artifact_hygiene_score(pilot_fixture)
         scores.v9_release_gate_correctness = v9_release_gate_correctness(pilot_fixture)
+    if fixture.is_v21:
+        selected_benchmark_fixture = fixture.selected_benchmark_fixture
+        scores.benchmark_spec_completeness = benchmark_spec_completeness(selected_benchmark_fixture)
+        scores.threat_model_quality = threat_model_quality(selected_benchmark_fixture)
+        scores.trace_generator_validity = trace_generator_validity(selected_benchmark_fixture)
+        scores.baseline_suite_completeness = baseline_suite_completeness(selected_benchmark_fixture)
+        scores.sequential_metric_correctness = sequential_metric_correctness(selected_benchmark_fixture)
+        scores.underpowered_claim_rejection = underpowered_claim_rejection(selected_benchmark_fixture)
+        scores.reviewer_blocker_quality = reviewer_blocker_quality(selected_benchmark_fixture)
+        scores.selected_benchmark_release_gate_correctness = selected_benchmark_release_gate_correctness(selected_benchmark_fixture)
     if fixture.is_v2_ideas:
         idea_fixture = fixture.idea_fixture
         scores.topic_portfolio_diversity = topic_portfolio_diversity(idea_fixture)
@@ -893,6 +941,14 @@ def _failed_checks(scores: EvalScores, result: FixtureEvalResult) -> list[tuple[
         "docs_audit_score": 0.8,
         "artifact_hygiene_score": 0.85,
         "v9_release_gate_correctness": 1.0,
+        "benchmark_spec_completeness": 0.9,
+        "threat_model_quality": 0.85,
+        "trace_generator_validity": 0.85,
+        "baseline_suite_completeness": 0.85,
+        "sequential_metric_correctness": 0.85,
+        "underpowered_claim_rejection": 1.0,
+        "reviewer_blocker_quality": 0.8,
+        "selected_benchmark_release_gate_correctness": 1.0,
     }
     suggestions = {
         "full_text_coverage_score": "Parse more full text before evaluating research quality.",
@@ -969,6 +1025,14 @@ def _failed_checks(scores: EvalScores, result: FixtureEvalResult) -> list[tuple[
         "docs_audit_score": "Ensure quickstarts, limitations, and no-overclaim docs are present.",
         "artifact_hygiene_score": "Ignore or redact generated/private artifacts and keep safe bundles restricted.",
         "v9_release_gate_correctness": "Require pilot spec/run/outcome/review/idea gate and all v1-readiness audits.",
+        "benchmark_spec_completeness": "Define honest and collusive distributions, modes, metrics, baselines, statistics, and limitations.",
+        "threat_model_quality": "Make agent count, observability, adversary knowledge, adaptive behavior, and limitations explicit.",
+        "trace_generator_validity": "Generate labeled synthetic honest, collusive, and hard-negative traces in both observability modes.",
+        "baseline_suite_completeness": "Require runnable random, threshold, lexical, repeated-action, and anomaly baselines.",
+        "sequential_metric_correctness": "Compute sequential metrics from traces and predictions with uncertainty warnings.",
+        "underpowered_claim_rejection": "Block fake results, deployment claims, and strong low-FPR smoke claims.",
+        "reviewer_blocker_quality": "Make reviewers expose blockers, required fixes, synthetic limits, and novelty uncertainty.",
+        "selected_benchmark_release_gate_correctness": "Require the selected benchmark smoke path and block premature publication claims.",
     }
     for name, threshold in thresholds.items():
         value = getattr(scores, name)

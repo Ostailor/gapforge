@@ -92,6 +92,15 @@ V9_FIXTURE_NAMES = [
     "v1_ready_project",
     "v1_blocked_migration",
 ]
+V21_FIXTURE_NAMES = [
+    "complete_smoke_benchmark",
+    "missing_honest_null_distribution",
+    "underpowered_low_fpr_overclaim",
+    "missing_baseline",
+    "fake_result_blocked",
+    "manuscript_smoke_labeled",
+    "reviewer_blocks_publishability",
+]
 V2_IDEA_FIXTURE_NAMES = [
     "accepted_benchmark_idea",
     "accepted_measurement_idea",
@@ -132,6 +141,7 @@ class EvalFixture:
     is_v7: bool = False
     is_v8: bool = False
     is_v9: bool = False
+    is_v21: bool = False
     is_v2_ideas: bool = False
     campaign_fixture: dict[str, Any] = field(default_factory=dict)
     real_literature_fixture: dict[str, Any] = field(default_factory=dict)
@@ -139,6 +149,7 @@ class EvalFixture:
     benchmark_fixture: dict[str, Any] = field(default_factory=dict)
     manuscript_fixture: dict[str, Any] = field(default_factory=dict)
     pilot_fixture: dict[str, Any] = field(default_factory=dict)
+    selected_benchmark_fixture: dict[str, Any] = field(default_factory=dict)
     idea_fixture: dict[str, Any] = field(default_factory=dict)
 
     @property
@@ -184,6 +195,10 @@ def default_v9_fixture_root() -> Path:
     return Path.cwd() / "tests" / "fixtures" / "pilots_v9"
 
 
+def default_v21_fixture_root() -> Path:
+    return Path.cwd() / "tests" / "fixtures" / "selected_benchmark_v21"
+
+
 def default_v2_idea_fixture_root() -> Path:
     return Path.cwd() / "tests" / "fixtures" / "ideas_v2"
 
@@ -217,6 +232,9 @@ def load_fixture(name: str, root: Path | None = None) -> EvalFixture:
         v9_path = default_v9_fixture_root() / name
         if v9_path.exists():
             return load_v9_fixture(name, default_v9_fixture_root())
+        v21_path = default_v21_fixture_root() / name
+        if v21_path.exists():
+            return load_v21_fixture(name, default_v21_fixture_root())
         v2_idea_path = default_v2_idea_fixture_root() / name
         if v2_idea_path.exists():
             return load_v2_idea_fixture(name, default_v2_idea_fixture_root())
@@ -577,6 +595,51 @@ def load_v9_fixture(name: str, root: Path | None = None) -> EvalFixture:
     )
 
 
+def load_v21_fixture(name: str, root: Path | None = None) -> EvalFixture:
+    fixture_root = root or default_v21_fixture_root()
+    path = fixture_root / name
+    if not path.exists():
+        raise FileNotFoundError(f"Unknown v2.1 selected benchmark eval fixture: {name}")
+    raw = _read_json(path / "fixture.json")
+    topic = str(raw.get("topic", name.replace("_", " ")))
+    papers = [
+        Paper(
+            id=f"paper-{name}",
+            title=f"Selected benchmark fixture paper for {topic}",
+            authors=["GapForge fixture"],
+            abstract="Synthetic offline fixture metadata for v2.1 selected benchmark execution evaluation.",
+            year=2026,
+            source="fixture",
+        )
+    ]
+    return EvalFixture(
+        name=name,
+        topic=topic,
+        path=path,
+        papers=papers,
+        paper_notes=[],
+        known_good_gaps=[
+            Gap(
+                id=f"gap-{name}",
+                title=topic,
+                description="Offline v2.1 selected benchmark execution behavior fixture.",
+                supporting_paper_ids=[papers[0].id],
+                why_existing_work_does_not_solve_it=(
+                    "Fixture encodes selected benchmark specification, smoke execution, review, and release gate behavior only."
+                ),
+                minimum_experiment_needed="Use fixture selected benchmark records and release-gate expectations.",
+                risk_that_gap_is_fake="This is synthetic fixture data and is not a real benchmark result.",
+                confidence="medium",
+            )
+        ],
+        known_bad_gaps=[],
+        duplicate_ideas=[],
+        expected_reviewer_objections=[],
+        is_v21=True,
+        selected_benchmark_fixture=raw,
+    )
+
+
 def load_v2_idea_fixture(name: str, root: Path | None = None) -> EvalFixture:
     fixture_root = root or default_v2_idea_fixture_root()
     path = fixture_root / name
@@ -659,6 +722,11 @@ def load_v8_fixtures(names: list[str] | None = None, root: Path | None = None) -
 def load_v9_fixtures(names: list[str] | None = None, root: Path | None = None) -> list[EvalFixture]:
     selected = names or V9_FIXTURE_NAMES
     return [load_v9_fixture(name, root) for name in selected]
+
+
+def load_v21_fixtures(names: list[str] | None = None, root: Path | None = None) -> list[EvalFixture]:
+    selected = names or V21_FIXTURE_NAMES
+    return [load_v21_fixture(name, root) for name in selected]
 
 
 def load_v2_idea_fixtures(names: list[str] | None = None, root: Path | None = None) -> list[EvalFixture]:

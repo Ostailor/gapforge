@@ -183,7 +183,7 @@ class ExperimentWorkspaceManager:
         workspace = self.load_workspace(workspace_id)
         manifest = self._require_manifest(workspace_id, manifest_id)
         sequence = len(self.list_execution_records(workspace_id)) + 1
-        execution_id = f"execution-{manifest.id}-{sequence}"
+        execution_id = f"execution-{slugify(workspace.id)}-{manifest.id}-{sequence}"
         stdout_path = Path(workspace.root_dir) / "logs" / f"{execution_id}.stdout.txt"
         stderr_path = Path(workspace.root_dir) / "logs" / f"{execution_id}.stderr.txt"
         stdout_path.write_text(stdout_text, encoding="utf-8")

@@ -59,6 +59,9 @@ from gapforge.ideas import (
     IdeaYieldMetrics,
     ResearchAgenda,
     ResearchAgendaManager,
+    SelectedIdeaLock,
+    SelectedIdeaProject,
+    SelectedIdeaProjectManager,
     TopicPortfolio,
     TopicPortfolioGenerator,
 )
@@ -148,6 +151,7 @@ from gapforge.release_gate import (
 from gapforge.release_gate.v07 import V07ReleaseGateEnforcer, V07ReleaseGateResult
 from gapforge.release_gate.v08 import V08ReleaseGateEnforcer, V08ReleaseGateResult
 from gapforge.release_gate.v2 import V2ReleaseGateEnforcer, V2ReleaseGateResult
+from gapforge.release_gate.v21 import V21ReleaseGateEnforcer, V21ReleaseGateResult
 from gapforge.replication import ReplicationPackageExporter, ReplicationPackageVerifier, ReproductionRunner
 from gapforge.reporting import write_final_report
 from gapforge.results import ErrorAnalysisBuilder, ResultAggregator, ResultParser, ResultStatisticsAnalyzer
@@ -155,6 +159,24 @@ from gapforge.results.statistics import StatisticalAnalysisReport
 from gapforge.retrieval import build_project_index, build_run_index
 from gapforge.reviewers.empirical import EmpiricalReviewBuilder
 from gapforge.search_strategy import plan_search_strategy as plan_search_strategy_skill
+from gapforge.selected_benchmark import (
+    MonitorBaseline,
+    MonitorBaselineManager,
+    SelectedBenchmarkExperimentRunner,
+    SelectedBenchmarkManager,
+    SelectedBenchmarkManuscript,
+    SelectedBenchmarkManuscriptManager,
+    SelectedBenchmarkPaperPackage,
+    SelectedBenchmarkReviewerPanelBuilder,
+    SelectedBenchmarkReviewPanel,
+    SelectedBenchmarkRunResult,
+    SelectedBenchmarkWorkspaceManager,
+    SequentialMetricManager,
+    SequentialMetricResult,
+    SequentialSpecificityBenchmarkSpec,
+    SyntheticTraceGenerator,
+    TraceDataset,
+)
 from gapforge.sources.base import ResearchSource
 from gapforge.sources.canonical import canonicalize_project, canonicalize_run
 from gapforge.sources.health import check_sources
@@ -1660,6 +1682,150 @@ def v2_release_gate(
 
     enforcer = V2ReleaseGateEnforcer(_config(config))
     result = enforcer.evaluate(allow_agenda_only=allow_agenda_only)
+    if write_report:
+        enforcer.write_outputs(result)
+    return result
+
+
+def lock_selected_idea(
+    idea_id: str,
+    *,
+    locked_by: str = "human",
+    lock_reason: str = "Freeze the v2 selected idea as the canonical v2.1 research target.",
+    force: bool = False,
+    config: GapForgeConfig | None = None,
+) -> SelectedIdeaLock:
+    """Lock a v2 selected idea so v2.1 execution cannot silently drift."""
+
+    return SelectedIdeaProjectManager(_config(config)).lock_selected_idea(
+        idea_id,
+        locked_by=locked_by,
+        lock_reason=lock_reason,
+        force=force,
+    )
+
+
+def create_selected_idea_project(
+    idea_id: str,
+    *,
+    locked_by: str = "human",
+    lock_reason: str = "Freeze the v2 selected idea as the canonical v2.1 research target.",
+    force: bool = False,
+    config: GapForgeConfig | None = None,
+) -> SelectedIdeaProject:
+    """Convert a locked v2 idea into the durable v2.1 selected-idea project."""
+
+    return SelectedIdeaProjectManager(_config(config)).create_selected_project(
+        idea_id,
+        locked_by=locked_by,
+        lock_reason=lock_reason,
+        force=force,
+    )
+
+
+def create_selected_benchmark_spec(
+    project_id: str,
+    *,
+    include_dependencies: bool = True,
+    config: GapForgeConfig | None = None,
+) -> SequentialSpecificityBenchmarkSpec:
+    """Create the selected benchmark spec, optionally with threat model and task families."""
+
+    manager = SelectedBenchmarkManager(_config(config))
+    spec = manager.create_spec(project_id)
+    if include_dependencies:
+        manager.create_threat_model(spec.id)
+        manager.create_task_families(spec.id)
+        spec = manager.load_spec(spec.id)
+    return spec
+
+
+def generate_traces(
+    benchmark_id: str,
+    *,
+    count: int = 100,
+    split: str = "smoke",
+    config: GapForgeConfig | None = None,
+) -> TraceDataset:
+    """Generate synthetic selected-benchmark traces for smoke or pilot execution."""
+
+    return SyntheticTraceGenerator(_config(config)).generate(benchmark_id, count=count, split=split)
+
+
+def create_monitor_baselines(
+    benchmark_id: str,
+    *,
+    config: GapForgeConfig | None = None,
+) -> list[MonitorBaseline]:
+    """Register the selected benchmark baseline monitor suite."""
+
+    return MonitorBaselineManager(_config(config)).create_baselines(benchmark_id)
+
+
+def run_selected_benchmark_smoke(
+    benchmark_id: str,
+    *,
+    workspace_id: str = "",
+    config: GapForgeConfig | None = None,
+) -> SelectedBenchmarkRunResult:
+    """Create or reuse a selected-benchmark workspace and run the smoke path."""
+
+    cfg = _config(config)
+    resolved_workspace_id = workspace_id
+    if not resolved_workspace_id:
+        workspace = SelectedBenchmarkWorkspaceManager(cfg).create_workspace(benchmark_id)
+        resolved_workspace_id = workspace.id
+    return SelectedBenchmarkExperimentRunner(cfg).run(resolved_workspace_id, run_type="smoke")
+
+
+def compute_sequential_metrics(
+    execution_id: str,
+    *,
+    config: GapForgeConfig | None = None,
+) -> list[SequentialMetricResult]:
+    """Compute sequential specificity metrics for a selected-benchmark dataset/execution id."""
+
+    return SequentialMetricManager(_config(config)).compute(execution_id)
+
+
+def selected_benchmark_review(
+    benchmark_id: str,
+    *,
+    config: GapForgeConfig | None = None,
+) -> SelectedBenchmarkReviewPanel:
+    """Run the deterministic reviewer panel for selected-benchmark artifacts."""
+
+    return SelectedBenchmarkReviewerPanelBuilder(_config(config)).review(benchmark_id)
+
+
+def selected_benchmark_manuscript(
+    benchmark_id: str,
+    *,
+    include_paper_package: bool = True,
+    config: GapForgeConfig | None = None,
+) -> SelectedBenchmarkManuscript | SelectedBenchmarkPaperPackage:
+    """Generate the selected-benchmark manuscript, optionally exporting its paper package too.
+
+    When ``include_paper_package`` is true, the paper package is persisted for the
+    v2.1 release gate and returned. Set it to false to return only the manuscript
+    draft.
+    """
+
+    manager = SelectedBenchmarkManuscriptManager(_config(config))
+    if include_paper_package:
+        return manager.paper_package(benchmark_id)
+    return manager.generate(benchmark_id)
+
+
+def v21_release_gate(
+    *,
+    write_report: bool = False,
+    config: GapForgeConfig | None = None,
+) -> V21ReleaseGateResult:
+    """Evaluate the v2.1 selected-idea execution release gate."""
+
+    enforcer = V21ReleaseGateEnforcer(_config(config))
+    result = enforcer.evaluate()
     if write_report:
         enforcer.write_outputs(result)
     return result

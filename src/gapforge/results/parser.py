@@ -133,7 +133,7 @@ def _parse_metrics_artifact(
     payload = json.loads(Path(artifact.path).read_text(encoding="utf-8"))
     entries = _metric_entries(payload)
     metric_lookup = _metric_lookup(metrics)
-    limitations: list[str] = []
+    limitations: list[str] = _payload_limitations(payload)
     results: list[MetricResult] = []
     for index, entry in enumerate(entries, start=1):
         raw_metric = str(entry.get("metric_id") or entry.get("metric") or entry.get("name") or "")
@@ -146,6 +146,7 @@ def _parse_metrics_artifact(
         metric_record = metric_lookup.get(_normalize_metric(raw_metric)) or metric_lookup.get(_normalize_metric(metric_id))
         if _is_low_fpr(metric_record, raw_metric) and not ci:
             limitations.append(f"Metric `{metric_id}` is low-FPR-related but lacks a confidence interval.")
+        limitations.extend(_entry_limitations(entry))
         result = MetricResult(
             id=f"metric-result-{_stable_id(execution.id, artifact.id, metric_id, str(index))}",
             execution_id=execution.id,
@@ -166,6 +167,26 @@ def _parse_metrics_artifact(
         )
         results.append(result)
     return results, limitations
+
+
+def _payload_limitations(payload: Any) -> list[str]:
+    if not isinstance(payload, dict):
+        return []
+    limitations: list[str] = []
+    raw_limitations = payload.get("limitations", [])
+    if isinstance(raw_limitations, list):
+        limitations.extend(str(item) for item in raw_limitations if item)
+    metadata = payload.get("metadata", {})
+    if isinstance(metadata, dict) and metadata.get("smoke_underpowered"):
+        limitations.append("Smoke outputs are underpowered and cannot support strong low-FPR claims.")
+    return limitations
+
+
+def _entry_limitations(entry: dict[str, Any]) -> list[str]:
+    raw_limitations = entry.get("limitations", [])
+    if isinstance(raw_limitations, list):
+        return [str(item) for item in raw_limitations if item]
+    return []
 
 
 def _metric_entries(payload: Any) -> list[dict[str, Any]]:

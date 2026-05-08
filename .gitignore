@@ -28,6 +28,7 @@ prompt_packs/
 **/task_outputs/
 artifacts_audit.json
 artifacts_audit.md
+docs/releases/*-latest.md
 
 runs/*
 !runs/.gitkeep
@@ -41,5 +42,6 @@ campaigns/*
 .omx/state/
 .omx/logs/
 .omx/context/
+.omx/metrics.json
 .gapforge_cache/
 artifacts/papers/
