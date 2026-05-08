@@ -343,3 +343,58 @@ For v0.9 task packs, prompts should include:
 - migration/backward compatibility and v1 readiness criteria
 
 Any Codex-generated v0.9 pilot output must be schema-valid, evidence-backed, and human-reviewed before it can support a defensible direction or v1-readiness claim. An evidence-backed refusal is a valid Codex-assisted outcome.
+
+## v2 Idea Discovery Role
+
+For v2, Codex/GPT-5.4 may help search for idea candidates across topic portfolios. Codex remains a synthesis assistant, not an authority on novelty, feasibility, citations, or results.
+
+Codex may help:
+
+- propose idea candidates from a recorded topic portfolio
+- mutate candidates into narrower, more testable, or more honestly rejectable variants
+- propose constructive gaps by changing constraints, metrics, datasets, methods, deployment settings, or failure modes
+- identify cross-domain transfer routes and adaptation requirements
+- summarize closest-prior-work risks and counterevidence from known records
+- draft tournament critiques under shared criteria
+- convert rejected candidates into research agenda fallback items
+- summarize human preference feedback for the active search controller
+
+Codex must not:
+
+- invent papers, citations, DOIs, arXiv IDs, datasets, baselines, metrics, experiments, results, venues, or reviewer feedback
+- claim a candidate is accepted without closest-prior-work review, counterevidence review, feasibility review, tournament evidence, and human review
+- treat a speculative seed, mutation, transfer idea, or tournament winner as paper-ready
+- hide rejected candidates, missing searches, source limits, or human objections
+- bypass v1 evidence gates or v2 release-gate failure
+- turn research agenda fallback into a success claim
+- request or persist hidden chain-of-thought
+
+For v2 task packs, prompts should include:
+
+- portfolio ID, source profile, scope exclusions, and human preferences
+- allowed paper IDs, EvidenceSpan locators, known citation keys, and prior-work candidates
+- existing candidate IDs, parent-child mutation lineage, and rejected ideas
+- constructive-gap and cross-domain transfer constraints
+- novelty and counterevidence requirements
+- idea tournament criteria
+- accepted-candidate standard
+- research agenda fallback rules
+- exact JSON output contracts and validation rules
+
+Codex/GPT-5.4 output may create or modify idea candidates only after schema validation and import. Human preference feedback may steer search, but it cannot waive evidence requirements. If no candidate survives, Codex should help produce a research agenda fallback and explicit failure report rather than force a generic idea to pass.
+
+## v2 Skill Routing
+
+Use the dedicated v2 skills when preparing or reviewing idea discovery work:
+
+- `topic-portfolio`: create diverse topic variants, not synonyms.
+- `idea-bank`: maintain auditable idea candidates and rejected candidates.
+- `idea-mutation`: transform weak or rejected ideas without erasing inherited risks.
+- `constructive-gap-creator`: propose benchmark, measurement, protocol, dataset, replication, negative-result, theory, system, or tooling paths.
+- `cross-domain-idea-transfer`: turn cross-domain mechanisms into search requests or candidates only when evidence supports transfer.
+- `idea-synthesis`: create Codex/GPT-5.4 task packs and validate output patches before import.
+- `idea-novelty-loop`: find closest prior work and counterevidence for promising candidates.
+- `idea-tournament`: score candidates transparently without treating ranking as acceptance.
+- `research-agenda-mode`: produce an honest fallback when no candidate survives active search.
+
+Codex should keep the distinction explicit in every v2 handoff: `seed` means provisional, `accepted candidate` means evidence-gated and human-reviewed, and `agenda` means no accepted idea was found under the current search.

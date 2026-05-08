@@ -1,0 +1,37 @@
+{
+  "topic": "low false-positive collusion detection in LLM multi-agent systems",
+  "known_paper_ids": ["paper-prior", "paper-specificity"],
+  "topic_portfolio": [
+    {"id": "topic-narrow", "transformation_type": "narrower", "expected_search_queries": ["low fpr collusion audit"], "promise": "Rescues scope.", "risk": "Still blocked."},
+    {"id": "topic-adjacent", "transformation_type": "adjacent", "expected_search_queries": ["honest agent auditing"], "promise": "New observable.", "risk": "Data gap."},
+    {"id": "topic-cross", "transformation_type": "cross_domain", "expected_search_queries": ["medical specificity audit"], "promise": "Transfer specificity.", "risk": "Adaptation."},
+    {"id": "topic-metric", "transformation_type": "metric_shift", "expected_search_queries": ["specificity first audit"], "promise": "Decisive change.", "risk": "Recall tradeoff."},
+    {"id": "topic-benchmark", "transformation_type": "benchmark_shift", "expected_search_queries": ["sequential audit benchmark"], "promise": "Artifact.", "risk": "Synthetic traces."},
+    {"id": "topic-theory", "transformation_type": "theory_shift", "expected_search_queries": ["sequential testing false positives"], "promise": "Protocol rationale.", "risk": "Assumptions."}
+  ],
+  "candidates": [
+    {"id": "idea-rejected-method", "title": "New detector matching prior collusion monitor", "summary": "Rejected because prior work overlaps.", "contribution_type": "method", "core_claim": "Prior-like detector.", "proposed_experiment": "Repeat prior method.", "expected_metrics": ["recall"], "novelty_status": "likely_duplicate", "maturity": "rejected", "duplicate_of": "paper-prior"},
+    {"id": "idea-rescued", "title": "Sequential specificity evaluation protocol for low-FPR collusion audits", "summary": "Rescued by changing from method novelty to evaluation protocol.", "contribution_type": "evaluation_protocol", "core_claim": "A sequential specificity protocol is distinct from the prior detector.", "proposed_experiment": "Evaluate prior detector and LLM judge under sequential low-FPR audits.", "expected_metrics": ["specificity", "false positive rate", "recall"], "novelty_status": "plausible", "maturity": "candidate"}
+  ],
+  "mutations": [
+    {"source_idea_id": "idea-rejected-method", "mutated_idea_id": "idea-rescued", "strategy": "reviewer_objection_to_new_idea", "what_changed": "Changed the decisive overlap dimension from detector method to evaluation protocol.", "why_it_may_help": "Preserves prior-work risk while creating a different contribution form.", "inherited_risks": ["fatal prior work on detector method"], "required_new_searches": ["sequential specificity evaluation protocol collusion"]}
+  ],
+  "constructive_gaps": [
+    {"id": "gap-protocol", "contribution_type": "evaluation_protocol", "minimum_artifact": "Sequential audit protocol.", "minimum_experiment": "Run prior detector under protocol.", "required_baselines": ["prior detector", "LLM judge"], "expected_metrics": ["specificity", "recall"], "closest_prior_work_ids": ["paper-prior"]}
+  ],
+  "transfers": [
+    {"id": "transfer-sequential", "source_field": "sequential hypothesis testing", "source_concept": "alpha spending", "transfer_mechanism": "Control false positives across repeated audit decisions.", "required_adaptation": "Audit rounds replace clinical tests.", "what_breaks": "Observations are correlated.", "supporting_source_papers": ["paper-specificity"], "target_idea_id": "idea-rescued"}
+  ],
+  "codex_task_ran": true,
+  "novelty_assessments": [
+    {"idea_id": "idea-rejected-method", "closest_prior_work_ids": ["paper-prior"], "similarity_summary": "Prior detector solves the original method idea.", "counterevidence": ["Fatal method overlap."], "verdict": "reject", "novelty_strength": "low"},
+    {"idea_id": "idea-rescued", "closest_prior_work_ids": ["paper-prior"], "similarity_summary": "Prior work overlaps on detector but not sequential specificity protocol.", "counterevidence": ["Prior detector remains a required baseline."], "verdict": "pursue", "novelty_strength": "medium"}
+  ],
+  "tournament": {"ran": true, "selected_candidate_id": "idea-rescued", "score_records": [{"idea_id": "idea-rejected-method", "total_score": 0.0, "blockers": ["fatal novelty blocker"]}, {"idea_id": "idea-rescued", "total_score": 0.87, "blockers": []}], "disqualified_candidate_ids": ["idea-rejected-method"]},
+  "preferences": {"preferred_contribution_types": ["evaluation_protocol"], "risk_tolerance": "medium"},
+  "human_feedback": [{"idea_id": "idea-rejected-method", "action": "request_mutation", "rationale": "Change the overlapping dimension."}, {"idea_id": "idea-rescued", "action": "accept", "rationale": "Mutation produced a defensible candidate."}],
+  "idea_yield_metrics": {"candidate_count": 2, "human_accepted_idea_count": 1, "agenda_generated": false},
+  "release_gate": {"allow_agenda_only": false},
+  "rejected_ideas_preserved": true,
+  "expected": {"outcome": "accepted", "selected_candidate_id": "idea-rescued", "rescued_idea_id": "idea-rescued", "mutation_required": true, "release_gate_pass": true}
+}

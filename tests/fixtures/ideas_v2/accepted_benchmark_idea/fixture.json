@@ -1,0 +1,35 @@
+{
+  "topic": "low false-positive collusion detection in LLM multi-agent systems",
+  "known_paper_ids": ["paper-monitoring", "paper-benchmark"],
+  "topic_portfolio": [
+    {"id": "topic-narrow", "transformation_type": "narrower", "expected_search_queries": ["low false positive collusion audit benchmark"], "promise": "Scopes to an auditable benchmark paper.", "risk": "May be too narrow."},
+    {"id": "topic-adjacent", "transformation_type": "adjacent", "expected_search_queries": ["multi-agent monitor evasion false positives"], "promise": "Finds monitor-evasion adjacent work.", "risk": "Could duplicate safety monitoring."},
+    {"id": "topic-cross", "transformation_type": "cross_domain", "expected_search_queries": ["medical specificity screening low false positive"], "promise": "Transfers specificity controls.", "risk": "Labels are noisier."},
+    {"id": "topic-metric", "transformation_type": "metric_shift", "expected_search_queries": ["specificity false positive rate audit"], "promise": "Makes low-FPR the core contribution.", "risk": "Recall may suffer."},
+    {"id": "topic-benchmark", "transformation_type": "benchmark_shift", "expected_search_queries": ["collusion detection benchmark benign traces"], "promise": "Supports a benchmark paper.", "risk": "Dataset construction may dominate."},
+    {"id": "topic-theory", "transformation_type": "theory_shift", "expected_search_queries": ["sequential hypothesis testing collusion monitoring"], "promise": "May yield guarantees.", "risk": "Assumptions may be brittle."}
+  ],
+  "candidates": [
+    {"id": "idea-benchmark", "title": "Sequential specificity benchmark for low-FPR collusion audits", "summary": "Benchmark benign and collusive traces under fixed false-positive budgets.", "contribution_type": "benchmark", "core_claim": "A specificity-first benchmark can expose monitor failure modes without claiming new results.", "proposed_experiment": "Compare LLM judge and rule monitors on benign and collusive multi-agent traces.", "expected_metrics": ["false positive rate", "specificity", "recall"], "novelty_status": "plausible", "maturity": "candidate"}
+  ],
+  "mutations": [
+    {"source_idea_id": "idea-weak", "mutated_idea_id": "idea-benchmark", "strategy": "method_to_benchmark", "what_changed": "Changed from detector method to benchmark artifact.", "why_it_may_help": "Avoids overclaiming method novelty.", "inherited_risks": ["prior monitor benchmarks may overlap"], "required_new_searches": ["collusion benchmark false positive"]}
+  ],
+  "constructive_gaps": [
+    {"id": "gap-benchmark", "contribution_type": "benchmark", "minimum_artifact": "Trace benchmark with honest and collusive splits.", "minimum_experiment": "Run baseline monitors at fixed FPR.", "required_baselines": ["LLM judge", "rule monitor"], "expected_metrics": ["false positive rate", "specificity"], "closest_prior_work_ids": ["paper-benchmark"]}
+  ],
+  "transfers": [
+    {"id": "transfer-specificity", "source_field": "medicine screening/specificity", "source_concept": "specificity", "transfer_mechanism": "Set monitor thresholds by specificity before measuring recall.", "required_adaptation": "Map diagnoses to collusion labels.", "what_breaks": "Ground-truth collusion is partly synthetic.", "supporting_source_papers": ["paper-monitoring"], "target_idea_id": "idea-benchmark"}
+  ],
+  "codex_task_ran": true,
+  "novelty_assessments": [
+    {"idea_id": "idea-benchmark", "closest_prior_work_ids": ["paper-benchmark"], "similarity_summary": "Prior work has monitors but not a specificity-first collusion benchmark.", "counterevidence": ["Closest benchmark lacks low-FPR audit protocol."], "verdict": "pursue", "novelty_strength": "medium"}
+  ],
+  "tournament": {"ran": true, "selected_candidate_id": "idea-benchmark", "score_records": [{"idea_id": "idea-benchmark", "total_score": 0.88, "blockers": []}], "disqualified_candidate_ids": []},
+  "preferences": {"preferred_contribution_types": ["benchmark"], "risk_tolerance": "medium"},
+  "human_feedback": [{"idea_id": "idea-benchmark", "action": "accept", "rationale": "Benchmark contribution is concrete and reviewable."}],
+  "idea_yield_metrics": {"candidate_count": 1, "human_accepted_idea_count": 1, "agenda_generated": false},
+  "release_gate": {"allow_agenda_only": false},
+  "rejected_ideas_preserved": true,
+  "expected": {"outcome": "accepted", "selected_candidate_id": "idea-benchmark", "release_gate_pass": true}
+}

@@ -2,6 +2,76 @@
 
 All notable project changes should be recorded here.
 
+## 2.0.0
+
+GapForge v2.0.0 is the Idea Discovery Engine release. It keeps the v1 evidence gates intact while changing the default behavior from evaluating or refusing the first obvious direction to actively searching across portfolios of defensible idea candidates.
+
+### Idea Discovery Engine
+
+- Added topic portfolios with narrower, adjacent, cross-domain, metric-shift, threat-model-shift, benchmark-shift, theory-shift, evaluation-shift, and data-shift variants.
+- Added first-class idea banks with auditable idea candidates, evidence links, reviews, feedback, rejected candidate preservation, reports, and Python API support.
+- Added idea mutation records and strategies for metric, observable, threat-model, benchmark, dataset, baseline, guarantee, domain-transfer, contribution-type, negative-result, measurement, theory, minimum-publishable-unit, and reviewer-objection reframing.
+- Added constructive gap creation for benchmark, measurement, evaluation protocol, dataset, replication, negative-result, theory, system, and tooling paper forms.
+- Added cross-domain transfer expansion from medicine screening/specificity, anomaly detection, fraud detection, cartel detection economics, covert channels/steganography, sequential testing, statistical process control, safety-critical monitoring, and reliability engineering.
+- Added validation-gated Codex/GPT-5.4 idea synthesis task packs for seed expansion, mutation, constructive gaps, transfer, critique, tournament judging, and research agenda building.
+- Added an active idea search controller and decision policy for portfolio creation, variant search, synthesis, mutation, prior-work loops, tournaments, feedback requests, agenda fallback, and stop decisions.
+- Added idea-specific novelty and counterevidence loops that update candidate novelty status and preserve closest prior work, missing searches, and counterevidence.
+- Added idea tournaments with transparent scoring across evidence, novelty, experimentability, tractability, impact, reviewer risk, time-to-demo, benchmark/baseline availability, cross-domain leverage, and human preference.
+- Added human preference profiles and feedback records that can steer search and tournament scoring without overriding evidence, novelty, fake-citation, fake-result, or human-review gates.
+- Added research agenda mode as the honest fallback when active search finds no accepted idea candidate.
+- Added idea yield metrics for topic variants, candidates, mutations, constructive gaps, transfers, duplicates/generic rejections, novelty unknowns, tournament survivors, accepted ideas, agenda fallback, yield rate, time to selected idea, evidence per candidate, and prior work per candidate.
+- Added the v2 release gate requiring v1 readiness, portfolio, idea bank, mutation, constructive gap, transfer, Codex synthesis task or explicit unavailability, novelty/counterevidence loop, tournament, human feedback/review, yield metrics, rejected-idea preservation, and either an accepted candidate or explicit agenda-only warning path.
+
+### API, Dashboard, Evals, Docs, and Skills
+
+- Exposed v2 idea discovery workflows through `gapforge.api`: `generate_topic_portfolio`, `create_idea_bank`, `generate_ideas`, `mutate_idea`, `generate_constructive_gaps`, `transfer_ideas`, `run_idea_novelty`, `run_idea_tournament`, `add_idea_feedback`, `generate_research_agenda`, `idea_yield`, and `v2_release_gate`.
+- Added idea discovery dashboard/report pages for portfolios, idea banks, candidates, mutations, constructive gaps, transfers, novelty, tournaments, feedback, agendas, yield, and v2 release gate state.
+- Added v2 idea eval fixtures and metrics covering accepted benchmark/measurement/negative-result ideas, generic rejection, duplicate rejection, agenda fallback, fake-citation blocking, human preference effects, mutation recovery, yield correctness, and tournament quality.
+- Added v2 roadmap, acceptance criteria, idea discovery, idea yield, research agenda, human feedback, release process, architecture, eval, limitation, and Codex research-agent documentation.
+- Added Codex-readable v2 skills for topic portfolios, idea banks, idea mutation, constructive gap creation, cross-domain transfer, idea synthesis, novelty loops, tournaments, and research agenda mode.
+
+### Pilot and Release Outcome
+
+- Ran the v2 low-FPR collusion idea pilot for `low false-positive collusion detection in LLM multi-agent systems`.
+- Accepted candidate idea found: `idea-sequential-specificity-benchmark-for-low-fpr-collusion-audits`.
+- Selected idea title: `Sequential specificity benchmark for low-FPR collusion audits`.
+- Rejected idea count in the release pilot: 1.
+- Research agenda status: no agenda fallback was used because an accepted candidate was found.
+- Idea yield metrics for the release pilot: 11 topic variants, 26 candidates, 1 mutation, 8 constructive gaps, 1 cross-domain transfer, 5 tournament survivors, 1 human-accepted idea, idea yield rate 0.0385, evidence per candidate 2.1538, prior work per candidate 2.1154.
+- v2 release gate passed with status `pass`, no blockers, and no agenda-only warning.
+
+### Validation
+
+- `make ci`
+- `make eval`
+- `gapforge eval --v2 --write-report`
+- `gapforge eval --v3 --write-report`
+- `gapforge eval --v4 --write-report`
+- `gapforge eval --v5 --write-report`
+- `gapforge eval --v6 --write-report`
+- `gapforge eval --v7 --write-report`
+- `gapforge eval --v8 --write-report`
+- `gapforge eval --v9 --write-report`
+- `gapforge eval --v2-ideas --write-report`
+- `make v2-smoke`
+- `make v3-smoke`
+- `make v4-smoke`
+- `make v6-smoke`
+- `make v7-smoke`
+- `make v8-smoke`
+- `make v9-smoke`
+- `gapforge v1-readiness --write-report --json`
+- `gapforge v2-release-gate --write-report --json`
+
+No `v5-smoke` target exists in the Makefile.
+
+### Non-Claims and Limitations
+
+- v2.0.0 does not claim exhaustive literature review, guaranteed novelty, empirical results, publication readiness, venue acceptance, or manuscript readiness.
+- The accepted idea is candidate-level only. It still needs real experiment execution, benchmark/data construction, manuscript work, and external review before any paper-ready claim.
+- Codex/GPT-5.4 task-pack output remains untrusted until schema-valid, evidence-grounded, imported, and reviewed.
+- Research agenda fallback remains a valid outcome in future runs when no candidate survives active search.
+
 ## 1.0.0
 
 GapForge v1.0.0 is the stable evidence-gated research ideation release. It promotes the v0.9.1 migration compatibility remediation into the v1 line after the v1 readiness gate passed with v4-v9 release evidence, Compatibility Audit V2, CLI audit, docs audit, artifact hygiene audit, and an accepted external pilot outcome.

@@ -66,6 +66,7 @@ PROJECT_ARTIFACTS = [
     "benchmark_suites.json",
     "benchmark_suites.md",
     "benchmark_suites/",
+    "ideas/",
     "revision_search_requests.json",
     "review_panels.json",
     "review_panel.md",
@@ -103,6 +104,7 @@ class ProjectMemoryManager:
         (root_dir / "reports").mkdir(parents=True, exist_ok=True)
         (root_dir / "campaigns").mkdir(parents=True, exist_ok=True)
         (root_dir / "experiment_workspaces").mkdir(parents=True, exist_ok=True)
+        (root_dir / "ideas").mkdir(parents=True, exist_ok=True)
         now = utc_now_iso()
         project = ResearchProject(
             id=project_id,
@@ -202,6 +204,7 @@ class ProjectMemoryManager:
         (root_dir / "campaigns").mkdir(parents=True, exist_ok=True)
         (root_dir / "experiment_workspaces").mkdir(parents=True, exist_ok=True)
         (root_dir / "benchmark_suites").mkdir(parents=True, exist_ok=True)
+        (root_dir / "ideas").mkdir(parents=True, exist_ok=True)
         program.project.root_dir = str(root_dir)
         program.project.run_ids = _unique(program.run_ids or program.project.run_ids)
         program.project.active_topic_ids = _unique(program.project.active_topic_ids)

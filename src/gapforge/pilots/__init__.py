@@ -20,6 +20,13 @@ from gapforge.pilots.status import (
     classify_record,
     render_pilot_status_json,
 )
+from gapforge.pilots.v2 import (
+    V2IdeaPilotRunner,
+    build_v2_pilot_acceptance,
+    render_v2_pilot_report,
+    render_v2_pilot_status,
+    v2_pilot_requirements,
+)
 
 __all__ = [
     "LOW_FPR_COLLUSION",
@@ -28,8 +35,10 @@ __all__ = [
     "ExternalPilotReviewManager",
     "PilotRunner",
     "PilotStore",
+    "V2IdeaPilotRunner",
     "assess_pilot_outcome",
     "build_acceptance_summary",
+    "build_v2_pilot_acceptance",
     "build_status_payload",
     "classify_record",
     "default_pilot_specs",
@@ -42,4 +51,7 @@ __all__ = [
     "render_pilot_outcome",
     "render_pilot_report",
     "render_pilot_status_json",
+    "render_v2_pilot_report",
+    "render_v2_pilot_status",
+    "v2_pilot_requirements",
 ]

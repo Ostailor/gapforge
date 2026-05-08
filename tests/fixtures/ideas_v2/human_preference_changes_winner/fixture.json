@@ -1,0 +1,37 @@
+{
+  "topic": "low false-positive collusion detection in LLM multi-agent systems",
+  "known_paper_ids": ["paper-measurement", "paper-method"],
+  "topic_portfolio": [
+    {"id": "topic-narrow", "transformation_type": "narrower", "expected_search_queries": ["false positive measurement"], "promise": "Measurement path.", "risk": "Lower novelty."},
+    {"id": "topic-adjacent", "transformation_type": "adjacent", "expected_search_queries": ["monitor evasion"], "promise": "Method path.", "risk": "Higher risk."},
+    {"id": "topic-cross", "transformation_type": "cross_domain", "expected_search_queries": ["safety critical monitoring specificity"], "promise": "Transfer.", "risk": "Adaptation."},
+    {"id": "topic-metric", "transformation_type": "metric_shift", "expected_search_queries": ["specificity measurement"], "promise": "Preference fit.", "risk": "Limited impact."},
+    {"id": "topic-benchmark", "transformation_type": "benchmark_shift", "expected_search_queries": ["honest traces benchmark"], "promise": "Artifact.", "risk": "Dataset."},
+    {"id": "topic-theory", "transformation_type": "theory_shift", "expected_search_queries": ["false alarm theory"], "promise": "Theory.", "risk": "Brittle."}
+  ],
+  "candidates": [
+    {"id": "idea-method", "title": "New monitor method for covert collusion detection", "summary": "Higher raw score but less preferred.", "contribution_type": "method", "core_claim": "Method may detect covert collusion.", "proposed_experiment": "Compare method to baselines.", "expected_metrics": ["recall", "false positive rate"], "novelty_status": "plausible", "maturity": "candidate"},
+    {"id": "idea-preferred-measurement", "title": "Measurement study of honest-agent false positives under collusion monitors", "summary": "Human-preferred measurement candidate.", "contribution_type": "measurement", "core_claim": "False-positive measurement is the preferred defensible path.", "proposed_experiment": "Measure baseline monitors on honest traces.", "expected_metrics": ["false positive rate", "specificity"], "novelty_status": "plausible", "maturity": "candidate"}
+  ],
+  "mutations": [
+    {"source_idea_id": "idea-method", "mutated_idea_id": "idea-preferred-measurement", "strategy": "method_to_measurement", "what_changed": "Changed method into measurement.", "why_it_may_help": "Matches human preference and lowers risk.", "inherited_risks": ["method novelty weak"], "required_new_searches": ["honest agent false positive measurement"]}
+  ],
+  "constructive_gaps": [
+    {"id": "gap-measurement", "contribution_type": "measurement", "minimum_artifact": "Honest traces.", "minimum_experiment": "Run monitors on honest traces.", "required_baselines": ["LLM judge"], "expected_metrics": ["specificity"], "closest_prior_work_ids": ["paper-measurement"]}
+  ],
+  "transfers": [
+    {"id": "transfer-safety", "source_field": "safety-critical monitoring", "source_concept": "false alarm budget", "transfer_mechanism": "Respect operator false alarm budgets.", "required_adaptation": "Operator alerts become collusion audit alerts.", "what_breaks": "Multi-agent dialogue is less structured.", "supporting_source_papers": ["paper-measurement"], "target_idea_id": "idea-preferred-measurement"}
+  ],
+  "codex_task_ran": true,
+  "novelty_assessments": [
+    {"idea_id": "idea-method", "closest_prior_work_ids": ["paper-method"], "similarity_summary": "Method novelty is riskier.", "counterevidence": ["Prior method overlap."], "verdict": "revise", "novelty_strength": "weak"},
+    {"idea_id": "idea-preferred-measurement", "closest_prior_work_ids": ["paper-measurement"], "similarity_summary": "Measurement framing remains plausible.", "counterevidence": ["Some benign traces exist."], "verdict": "pursue", "novelty_strength": "medium"}
+  ],
+  "tournament": {"ran": true, "selected_candidate_id": "idea-preferred-measurement", "human_preference_applied": true, "score_records": [{"idea_id": "idea-method", "total_score": 0.81, "blockers": ["human preference risk"]}, {"idea_id": "idea-preferred-measurement", "total_score": 0.84, "blockers": []}], "disqualified_candidate_ids": []},
+  "preferences": {"preferred_contribution_types": ["measurement"], "risk_tolerance": "low"},
+  "human_feedback": [{"idea_id": "idea-method", "action": "downvote", "rationale": "Too method-heavy."}, {"idea_id": "idea-preferred-measurement", "action": "accept", "rationale": "Preferred lower-risk contribution."}],
+  "idea_yield_metrics": {"candidate_count": 2, "human_accepted_idea_count": 1, "agenda_generated": false},
+  "release_gate": {"allow_agenda_only": false},
+  "rejected_ideas_preserved": true,
+  "expected": {"outcome": "accepted", "selected_candidate_id": "idea-preferred-measurement", "human_preference_changed_winner": true, "release_gate_pass": true}
+}

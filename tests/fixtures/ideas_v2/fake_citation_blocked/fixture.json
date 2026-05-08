@@ -1,0 +1,35 @@
+{
+  "topic": "low false-positive collusion detection in LLM multi-agent systems",
+  "known_paper_ids": ["paper-real"],
+  "topic_portfolio": [
+    {"id": "topic-narrow", "transformation_type": "narrower", "expected_search_queries": ["fake citation audit"], "promise": "Checks citations.", "risk": "Blocked."},
+    {"id": "topic-adjacent", "transformation_type": "adjacent", "expected_search_queries": ["monitor audit"], "promise": "Adjacent.", "risk": "Overlap."},
+    {"id": "topic-cross", "transformation_type": "cross_domain", "expected_search_queries": ["fraud detection"], "promise": "Transfer.", "risk": "Shallow."},
+    {"id": "topic-metric", "transformation_type": "metric_shift", "expected_search_queries": ["specificity"], "promise": "Metric.", "risk": "Missing source."},
+    {"id": "topic-benchmark", "transformation_type": "benchmark_shift", "expected_search_queries": ["benchmark"], "promise": "Artifact.", "risk": "Fake citation."},
+    {"id": "topic-theory", "transformation_type": "theory_shift", "expected_search_queries": ["theory"], "promise": "Theory.", "risk": "Weak."}
+  ],
+  "candidates": [
+    {"id": "idea-fake", "title": "Specificity benchmark with unresolved prior-work citation", "summary": "Specific candidate but cites a nonexistent prior.", "contribution_type": "benchmark", "core_claim": "Requires a real prior-work anchor.", "proposed_experiment": "Run monitor baselines.", "expected_metrics": ["specificity"], "novelty_status": "plausible", "maturity": "rejected", "unresolved_paper_ids": ["paper-fake"], "expected_gate": "reject_fake_citation"}
+  ],
+  "mutations": [
+    {"source_idea_id": "idea-fake", "mutated_idea_id": "idea-real-search", "strategy": "baseline_shift", "what_changed": "Requires real baseline search.", "why_it_may_help": "Removes fake citation dependency.", "inherited_risks": ["unresolved citation"], "required_new_searches": ["real low fpr monitor benchmark"]}
+  ],
+  "constructive_gaps": [
+    {"id": "gap-eval", "contribution_type": "evaluation_protocol", "minimum_artifact": "Protocol.", "minimum_experiment": "Run baselines.", "required_baselines": ["real baseline"], "expected_metrics": ["specificity"], "missing_searches": ["resolve citation"]}
+  ],
+  "transfers": [
+    {"id": "transfer-fraud", "source_field": "fraud detection", "source_concept": "alert review", "transfer_mechanism": "False alert triage.", "required_adaptation": "Map fraud alerts to collusion alerts.", "what_breaks": "Labels differ.", "required_searches": ["fraud detection false positives"], "target_idea_id": ""}
+  ],
+  "codex_task_ran": true,
+  "novelty_assessments": [
+    {"idea_id": "idea-fake", "closest_prior_work_ids": [], "missing_searches": ["resolve paper-fake"], "similarity_summary": "Claimed prior work does not resolve.", "counterevidence": ["Fake citation cannot support novelty."], "verdict": "reject", "novelty_strength": "unknown"}
+  ],
+  "tournament": {"ran": true, "selected_candidate_id": "", "score_records": [{"idea_id": "idea-fake", "total_score": 0.0, "blockers": ["fake citation"]}], "disqualified_candidate_ids": ["idea-fake"], "fake_citation_candidate_won": false},
+  "preferences": {"preferred_contribution_types": ["benchmark"], "risk_tolerance": "medium"},
+  "human_feedback": [{"idea_id": "idea-fake", "action": "reject", "rationale": "Fake citation blocks selection."}],
+  "idea_yield_metrics": {"candidate_count": 1, "human_accepted_idea_count": 0, "agenda_generated": false},
+  "release_gate": {"allow_agenda_only": false},
+  "rejected_ideas_preserved": true,
+  "expected": {"outcome": "reject_fake_citation", "release_gate_pass": false, "must_fail_bad_idea": true}
+}

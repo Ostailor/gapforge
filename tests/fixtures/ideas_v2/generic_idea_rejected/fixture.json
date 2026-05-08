@@ -1,0 +1,35 @@
+{
+  "topic": "low false-positive collusion detection in LLM multi-agent systems",
+  "known_paper_ids": ["paper-monitoring"],
+  "topic_portfolio": [
+    {"id": "topic-narrow", "transformation_type": "narrower", "expected_search_queries": ["collusion auditing"], "promise": "Narrows topic.", "risk": "Still broad."},
+    {"id": "topic-adjacent", "transformation_type": "adjacent", "expected_search_queries": ["monitor evasion"], "promise": "Adjacent search.", "risk": "Drift."},
+    {"id": "topic-cross", "transformation_type": "cross_domain", "expected_search_queries": ["medical specificity"], "promise": "Transfer.", "risk": "Shallow."},
+    {"id": "topic-metric", "transformation_type": "metric_shift", "expected_search_queries": ["false positive rate"], "promise": "Metric focus.", "risk": "No idea."},
+    {"id": "topic-benchmark", "transformation_type": "benchmark_shift", "expected_search_queries": ["collusion benchmark"], "promise": "Artifact path.", "risk": "Duplicate."},
+    {"id": "topic-theory", "transformation_type": "theory_shift", "expected_search_queries": ["collusion theory"], "promise": "Theory path.", "risk": "Weak."}
+  ],
+  "candidates": [
+    {"id": "idea-generic", "title": "Research idea", "summary": "Use AI to improve collusion detection.", "contribution_type": "method", "core_claim": "", "proposed_experiment": "", "expected_metrics": [], "novelty_status": "unknown", "maturity": "rejected", "expected_gate": "reject_generic"}
+  ],
+  "mutations": [
+    {"source_idea_id": "idea-generic", "mutated_idea_id": "idea-specific", "strategy": "broad_to_minimum_publishable_unit", "what_changed": "Forced a specific benchmark unit.", "why_it_may_help": "Generic idea cannot pass.", "inherited_risks": ["generic framing"], "required_new_searches": ["specific collusion benchmark"]}
+  ],
+  "constructive_gaps": [
+    {"id": "gap-benchmark", "contribution_type": "benchmark", "minimum_artifact": "Trace benchmark.", "minimum_experiment": "Run baselines.", "required_baselines": ["LLM judge"], "expected_metrics": ["false positive rate"], "missing_searches": ["benchmark search"]}
+  ],
+  "transfers": [
+    {"id": "transfer-specificity", "source_field": "medicine screening/specificity", "source_concept": "specificity", "transfer_mechanism": "Threshold by specificity.", "required_adaptation": "Map labels.", "what_breaks": "Label noise.", "required_searches": ["specificity monitoring"]}
+  ],
+  "codex_task_ran": true,
+  "novelty_assessments": [
+    {"idea_id": "idea-generic", "closest_prior_work_ids": [], "missing_searches": ["specific queries missing"], "similarity_summary": "Too generic to assess.", "counterevidence": ["No concrete artifact."], "verdict": "reject", "novelty_strength": "unknown"}
+  ],
+  "tournament": {"ran": true, "selected_candidate_id": "", "score_records": [{"idea_id": "idea-generic", "total_score": 0.0, "blockers": ["generic idea"]}], "disqualified_candidate_ids": ["idea-generic"], "generic_candidate_won": false},
+  "preferences": {"preferred_contribution_types": ["benchmark"], "risk_tolerance": "medium"},
+  "human_feedback": [{"idea_id": "idea-generic", "action": "reject", "rationale": "Generic seed is not a candidate."}],
+  "idea_yield_metrics": {"candidate_count": 1, "human_accepted_idea_count": 0, "agenda_generated": false},
+  "release_gate": {"allow_agenda_only": false},
+  "rejected_ideas_preserved": true,
+  "expected": {"outcome": "reject_generic", "release_gate_pass": false, "must_fail_bad_idea": true}
+}

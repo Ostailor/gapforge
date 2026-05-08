@@ -238,6 +238,45 @@ Important limits:
 - failed migrations must be repaired from backups or explicit migrator rules, not ignored
 - v1 must not be claimed until `gapforge v1-readiness --write-report --json` passes
 
+## v2 Idea Discovery Engine Limits
+
+v2 is the Idea Discovery Engine release line. It should actively search for defensible research ideas instead of evaluating only the first obvious idea.
+
+v2 must still preserve these limits:
+
+- active search does not guarantee that a good idea exists
+- topic portfolios can miss important subfields, venues, or source families
+- idea candidates are provisional search artifacts, not research directions, manuscripts, or publication claims
+- idea mutation can create more variants without creating novelty
+- constructive gap creation can propose useful frames, but every frame still needs closest-prior-work review
+- cross-domain transfer can be suggestive without being novel, feasible, or accepted by either domain
+- Codex/GPT-5.4 synthesis tasks remain untrusted until schema-valid, evidence-grounded, imported, and reviewed
+- idea tournaments rank candidates under chosen criteria, but ranking does not prove novelty or feasibility
+- human preference feedback can steer search but cannot waive evidence gates
+- idea yield metrics can diagnose search productivity but cannot prove research quality by themselves
+- research agenda fallback is an honest no-accepted-idea outcome, not a successful idea-discovery claim
+- the v2 release gate must fail unless at least one idea candidate is accepted or explicit idea-discovery failure is recorded for v2.0.1 or v2.1 planning
+
+v2 non-goals:
+
+- weakening evidence gates
+- inventing citations, datasets, baselines, metrics, or results
+- forcing a generic idea to pass
+- treating speculative seeds as paper-ready
+- removing correct refusal as a possible outcome
+- bypassing human review
+- using candidate volume as a proxy for quality
+
+An accepted v2 idea candidate means the candidate survived portfolio search, novelty and counterevidence review, feasibility review, tournament comparison, and human review for a stated scope. It does not mean the idea is empirically proven, manuscript-ready, submission-ready, or publishable.
+
+Current operational limits:
+
+- `seed` ideas are allowed to be incomplete and risky; scripts and reports must not present them as accepted.
+- Human feedback can up-rank, down-rank, reject, request mutation, request search, or accept a candidate, but acceptance still requires novelty, evidence, and release-gate checks.
+- Codex/GPT-5.4 task packs can propose patches only. Import validation must reject fake citations, fake results, generic ideas, unresolved evidence links, and unsupported strong novelty.
+- Cross-domain transfer without supporting evidence is a search request, not an idea candidate.
+- Agenda-only fallback is honest incompleteness for v2.0 unless explicitly allowed with warning release notes.
+
 ## Operational Guidance
 
 Use strict mode and coverage assessment before interpreting outputs:

@@ -215,6 +215,46 @@ def test_api_v4_release_gate(tmp_path: Path) -> None:
     assert result.blockers
 
 
+def test_api_v2_idea_discovery_workflow_and_release_gate(tmp_path: Path) -> None:
+    config = GapForgeConfig.from_cwd(tmp_path)
+    root_topic = "low false-positive collusion detection in LLM multi-agent systems"
+    project = api.create_project(root_topic, description=root_topic, config=config)
+    ProjectMemoryManager(config).use_project(project.project.id)
+    _write_api_v1_pass(config)
+
+    portfolio = api.generate_topic_portfolio(project_id=project.project.id, root_topic=root_topic, config=config)
+    bank = api.create_idea_bank(project.project.id, root_topic, config=config)
+    generated = api.generate_ideas(project_id=project.project.id, max_candidates=8, config=config)
+    mutation = api.mutate_idea(generated.candidates[0].id, strategy="method_to_benchmark", config=config)
+    gaps = api.generate_constructive_gaps(project_id=project.project.id, config=config)
+    transfers = api.transfer_ideas(project_id=project.project.id, config=config)
+    novelty = api.run_idea_novelty(idea_id=mutation.candidate.id, top_k=3, config=config)
+    tournament = api.run_idea_tournament(project.project.id, top_k=8, config=config)
+    assert tournament.selected_candidate_id
+    feedback = api.add_idea_feedback(
+        tournament.selected_candidate_id,
+        "accept",
+        reviewer="api-fixture",
+        rationale="Accept the API-selected candidate after the scripted v2 workflow.",
+        config=config,
+    )
+    metrics = api.idea_yield(project.project.id, write_report=True, config=config)
+    _write_api_codex_task_marker(config, project.project.id)
+    gate = api.v2_release_gate(write_report=True, config=config)
+
+    assert portfolio.project_id == project.project.id
+    assert bank.project_id == project.project.id
+    assert generated.candidates
+    assert mutation.candidate.id != generated.candidates[0].id
+    assert gaps.candidates
+    assert transfers.transfers
+    assert getattr(novelty, "idea_id") == mutation.candidate.id
+    assert feedback.idea_id == tournament.selected_candidate_id
+    assert metrics.candidate_count >= len(generated.candidates)
+    assert gate.passed is True
+    assert gate.selected_idea_id == tournament.selected_candidate_id
+
+
 def test_api_create_draft_and_traceability_manuscript(tmp_path: Path) -> None:
     config, manuscript_id, execution_id, artifact_ids = _api_manuscript_fixture(tmp_path)
 
@@ -725,6 +765,25 @@ def _write_v8_api_prerequisites(config: GapForgeConfig) -> None:
     release_dir.mkdir(parents=True, exist_ok=True)
     (release_dir / "deterministic_ci.json").write_text('{"passed": true}\n', encoding="utf-8")
     (release_dir / "v0.7_latest.json").write_text('{"passed": true, "status": "pass"}\n', encoding="utf-8")
+
+
+def _write_api_v1_pass(config: GapForgeConfig) -> None:
+    release_dir = config.data_dir / "release_gate"
+    release_dir.mkdir(parents=True, exist_ok=True)
+    (release_dir / "v1_readiness_latest.json").write_text(
+        json.dumps({"passed": True, "status": "pass", "recommended_next_version": "v1"}, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+
+def _write_api_codex_task_marker(config: GapForgeConfig, project_id: str) -> None:
+    project = ProjectMemoryManager(config).load_project(project_id).project
+    task_dir = Path(project.root_dir) / "ideas" / "codex_tasks" / "idea-codex-task-api-fixture"
+    task_dir.mkdir(parents=True, exist_ok=True)
+    (task_dir / "task.json").write_text(
+        json.dumps({"id": "idea-codex-task-api-fixture", "project_id": project_id, "task_type": "idea_seed_expansion"}, indent=2) + "\n",
+        encoding="utf-8",
+    )
 
 
 def _tiny_pdf(text: str) -> bytes:

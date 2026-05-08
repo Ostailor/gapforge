@@ -125,6 +125,24 @@ from gapforge.export.paper_package import PaperPackageExporter
 from gapforge.fulltext.downloader import PdfDownloader
 from gapforge.fulltext.pdf_parser import FullTextParser
 from gapforge.fulltext.structure import FullTextStructureParser
+from gapforge.ideas import (
+    IDEA_CODEX_TASK_TYPES,
+    ConstructiveGapGenerator,
+    CrossDomainIdeaTransferEngine,
+    IdeaCodexTaskManager,
+    IdeaFeedbackManager,
+    IdeaMutationEngine,
+    IdeaNoveltyLoop,
+    IdeaPreferenceManager,
+    IdeaSearchController,
+    IdeaSeedGenerator,
+    IdeaStore,
+    IdeaTournamentRunner,
+    IdeaYieldMetricCalculator,
+    ResearchAgendaManager,
+    TopicPortfolioGenerator,
+    render_idea_discovery_report,
+)
 from gapforge.ingest import ManualIngestor, parse_authors
 from gapforge.jobs import JobScheduler, render_job, render_job_queue, render_job_runner_result
 from gapforge.llm.base import LLMClient
@@ -187,6 +205,7 @@ from gapforge.pilots import (
     IdeaGate,
     PilotRunner,
     PilotStore,
+    V2IdeaPilotRunner,
     assess_pilot_outcome,
     get_pilot_spec,
     render_idea_gate,
@@ -196,6 +215,7 @@ from gapforge.pilots import (
     render_pilot_outcome,
     render_pilot_report,
     render_pilot_status_json,
+    render_v2_pilot_status,
 )
 from gapforge.project_memory import ProjectMemoryManager
 from gapforge.real_literature import (
@@ -215,9 +235,11 @@ from gapforge.release_gate import (
     V08ReleaseGateEnforcer,
     V09ReleaseGateEnforcer,
     V1ReadinessGate,
+    V2ReleaseGateEnforcer,
     render_v04_release_gate_markdown,
     render_v09_release_gate_markdown,
     render_v1_readiness_markdown,
+    render_v2_release_gate_markdown,
 )
 from gapforge.release_gate.v05 import render_v05_release_gate_markdown
 from gapforge.release_gate.v06 import render_v06_release_gate_markdown
@@ -391,6 +413,15 @@ def build_parser() -> argparse.ArgumentParser:
     pilot_report_parser = subparsers.add_parser("pilot-report", help="Print and write the final durable report for a v0.9 pilot run.")
     pilot_report_parser.add_argument("--pilot-id", required=True)
 
+    v2_pilot_run_parser = subparsers.add_parser("v2-pilot-run", help="Run the v2 idea-discovery pilot workflow.")
+    v2_pilot_run_parser.add_argument("--name", required=True)
+
+    v2_pilot_status_parser = subparsers.add_parser("v2-pilot-status", help="Print v2 idea-discovery pilot status JSON.")
+    v2_pilot_status_parser.add_argument("--name", required=True)
+
+    v2_pilot_report_parser = subparsers.add_parser("v2-pilot-report", help="Print and write the v2 idea-discovery pilot report.")
+    v2_pilot_report_parser.add_argument("--name", required=True)
+
     pilot_acceptance_parser = subparsers.add_parser("pilot-acceptance", help="Print whether a v0.9 pilot can count for v1 readiness.")
     pilot_acceptance_parser.add_argument("--pilot-id", required=True)
 
@@ -431,8 +462,10 @@ def build_parser() -> argparse.ArgumentParser:
     idea_gate_scope.add_argument("--campaign-id")
     idea_gate_parser.add_argument("--json", action="store_true")
 
-    selected_idea_parser = subparsers.add_parser("selected-idea", help="Print the one selected v0.9 pilot idea, if the gate accepted one.")
-    selected_idea_parser.add_argument("--pilot-id", required=True)
+    selected_idea_parser = subparsers.add_parser("selected-idea", help="Print the selected pilot direction or v2 idea.")
+    selected_idea_scope = selected_idea_parser.add_mutually_exclusive_group(required=True)
+    selected_idea_scope.add_argument("--pilot-id")
+    selected_idea_scope.add_argument("--project-id")
 
     map_parser = subparsers.add_parser("map", help="Build a field map for a topic or existing run.")
     map_parser.add_argument("topic", nargs="?")
@@ -617,6 +650,7 @@ def build_parser() -> argparse.ArgumentParser:
     eval_parser.add_argument("--v7", action="store_true", help="Run v0.7 benchmark and replication evaluation fixtures.")
     eval_parser.add_argument("--v8", action="store_true", help="Run v0.8 manuscript submission evaluation fixtures.")
     eval_parser.add_argument("--v9", action="store_true", help="Run v0.9 pilot and v1-readiness evaluation fixtures.")
+    eval_parser.add_argument("--v2-ideas", action="store_true", help="Run v2 Idea Discovery Engine evaluation fixtures.")
     eval_parser.add_argument("--write-report", action="store_true")
 
     report_parser = subparsers.add_parser("report", help="Write final_report.md or final_report.json.")
@@ -643,6 +677,7 @@ def build_parser() -> argparse.ArgumentParser:
     dashboard_parser.add_argument("--include-benchmarks", action="store_true", help="Include v0.7 benchmark execution pages.")
     dashboard_parser.add_argument("--include-replication", action="store_true", help="Include v0.7 replication pages.")
     dashboard_parser.add_argument("--include-manuscripts", action="store_true", help="Include v0.8 manuscript readiness pages.")
+    dashboard_parser.add_argument("--include-ideas", action="store_true", help="Include v2 idea discovery dashboard pages.")
 
     release_gate_dashboard_parser = subparsers.add_parser(
         "release-gate-dashboard", help="Generate a project dashboard and print the release-gate page path."
@@ -1262,6 +1297,11 @@ def build_parser() -> argparse.ArgumentParser:
     v1_readiness_parser.add_argument("--explain", action="store_true", help="Print detailed blockers, warnings, and next commands.")
     v1_readiness_parser.add_argument("--next-commands", action="store_true", help="Print only the commands needed to unblock v1.")
 
+    v2_release_gate_parser = subparsers.add_parser("v2-release-gate", help="Enforce the v2 Idea Discovery Engine release gate.")
+    v2_release_gate_parser.add_argument("--allow-agenda-only", action="store_true")
+    v2_release_gate_parser.add_argument("--write-report", action="store_true")
+    v2_release_gate_parser.add_argument("--json", action="store_true")
+
     cli_audit_parser = subparsers.add_parser("cli-audit", help="Audit command grouping, help text, and v1 CLI discoverability.")
     cli_audit_parser.add_argument("--write-report", action="store_true")
 
@@ -1361,6 +1401,149 @@ def build_parser() -> argparse.ArgumentParser:
     protocol_parser = subparsers.add_parser("experiment-protocol", help="Generate an executable experiment protocol.")
     protocol_parser.add_argument("--project-id", required=True)
     protocol_parser.add_argument("--direction-id", required=True)
+
+    idea_bank_create_parser = subparsers.add_parser("idea-bank-create", help="Create a v2 first-class idea bank for a project.")
+    idea_bank_create_parser.add_argument("--project-id", required=True)
+    idea_bank_create_parser.add_argument("--root-topic", required=True)
+
+    idea_list_parser = subparsers.add_parser("idea-list", help="List v2 idea candidates for a project.")
+    idea_list_parser.add_argument("--project-id", required=True)
+
+    idea_report_parser = subparsers.add_parser("idea-report", help="Write and print a v2 idea candidate report.")
+    idea_report_parser.add_argument("--idea-id", required=True)
+
+    idea_review_parser = subparsers.add_parser("idea-review", help="Record or print human review for a v2 idea candidate.")
+    idea_review_parser.add_argument("--idea-id", required=True)
+    idea_review_parser.add_argument("--reviewer", default="")
+    idea_review_parser.add_argument("--status", choices=["accepted", "rejected", "revise", "uncertain"], default="uncertain")
+    idea_review_parser.add_argument("--novelty-judgment", default="")
+    idea_review_parser.add_argument("--feasibility-judgment", default="")
+    idea_review_parser.add_argument("--impact-judgment", default="")
+    idea_review_parser.add_argument("--required-fix", action="append", dest="required_fixes", default=[])
+    idea_review_parser.add_argument("--notes", default="")
+
+    topic_portfolio_parser = subparsers.add_parser("topic-portfolio", help="Generate a v2 topic variant portfolio.")
+    topic_portfolio_parser.add_argument("root_topic", nargs="?")
+    topic_portfolio_parser.add_argument("--project-id", default="")
+
+    topic_portfolio_report_parser = subparsers.add_parser("topic-portfolio-report", help="Print a v2 topic portfolio report.")
+    topic_portfolio_report_parser.add_argument("--portfolio-id", required=True)
+
+    idea_generate_parser = subparsers.add_parser("idea-generate", help="Generate v2 seed ideas from a topic portfolio and project memory.")
+    idea_generate_scope = idea_generate_parser.add_mutually_exclusive_group(required=True)
+    idea_generate_scope.add_argument("--project-id")
+    idea_generate_scope.add_argument("--portfolio-id")
+    idea_generate_parser.add_argument("--max-candidates", type=int, default=50)
+
+    mutate_idea_parser = subparsers.add_parser("mutate-idea", help="Mutate a weak or rejected v2 idea candidate into a new seed.")
+    mutate_idea_parser.add_argument("--idea-id", required=True)
+    mutate_idea_parser.add_argument("--strategy", default="")
+
+    mutate_rejected_parser = subparsers.add_parser("mutate-rejected-ideas", help="Mutate all rejected ideas retained in a project.")
+    mutate_rejected_parser.add_argument("--project-id", required=True)
+    mutate_rejected_parser.add_argument("--strategy", default="")
+
+    mutation_report_parser = subparsers.add_parser("mutation-report", help="Print the v2 idea mutation audit report.")
+    mutation_report_parser.add_argument("--project-id", required=True)
+
+    constructive_gaps_parser = subparsers.add_parser(
+        "constructive-gaps", help="Generate constructive gap candidates for non-method paper forms."
+    )
+    constructive_gaps_scope = constructive_gaps_parser.add_mutually_exclusive_group(required=True)
+    constructive_gaps_scope.add_argument("--project-id")
+    constructive_gaps_scope.add_argument("--campaign-id")
+
+    constructive_gap_report_parser = subparsers.add_parser("constructive-gap-report", help="Print the constructive gap candidate report.")
+    constructive_gap_report_parser.add_argument("--project-id", required=True)
+
+    transfer_ideas_parser = subparsers.add_parser("transfer-ideas", help="Generate evidence-gated cross-domain idea transfers.")
+    transfer_ideas_scope = transfer_ideas_parser.add_mutually_exclusive_group(required=True)
+    transfer_ideas_scope.add_argument("--project-id")
+    transfer_ideas_scope.add_argument("--topic")
+
+    transfer_report_parser = subparsers.add_parser("transfer-report", help="Print the cross-domain idea transfer report.")
+    transfer_report_parser.add_argument("--project-id", required=True)
+
+    idea_codex_task_parser = subparsers.add_parser("idea-codex-task", help="Create a validation-gated Codex idea synthesis task pack.")
+    idea_codex_task_parser.add_argument("--project-id", required=True)
+    idea_codex_task_parser.add_argument("--type", required=True, choices=sorted(IDEA_CODEX_TASK_TYPES))
+
+    idea_codex_handoff_parser = subparsers.add_parser("idea-codex-handoff", help="Print a Codex idea synthesis task handoff.")
+    idea_codex_handoff_parser.add_argument("--task-id", required=True)
+
+    idea_codex_import_parser = subparsers.add_parser("idea-codex-import", help="Validate and import Codex idea synthesis outputs.")
+    idea_codex_import_parser.add_argument("--task-id", required=True)
+
+    idea_search_parser = subparsers.add_parser("idea-search", help="Run the active v2 idea search controller.")
+    idea_search_parser.add_argument("--project-id", required=True)
+    idea_search_parser.add_argument("--max-iterations", type=int, default=5)
+
+    idea_search_status_parser = subparsers.add_parser("idea-search-status", help="Print active v2 idea search status.")
+    idea_search_status_parser.add_argument("--project-id", required=True)
+
+    idea_search_decisions_parser = subparsers.add_parser("idea-search-decisions", help="Print persisted active v2 idea search decisions.")
+    idea_search_decisions_parser.add_argument("--project-id", required=True)
+
+    idea_novelty_parser = subparsers.add_parser("idea-novelty", help="Run idea-specific novelty and counterevidence assessment.")
+    idea_novelty_scope = idea_novelty_parser.add_mutually_exclusive_group(required=True)
+    idea_novelty_scope.add_argument("--idea-id")
+    idea_novelty_scope.add_argument("--project-id")
+    idea_novelty_parser.add_argument("--top-k", type=int, default=10)
+
+    idea_counterevidence_parser = subparsers.add_parser("idea-counterevidence", help="Find and persist counterevidence for an idea.")
+    idea_counterevidence_parser.add_argument("--idea-id", required=True)
+    idea_counterevidence_parser.add_argument("--top-k", type=int, default=10)
+
+    idea_tournament_parser = subparsers.add_parser("idea-tournament", help="Run transparent tournament scoring for v2 ideas.")
+    idea_tournament_parser.add_argument("--project-id", required=True)
+    idea_tournament_parser.add_argument("--top-k", type=int, default=5)
+
+    idea_score_report_parser = subparsers.add_parser("idea-score-report", help="Print the latest idea tournament score report.")
+    idea_score_report_parser.add_argument("--project-id", required=True)
+
+    idea_preferences_parser = subparsers.add_parser("idea-preferences", help="Save or print human idea preference profile.")
+    idea_preferences_parser.add_argument("--project-id", required=True)
+    idea_preferences_parser.add_argument("--preferred-contribution-type", action="append", dest="preferred_contribution_types", default=[])
+    idea_preferences_parser.add_argument("--preferred-domain", action="append", dest="preferred_domains", default=[])
+    idea_preferences_parser.add_argument("--risk-tolerance", default="")
+    idea_preferences_parser.add_argument("--time-budget", default="")
+    idea_preferences_parser.add_argument("--compute-budget", default="")
+    idea_preferences_parser.add_argument("--publication-target", default="")
+    idea_preferences_parser.add_argument("--avoid-topic", action="append", dest="avoid_topics", default=[])
+    idea_preferences_parser.add_argument("--notes", default="")
+
+    idea_feedback_parser = subparsers.add_parser("idea-feedback", help="Record auditable human feedback for an idea.")
+    idea_feedback_parser.add_argument("--idea-id", required=True)
+    idea_feedback_parser.add_argument(
+        "--action",
+        required=True,
+        choices=sorted(["upvote", "downvote", "reject", "request_mutation", "request_search", "accept"]),
+    )
+    idea_feedback_parser.add_argument("--reviewer", default="human")
+    idea_feedback_parser.add_argument("--rationale", default="")
+    idea_feedback_parser.add_argument("--preferred-mutation", action="append", dest="preferred_mutations", default=[])
+    idea_feedback_parser.add_argument("--notes", default="")
+
+    idea_feedback_report_parser = subparsers.add_parser("idea-feedback-report", help="Print the idea feedback audit report.")
+    idea_feedback_report_parser.add_argument("--project-id", required=True)
+
+    idea_yield_parser = subparsers.add_parser("idea-yield", help="Compute v2 idea yield metrics for a project.")
+    idea_yield_parser.add_argument("--project-id", required=True)
+    idea_yield_parser.add_argument("--write-report", action="store_true")
+
+    idea_discovery_report_parser = subparsers.add_parser(
+        "idea-discovery-report", help="Print and write the consolidated v2 idea discovery report."
+    )
+    idea_discovery_report_parser.add_argument("--project-id", required=True)
+
+    research_agenda_parser = subparsers.add_parser("research-agenda", help="Create a staged research agenda fallback.")
+    research_agenda_parser.add_argument("--project-id", required=True)
+
+    agenda_report_parser = subparsers.add_parser("agenda-report", help="Print a research agenda report.")
+    agenda_report_parser.add_argument("--agenda-id", required=True)
+
+    agenda_to_campaigns_parser = subparsers.add_parser("agenda-to-campaigns", help="Create planned campaigns from agenda steps.")
+    agenda_to_campaigns_parser.add_argument("--agenda-id", required=True)
 
     compute_status_parser = subparsers.add_parser("compute-status", help="Inspect local, GPU, Docker, and Slurm compute availability.")
     compute_status_parser.add_argument("--json", action="store_true")
@@ -2040,6 +2223,16 @@ def _dispatch(
         pilot_report_path.write_text(pilot_report_text, encoding="utf-8")
         print(pilot_report_text, end="")
         return 0
+    if args.command == "v2-pilot-run":
+        pilot_record = V2IdeaPilotRunner(config).run(args.name)
+        print(json.dumps(to_plain(pilot_record), indent=2))
+        return 0 if pilot_record.status != "product_failure" else 1
+    if args.command == "v2-pilot-status":
+        print(render_v2_pilot_status(config, args.name), end="")
+        return 0
+    if args.command == "v2-pilot-report":
+        print(V2IdeaPilotRunner(config).report(args.name), end="")
+        return 0
     if args.command == "pilot-acceptance":
         store = PilotStore(config)
         pilot_record = store.load_record(args.pilot_id)
@@ -2080,6 +2273,13 @@ def _dispatch(
         print(render_idea_gate(idea_assessment, as_json=args.json), end="")
         return 0 if idea_assessment.acceptance_status != "rejected" else 1
     if args.command == "selected-idea":
+        if getattr(args, "project_id", None):
+            selected = IdeaTournamentRunner(config).selected_idea(args.project_id)
+            if selected is None:
+                print("No idea has been selected.")
+            else:
+                print(json.dumps(to_plain(selected), indent=2))
+            return 0
         idea_assessment = IdeaGate(config).load_assessment(args.pilot_id)
         if not idea_assessment.selected_direction_id:
             print("No selected direction.")
@@ -2449,6 +2649,7 @@ def _dispatch(
             v7=args.v7,
             v8=args.v8,
             v9=args.v9,
+            v2_ideas=args.v2_ideas,
         )
         target = report.report_path or (config.root / "eval_report.md")
         print(f"Wrote evaluation report to {target}")
@@ -2466,7 +2667,11 @@ def _dispatch(
         elif args.manuscript_id:
             result = dashboard.build_manuscript(args.manuscript_id)
         elif args.project_id:
-            result = dashboard.build_project(args.project_id, include_manuscripts=args.include_manuscripts)
+            result = dashboard.build_project(
+                args.project_id,
+                include_manuscripts=args.include_manuscripts,
+                include_ideas=args.include_ideas,
+            )
         else:
             result = dashboard.build_run(args.run_id)
         if args.open:
@@ -3456,6 +3661,16 @@ def _dispatch(
         else:
             print(render_v1_readiness_markdown(v1_result), end="")
         return 0 if v1_result.passed else 1
+    if args.command == "v2-release-gate":
+        v2_gate = V2ReleaseGateEnforcer(config)
+        v2_result = v2_gate.evaluate(allow_agenda_only=args.allow_agenda_only)
+        if args.write_report:
+            v2_gate.write_outputs(v2_result)
+        if args.json:
+            print(json.dumps(v2_result.to_dict(), indent=2))
+        else:
+            print(render_v2_release_gate_markdown(v2_result), end="")
+        return 0 if v2_result.passed else 1
     if args.command == "cli-audit":
         cli_audit = CLICommandAuditor(config).audit(build_parser(), write=args.write_report)
         print(render_cli_command_audit(cli_audit), end="")
@@ -3605,6 +3820,183 @@ def _dispatch(
     if args.command == "experiment-protocol":
         protocol = ExperimentProtocolBuilder(config).build_for_project(args.project_id, args.direction_id)
         print(render_protocol_markdown(protocol), end="")
+        return 0
+    if args.command == "idea-bank-create":
+        bank = IdeaStore(config).create_bank(project_id=args.project_id, root_topic=args.root_topic)
+        print(json.dumps(to_plain(bank), indent=2))
+        return 0
+    if args.command == "idea-list":
+        print(IdeaStore(config).render_bank(args.project_id), end="")
+        return 0
+    if args.command == "idea-report":
+        print(IdeaStore(config).write_idea_report(args.idea_id), end="")
+        return 0
+    if args.command == "idea-review":
+        idea_store = IdeaStore(config)
+        if args.reviewer:
+            idea_review_record = idea_store.add_review(
+                idea_id=args.idea_id,
+                reviewer=args.reviewer,
+                status=args.status,
+                novelty_judgment=args.novelty_judgment,
+                feasibility_judgment=args.feasibility_judgment,
+                impact_judgment=args.impact_judgment,
+                required_fixes=args.required_fixes,
+                notes=args.notes,
+            )
+            print(json.dumps(to_plain(idea_review_record), indent=2))
+        else:
+            print(idea_store.render_idea_report(args.idea_id), end="")
+        return 0
+    if args.command == "topic-portfolio":
+        generator = TopicPortfolioGenerator(config)
+        portfolio = generator.generate(root_topic=args.root_topic or "", project_id=args.project_id)
+        print(json.dumps(to_plain(portfolio), indent=2))
+        return 0
+    if args.command == "topic-portfolio-report":
+        print(TopicPortfolioGenerator(config).write_report(args.portfolio_id), end="")
+        return 0
+    if args.command == "idea-generate":
+        idea_generation_result = IdeaSeedGenerator(config).generate(
+            project_id=args.project_id or "",
+            portfolio_id=args.portfolio_id or "",
+            max_candidates=args.max_candidates,
+        )
+        print(json.dumps(to_plain(idea_generation_result), indent=2))
+        return 0
+    if args.command == "mutate-idea":
+        mutation_result = IdeaMutationEngine(config).mutate_idea(args.idea_id, strategy=args.strategy)
+        print(json.dumps(to_plain(mutation_result), indent=2))
+        return 0
+    if args.command == "mutate-rejected-ideas":
+        mutation_results = IdeaMutationEngine(config).mutate_rejected_ideas(args.project_id, strategy=args.strategy)
+        print(json.dumps(to_plain(mutation_results), indent=2))
+        return 0
+    if args.command == "mutation-report":
+        print(IdeaMutationEngine(config).write_report(args.project_id), end="")
+        return 0
+    if args.command == "constructive-gaps":
+        constructive_gap_generator = ConstructiveGapGenerator(config)
+        if args.project_id:
+            constructive_gap_result = constructive_gap_generator.generate_for_project(args.project_id)
+        else:
+            constructive_gap_result = constructive_gap_generator.generate_for_campaign(args.campaign_id)
+        print(json.dumps(to_plain(constructive_gap_result), indent=2))
+        return 0
+    if args.command == "constructive-gap-report":
+        print(ConstructiveGapGenerator(config).write_report(args.project_id), end="")
+        return 0
+    if args.command == "transfer-ideas":
+        transfer_engine = CrossDomainIdeaTransferEngine(config)
+        if args.project_id:
+            transfer_result = transfer_engine.transfer_for_project(args.project_id)
+        else:
+            transfer_result = transfer_engine.transfer_for_topic(args.topic)
+        print(json.dumps(to_plain(transfer_result), indent=2))
+        return 0
+    if args.command == "transfer-report":
+        print(CrossDomainIdeaTransferEngine(config).write_report(args.project_id), end="")
+        return 0
+    if args.command == "idea-codex-task":
+        task = IdeaCodexTaskManager(config).create_task(args.project_id, args.type)
+        print(json.dumps(to_plain(task), indent=2))
+        return 0
+    if args.command == "idea-codex-handoff":
+        print(IdeaCodexTaskManager(config).handoff(args.task_id), end="")
+        return 0
+    if args.command == "idea-codex-import":
+        idea_codex_record = IdeaCodexTaskManager(config).import_outputs(args.task_id)
+        print(json.dumps(to_plain(idea_codex_record), indent=2))
+        return 0
+    if args.command == "idea-search":
+        idea_search_result = IdeaSearchController(config).run(args.project_id, max_iterations=args.max_iterations)
+        print(json.dumps(to_plain(idea_search_result), indent=2))
+        return 0
+    if args.command == "idea-search-status":
+        print(IdeaSearchController(config).render_status(args.project_id), end="")
+        return 0
+    if args.command == "idea-search-decisions":
+        print(IdeaSearchController(config).render_decisions(args.project_id), end="")
+        return 0
+    if args.command == "idea-novelty":
+        idea_novelty_loop = IdeaNoveltyLoop(config)
+        if args.idea_id:
+            print(json.dumps(to_plain(idea_novelty_loop.assess_idea(args.idea_id, top_k=args.top_k)), indent=2))
+        else:
+            print(json.dumps(to_plain(idea_novelty_loop.assess_project(args.project_id, top_k=args.top_k)), indent=2))
+        return 0
+    if args.command == "idea-counterevidence":
+        counterevidence_result = IdeaNoveltyLoop(config).find_counterevidence(args.idea_id, top_k=args.top_k)
+        print(json.dumps(to_plain(counterevidence_result), indent=2))
+        return 0
+    if args.command == "idea-tournament":
+        tournament = IdeaTournamentRunner(config).run(args.project_id, top_k=args.top_k)
+        print(json.dumps(to_plain(tournament), indent=2))
+        return 0
+    if args.command == "idea-score-report":
+        print(IdeaTournamentRunner(config).write_report(args.project_id), end="")
+        return 0
+    if args.command == "idea-preferences":
+        preferences = IdeaPreferenceManager(config).save_profile(
+            project_id=args.project_id,
+            preferred_contribution_types=args.preferred_contribution_types,
+            preferred_domains=args.preferred_domains,
+            risk_tolerance=args.risk_tolerance,
+            time_budget=args.time_budget,
+            compute_budget=args.compute_budget,
+            publication_target=args.publication_target,
+            avoid_topics=args.avoid_topics,
+            notes=args.notes,
+        )
+        print(json.dumps(to_plain(preferences), indent=2))
+        return 0
+    if args.command == "idea-feedback":
+        feedback = IdeaFeedbackManager(config).add_feedback(
+            idea_id=args.idea_id,
+            action=args.action,
+            reviewer=args.reviewer,
+            rationale=args.rationale,
+            preferred_mutations=args.preferred_mutations,
+            notes=args.notes,
+        )
+        print(json.dumps(to_plain(feedback), indent=2))
+        return 0
+    if args.command == "idea-feedback-report":
+        print(IdeaFeedbackManager(config).write_report(args.project_id), end="")
+        return 0
+    if args.command == "idea-yield":
+        idea_yield = IdeaYieldMetricCalculator(config)
+        if args.write_report:
+            print(idea_yield.write_report(args.project_id), end="")
+        else:
+            print(json.dumps(to_plain(idea_yield.compute(args.project_id)), indent=2))
+        return 0
+    if args.command == "idea-discovery-report":
+        idea_store = IdeaStore(config)
+        idea_state = idea_store.load_state(args.project_id)
+        portfolios = TopicPortfolioGenerator(config).list_project_portfolios(args.project_id)
+        metrics = IdeaYieldMetricCalculator(config).compute(args.project_id)
+        try:
+            release_gate = V2ReleaseGateEnforcer(config).evaluate()
+        except (FileNotFoundError, json.JSONDecodeError, TypeError, ValueError):
+            release_gate = None
+        discovery_report = render_idea_discovery_report(idea_state, portfolios=portfolios, metrics=metrics, release_gate=release_gate)
+        program = ProjectMemoryManager(config).load_project(args.project_id)
+        report_path = Path(program.project.root_dir) / "ideas" / "reports" / "idea_discovery_report.md"
+        report_path.parent.mkdir(parents=True, exist_ok=True)
+        report_path.write_text(discovery_report, encoding="utf-8")
+        print(discovery_report, end="")
+        return 0
+    if args.command == "research-agenda":
+        agenda = ResearchAgendaManager(config).generate(args.project_id)
+        print(json.dumps(to_plain(agenda), indent=2))
+        return 0
+    if args.command == "agenda-report":
+        print(ResearchAgendaManager(config).write_report(args.agenda_id), end="")
+        return 0
+    if args.command == "agenda-to-campaigns":
+        campaigns = ResearchAgendaManager(config).agenda_to_campaigns(args.agenda_id)
+        print(json.dumps(to_plain(campaigns), indent=2))
         return 0
     if args.command == "compute-status":
         environments = detect_compute_environments()

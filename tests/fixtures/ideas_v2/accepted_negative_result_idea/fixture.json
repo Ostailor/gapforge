@@ -1,0 +1,35 @@
+{
+  "topic": "low false-positive collusion detection in LLM multi-agent systems",
+  "known_paper_ids": ["paper-judge", "paper-covert"],
+  "topic_portfolio": [
+    {"id": "topic-narrow", "transformation_type": "narrower", "expected_search_queries": ["LLM judge collusion monitor false positive"], "promise": "Tests a common baseline.", "risk": "Negative result may be too expected."},
+    {"id": "topic-adjacent", "transformation_type": "adjacent", "expected_search_queries": ["monitor evasion lexical substitution"], "promise": "Connects to evasion literature.", "risk": "May duplicate jailbreak work."},
+    {"id": "topic-cross", "transformation_type": "cross_domain", "expected_search_queries": ["covert channel detector false positives"], "promise": "Transfers channel-detection stress tests.", "risk": "Communication model differs."},
+    {"id": "topic-metric", "transformation_type": "metric_shift", "expected_search_queries": ["false positive constrained detector failure"], "promise": "Makes failure falsifiable.", "risk": "Can be overfit."},
+    {"id": "topic-benchmark", "transformation_type": "benchmark_shift", "expected_search_queries": ["collusion monitor lexical substitution benchmark"], "promise": "Creates reusable stress tests.", "risk": "Synthetic artifacts."},
+    {"id": "topic-theory", "transformation_type": "theory_shift", "expected_search_queries": ["covert channel indistinguishability monitoring"], "promise": "May explain impossibility.", "risk": "Assumptions may be narrow."}
+  ],
+  "candidates": [
+    {"id": "idea-negative", "title": "Negative result for LLM-judge collusion monitors under lexical covert channels", "summary": "Test whether judge monitors fail under lexical substitutions while maintaining low FPR.", "contribution_type": "negative_result", "core_claim": "A falsifiable stress test can show where existing monitors are insufficient.", "proposed_experiment": "Evaluate judge monitors on clean, lexical-substituted, and covert-channel traces.", "expected_metrics": ["false positive rate", "recall", "specificity"], "novelty_status": "plausible", "maturity": "candidate"}
+  ],
+  "mutations": [
+    {"source_idea_id": "idea-detector", "mutated_idea_id": "idea-negative", "strategy": "positive_to_negative_result", "what_changed": "Changed from proposing a new detector to falsifying existing monitors.", "why_it_may_help": "Negative result is publishable if expectation is falsifiable.", "inherited_risks": ["existing evasion papers may already show failure"], "required_new_searches": ["LLM judge covert channel collusion monitor"]}
+  ],
+  "constructive_gaps": [
+    {"id": "gap-negative", "contribution_type": "negative_result", "minimum_artifact": "Covert-channel trace generator.", "minimum_experiment": "Run existing monitors on controlled lexical substitutions.", "required_baselines": ["LLM judge"], "expected_metrics": ["false positive rate", "recall"], "closest_prior_work_ids": ["paper-judge"], "falsifiable_expectation": "If judge recall stays high at fixed FPR, the negative result fails."}
+  ],
+  "transfers": [
+    {"id": "transfer-covert", "source_field": "covert channels/steganography", "source_concept": "channel capacity under detection", "transfer_mechanism": "Vary channel strength while measuring detector operating points.", "required_adaptation": "Map channel messages to agent coordination.", "what_breaks": "Natural language channels are ambiguous.", "supporting_source_papers": ["paper-covert"], "target_idea_id": "idea-negative"}
+  ],
+  "codex_task_ran": true,
+  "novelty_assessments": [
+    {"idea_id": "idea-negative", "closest_prior_work_ids": ["paper-judge"], "similarity_summary": "Prior judge work lacks low-FPR covert-channel negative result.", "counterevidence": ["Some evasion work is adjacent."], "verdict": "pursue", "novelty_strength": "medium"}
+  ],
+  "tournament": {"ran": true, "selected_candidate_id": "idea-negative", "score_records": [{"idea_id": "idea-negative", "total_score": 0.82, "blockers": []}], "disqualified_candidate_ids": []},
+  "preferences": {"preferred_contribution_types": ["negative_result"], "risk_tolerance": "medium"},
+  "human_feedback": [{"idea_id": "idea-negative", "action": "accept", "rationale": "Falsifiable negative result is acceptable as a candidate."}],
+  "idea_yield_metrics": {"candidate_count": 1, "human_accepted_idea_count": 1, "agenda_generated": false},
+  "release_gate": {"allow_agenda_only": false},
+  "rejected_ideas_preserved": true,
+  "expected": {"outcome": "accepted", "selected_candidate_id": "idea-negative", "release_gate_pass": true}
+}

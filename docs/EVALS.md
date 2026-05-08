@@ -205,6 +205,8 @@ gapforge eval --fixture fake_agent_campaign --v4
 gapforge eval --fixture live_like_low_fpr_collusion --v5
 gapforge eval --fixture smoke_success --v6
 gapforge eval --fixture complete_submission_package --v8
+gapforge eval --v2-ideas
+gapforge eval --fixture accepted_measurement_idea --v2-ideas
 gapforge eval --write-report
 make eval
 ```
@@ -233,6 +235,8 @@ make eval
 - empirical claims generated without result artifacts
 - smoke outputs presented as main results
 - fake result files accepted as observed results
+- v2 idea discovery accepting generic, duplicate, fake-citation, or fake-result candidates
+- v2 release gate passing without topic portfolio, idea bank, mutation, constructive gaps, transfer, novelty loop, tournament, human feedback, yield metrics, or accepted candidate/explicit agenda-only warning
 - failed experiment paths hidden from reports
 - low-FPR metrics missing confidence/sample-size caution
 - paper packages blending planned, smoke, pilot, main, failed, and hypothetical result categories
@@ -243,6 +247,33 @@ make eval
 - anonymous submission identity leaks hidden from checklists
 - reviewer objections answered with invented results or citations
 - camera-ready packages with open fatal rebuttal items
+
+## v2 Idea Discovery Fixtures
+
+Offline v2 idea fixtures live under `tests/fixtures/ideas_v2/` and exercise:
+
+- accepted benchmark, measurement, and negative-result ideas
+- generic idea rejection
+- duplicate idea rejection
+- fake citation blocking
+- agenda fallback after no survivors
+- human preference changing a tournament winner without overriding gates
+- mutation rescuing a rejected idea while preserving inherited risks
+
+The v2 idea eval metrics are behavior checks, not scientific validation:
+
+- `topic_portfolio_diversity`
+- `idea_candidate_specificity`
+- `mutation_quality`
+- `constructive_gap_quality`
+- `cross_domain_transfer_quality`
+- `novelty_loop_quality`
+- `tournament_selection_quality`
+- `human_feedback_integration`
+- `research_agenda_quality`
+- `idea_yield_gate_correctness`
+
+Passing these evals means the offline mechanics reject bad ideas and preserve auditable search state. It does not mean a generated idea is publishable, empirically proven, or accepted without human review.
 
 ## Fixture Policy
 

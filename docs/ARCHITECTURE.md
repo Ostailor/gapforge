@@ -12,6 +12,7 @@ GapForge is a skills-based research ideation OS. It is not a rigid one-pass summ
 - **v0.6 empirical execution layer**: experiment workspaces, dataset/baseline/metric registries, run manifests, execution records, result artifacts, statistical analysis, reproducibility checks, empirical reviewer panels, paper package v2 exports, experiment dashboards, and v6 release-gate enforcement.
 - **v0.7 benchmark and replication layer**: benchmark registries, dataset consent/cache handling, compute/job abstractions, sweeps, result aggregation, error analysis, benchmark comparison, low-FPR power checks, replication packages, reproduction matrices, and v7 release-gate enforcement.
 - **v0.8 manuscript and submission layer**: manuscript projects, section state, bibliography records, claim-use traceability, artifact-backed figures/tables, venue checklists, anonymization reports, artifact evaluation packages, manuscript reviewer panels, rebuttal/revision plans, submission packages, dashboards, Python API wrappers, and v8 release-gate enforcement.
+- **v2 idea discovery layer**: topic portfolios, idea banks, idea candidates, mutation records, constructive gaps, cross-domain transfers, Codex idea synthesis task packs, active idea-search decisions, novelty/counterevidence assessments, tournaments, human feedback records, research agendas, idea-yield metrics, idea dashboard pages, Python API wrappers, and v2 release-gate enforcement.
 
 ## Core Layers
 
@@ -106,6 +107,16 @@ GapForge is a skills-based research ideation OS. It is not a rigid one-pass summ
    - `src/gapforge/dashboard/static_site.py` renders manuscript readiness pages that surface unsupported claims, fake-looking citations, reviewer blockers, submission package status, and v8 release-gate state without embedding raw logs.
    - `src/gapforge/api.py` exposes v0.8 workflows as Python functions so notebooks and automation can script the same manager paths as the CLI.
    - `src/gapforge/release_gate/v08.py` fails closed when citations are unknown, claims are unsupported, result claims lack artifacts, artifact packages are missing, reviewer/rebuttal blockers remain, or failed/negative experiments are hidden.
+
+16. **v2 Idea Discovery Engine**
+   - `src/gapforge/ideas/` owns first-class idea discovery state: `TopicPortfolio`, `IdeaBank`, `IdeaCandidate`, `IdeaMutationRecord`, `ConstructiveGapCandidate`, `IdeaTransferCandidate`, `IdeaNoveltyAssessment`, `IdeaTournament`, `IdeaFeedbackRecord`, `ResearchAgenda`, and `IdeaYieldMetrics`.
+   - `src/gapforge/ideas/controller.py` and `decision_policy.py` make idea search active rather than one-shot. Decisions record whether to generate a portfolio, synthesize ideas, mutate weak candidates, run prior-work loops, request feedback, create an agenda, or stop.
+   - `src/gapforge/ideas/codex_tasks.py` creates bounded Codex/GPT-5.4 task packs. Imports are schema-validated; fake citations, fake results, generic ideas, and unsupported strong novelty are rejected or downgraded.
+   - `src/gapforge/dashboard/static_site.py` renders idea discovery pages for portfolios, candidates, mutations, constructive gaps, transfers, novelty, tournaments, feedback, agendas, yield, and the v2 release gate.
+   - `src/gapforge/api.py` exposes the same v2 workflows as scriptable functions. The CLI should remain a thin wrapper over these managers and API-style service boundaries.
+   - `src/gapforge/release_gate/v2.py` requires v1 readiness plus active idea discovery evidence. Agenda-only fallback is honest incompleteness unless explicitly allowed with `--allow-agenda-only`.
+
+v1 evaluates and refuses research directions under evidence gates. v2 searches harder for ideas before accepting refusal, but it does not weaken those gates. A seed is a provisional search object; an accepted idea candidate has passed active search, novelty/counterevidence, tournament comparison, and human review; a research agenda is a no-accepted-idea fallback plan.
 
 ## v0.3 Staged Loop
 

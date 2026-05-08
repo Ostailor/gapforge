@@ -1,0 +1,35 @@
+{
+  "topic": "low false-positive collusion detection in LLM multi-agent systems",
+  "known_paper_ids": ["paper-duplicate"],
+  "topic_portfolio": [
+    {"id": "topic-narrow", "transformation_type": "narrower", "expected_search_queries": ["duplicate monitor benchmark"], "promise": "Finds prior work.", "risk": "Duplicate."},
+    {"id": "topic-adjacent", "transformation_type": "adjacent", "expected_search_queries": ["collusion monitor benchmark"], "promise": "Adjacent work.", "risk": "Overlap."},
+    {"id": "topic-cross", "transformation_type": "cross_domain", "expected_search_queries": ["fraud detection false positives"], "promise": "Transfer.", "risk": "Shallow."},
+    {"id": "topic-metric", "transformation_type": "metric_shift", "expected_search_queries": ["low false positive detection"], "promise": "Metric focus.", "risk": "Already done."},
+    {"id": "topic-benchmark", "transformation_type": "benchmark_shift", "expected_search_queries": ["collusion benchmark low fpr"], "promise": "Benchmark path.", "risk": "Solved."},
+    {"id": "topic-theory", "transformation_type": "theory_shift", "expected_search_queries": ["monitor guarantees"], "promise": "Theory path.", "risk": "Mismatch."}
+  ],
+  "candidates": [
+    {"id": "idea-duplicate", "title": "Low-FPR collusion monitor benchmark matching prior work", "summary": "Duplicate benchmark idea.", "contribution_type": "benchmark", "core_claim": "Same as prior benchmark.", "proposed_experiment": "Repeat prior benchmark.", "expected_metrics": ["false positive rate"], "novelty_status": "likely_duplicate", "maturity": "rejected", "duplicate_of": "paper-duplicate", "expected_gate": "reject_duplicate"}
+  ],
+  "mutations": [
+    {"source_idea_id": "idea-duplicate", "mutated_idea_id": "idea-shifted", "strategy": "benchmark_shift", "what_changed": "Changed decisive overlap dimension.", "why_it_may_help": "Prior work solves original benchmark.", "inherited_risks": ["fatal prior work"], "required_new_searches": ["sequential low fpr audit benchmark"]}
+  ],
+  "constructive_gaps": [
+    {"id": "gap-protocol", "contribution_type": "evaluation_protocol", "minimum_artifact": "Protocol spec.", "minimum_experiment": "Run prior baselines under sequential audits.", "required_baselines": ["prior benchmark baseline"], "expected_metrics": ["specificity"], "closest_prior_work_ids": ["paper-duplicate"]}
+  ],
+  "transfers": [
+    {"id": "transfer-spc", "source_field": "statistical process control", "source_concept": "control chart false alarms", "transfer_mechanism": "Sequential alarms with controlled false positives.", "required_adaptation": "Map process drift to collusion evidence.", "what_breaks": "Nonstationary language.", "required_searches": ["process control false alarm sequential"], "target_idea_id": ""}
+  ],
+  "codex_task_ran": true,
+  "novelty_assessments": [
+    {"idea_id": "idea-duplicate", "closest_prior_work_ids": ["paper-duplicate"], "similarity_summary": "Closest prior work solves the core idea.", "counterevidence": ["Prior benchmark has same metric and artifact."], "verdict": "reject", "novelty_strength": "low"}
+  ],
+  "tournament": {"ran": true, "selected_candidate_id": "", "score_records": [{"idea_id": "idea-duplicate", "total_score": 0.0, "blockers": ["fatal novelty blocker"]}], "disqualified_candidate_ids": ["idea-duplicate"], "duplicate_candidate_won": false},
+  "preferences": {"preferred_contribution_types": ["benchmark"], "risk_tolerance": "low"},
+  "human_feedback": [{"idea_id": "idea-duplicate", "action": "reject", "rationale": "Closest prior work is fatal."}],
+  "idea_yield_metrics": {"candidate_count": 1, "human_accepted_idea_count": 0, "agenda_generated": false},
+  "release_gate": {"allow_agenda_only": false},
+  "rejected_ideas_preserved": true,
+  "expected": {"outcome": "reject_duplicate", "release_gate_pass": false, "must_fail_bad_idea": true}
+}

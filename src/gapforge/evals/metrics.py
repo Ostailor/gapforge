@@ -117,6 +117,16 @@ class EvalScores:
     docs_audit_score: float | None = None
     artifact_hygiene_score: float | None = None
     v9_release_gate_correctness: float | None = None
+    topic_portfolio_diversity: float | None = None
+    idea_candidate_specificity: float | None = None
+    mutation_quality: float | None = None
+    constructive_gap_quality: float | None = None
+    cross_domain_transfer_quality: float | None = None
+    novelty_loop_quality: float | None = None
+    tournament_selection_quality: float | None = None
+    human_feedback_integration: float | None = None
+    research_agenda_quality: float | None = None
+    idea_yield_gate_correctness: float | None = None
 
     def overall(self) -> float:
         positive = [
@@ -259,6 +269,24 @@ class EvalScores:
             self.docs_audit_score,
             self.artifact_hygiene_score,
             self.v9_release_gate_correctness,
+        ]
+        present = [value for value in values if value is not None]
+        if not present:
+            return None
+        return round(sum(present) / len(present), 3)
+
+    def v2_ideas_overall(self) -> float | None:
+        values = [
+            self.topic_portfolio_diversity,
+            self.idea_candidate_specificity,
+            self.mutation_quality,
+            self.constructive_gap_quality,
+            self.cross_domain_transfer_quality,
+            self.novelty_loop_quality,
+            self.tournament_selection_quality,
+            self.human_feedback_integration,
+            self.research_agenda_quality,
+            self.idea_yield_gate_correctness,
         ]
         present = [value for value in values if value is not None]
         if not present:
@@ -1494,6 +1522,252 @@ def v9_release_gate_correctness(fixture: dict[str, object]) -> float:
     return round((0.7 * int(computed_pass is False)) + (0.3 * int(bool(expected_blockers))), 3)
 
 
+def topic_portfolio_diversity(fixture: dict[str, object]) -> float:
+    variants = _dicts(fixture.get("topic_portfolio"))
+    if not variants:
+        return 0.0
+    transformation_types = {str(item.get("transformation_type", "")) for item in variants}
+    required = {"narrower", "adjacent", "cross_domain", "metric_shift", "benchmark_shift", "theory_shift"}
+    query_score = sum(1 for item in variants if _list(item.get("expected_search_queries"))) / len(variants)
+    rationale_score = sum(1 for item in variants if item.get("promise") and item.get("risk")) / len(variants)
+    return round(
+        min(1.0, (0.5 * len(transformation_types & required) / len(required)) + (0.25 * query_score) + (0.25 * rationale_score)), 3
+    )
+
+
+def idea_candidate_specificity(fixture: dict[str, object]) -> float:
+    candidates = _dicts(fixture.get("candidates"))
+    if not candidates:
+        return 0.0
+    expected = _dict(fixture.get("expected"))
+    expected_outcome = str(expected.get("outcome", ""))
+    selected_id = str(_dict(fixture.get("tournament")).get("selected_candidate_id", ""))
+    scores = []
+    for candidate in candidates:
+        title = str(candidate.get("title", ""))
+        text = " ".join(
+            [
+                title,
+                str(candidate.get("summary", "")),
+                str(candidate.get("core_claim", "")),
+                str(candidate.get("proposed_experiment", "")),
+            ]
+        ).lower()
+        generic = _generic_idea_title(title)
+        required_fields = [
+            bool(title),
+            bool(candidate.get("contribution_type")),
+            bool(candidate.get("core_claim")),
+            bool(candidate.get("proposed_experiment")) or str(candidate.get("maturity")) == "rejected",
+            bool(_list(candidate.get("expected_metrics"))) or str(candidate.get("contribution_type")) in {"theory", "survey"},
+        ]
+        specificity_terms = ["false-positive", "specificity", "benchmark", "measurement", "negative result", "collusion", "sequential"]
+        scores.append(
+            (
+                sum(1 for item in required_fields if item) / len(required_fields)
+                + int(not generic)
+                + int(any(term in text for term in specificity_terms))
+            )
+            / 3
+        )
+    if expected_outcome == "reject_generic":
+        generic_rejected = any(
+            _generic_idea_title(str(item.get("title", ""))) and str(item.get("maturity")) == "rejected" for item in candidates
+        )
+        return 1.0 if generic_rejected else 0.0
+    if selected_id:
+        selected = next((item for item in candidates if str(item.get("id")) == selected_id), {})
+        if selected and _generic_idea_title(str(selected.get("title", ""))):
+            return 0.0
+    return round(sum(scores) / len(scores), 3)
+
+
+def mutation_quality(fixture: dict[str, object]) -> float:
+    mutations = _dicts(fixture.get("mutations"))
+    expected = _dict(fixture.get("expected"))
+    if not mutations:
+        return 1.0 if not bool(expected.get("mutation_required")) else 0.0
+    scores = []
+    for mutation in mutations:
+        checks = [
+            bool(mutation.get("source_idea_id")),
+            bool(mutation.get("mutated_idea_id")),
+            bool(mutation.get("strategy")),
+            bool(mutation.get("what_changed")),
+            bool(mutation.get("why_it_may_help")),
+            bool(_list(mutation.get("inherited_risks"))),
+            bool(_list(mutation.get("required_new_searches"))),
+        ]
+        scores.append(sum(1 for item in checks if item) / len(checks))
+    rescued_id = str(expected.get("rescued_idea_id", ""))
+    if rescued_id:
+        scores.append(float(any(str(item.get("mutated_idea_id")) == rescued_id for item in mutations)))
+    return round(sum(scores) / len(scores), 3)
+
+
+def constructive_gap_quality(fixture: dict[str, object]) -> float:
+    gaps = _dicts(fixture.get("constructive_gaps"))
+    if not gaps:
+        return 0.0
+    scores = []
+    for gap in gaps:
+        checks = [
+            str(gap.get("contribution_type"))
+            in {
+                "benchmark",
+                "measurement",
+                "evaluation_protocol",
+                "dataset",
+                "replication",
+                "negative_result",
+                "theory",
+                "system",
+                "tooling",
+            },
+            bool(gap.get("minimum_artifact")),
+            bool(gap.get("minimum_experiment")),
+            bool(_list(gap.get("required_baselines"))) or str(gap.get("contribution_type")) in {"theory"},
+            bool(_list(gap.get("expected_metrics"))) or str(gap.get("contribution_type")) in {"theory"},
+            bool(_list(gap.get("closest_prior_work_ids"))) or bool(_list(gap.get("missing_searches"))),
+        ]
+        if str(gap.get("contribution_type")) == "negative_result":
+            checks.append(bool(gap.get("falsifiable_expectation")))
+        scores.append(sum(1 for item in checks if item) / len(checks))
+    return round(sum(scores) / len(scores), 3)
+
+
+def cross_domain_transfer_quality(fixture: dict[str, object]) -> float:
+    transfers = _dicts(fixture.get("transfers"))
+    if not transfers:
+        return 0.0
+    scores = []
+    for transfer in transfers:
+        evidence = bool(_list(transfer.get("supporting_source_papers")))
+        candidate = bool(transfer.get("target_idea_id"))
+        checks = [
+            bool(transfer.get("source_field")),
+            bool(transfer.get("source_concept")),
+            bool(transfer.get("transfer_mechanism")),
+            bool(transfer.get("required_adaptation")),
+            bool(transfer.get("what_breaks")),
+            (evidence and candidate) or (not evidence and bool(_list(transfer.get("required_searches"))) and not candidate),
+            not bool(transfer.get("shallow_analogy_accepted")),
+        ]
+        scores.append(sum(1 for item in checks if item) / len(checks))
+    return round(sum(scores) / len(scores), 3)
+
+
+def novelty_loop_quality(fixture: dict[str, object]) -> float:
+    assessments = _dicts(fixture.get("novelty_assessments"))
+    if not assessments:
+        return 0.0
+    candidates = {str(item.get("id")): item for item in _dicts(fixture.get("candidates"))}
+    scores = []
+    for assessment in assessments:
+        idea_id = str(assessment.get("idea_id", ""))
+        candidate = candidates.get(idea_id, {})
+        duplicate = str(candidate.get("novelty_status")) == "likely_duplicate" or bool(candidate.get("duplicate_of"))
+        fake_citation = bool(_list(candidate.get("unresolved_paper_ids")))
+        checks = [
+            bool(_list(assessment.get("closest_prior_work_ids"))) or bool(_list(assessment.get("missing_searches"))),
+            str(assessment.get("verdict")) in {"reject", "revise", "pursue", "unknown"},
+            bool(assessment.get("similarity_summary")),
+            bool(_list(assessment.get("counterevidence"))) or str(assessment.get("verdict")) == "pursue",
+        ]
+        if duplicate or fake_citation:
+            checks.append(str(assessment.get("verdict")) == "reject")
+        if _list(assessment.get("missing_searches")):
+            checks.append(str(assessment.get("novelty_strength")) == "unknown")
+        scores.append(sum(1 for item in checks if item) / len(checks))
+    return round(sum(scores) / len(scores), 3)
+
+
+def tournament_selection_quality(fixture: dict[str, object]) -> float:
+    tournament = _dict(fixture.get("tournament"))
+    expected = _dict(fixture.get("expected"))
+    if not tournament:
+        return 0.0
+    selected = str(tournament.get("selected_candidate_id", ""))
+    expected_selected = str(expected.get("selected_candidate_id", ""))
+    expected_outcome = str(expected.get("outcome", ""))
+    disqualified = set(str(item) for item in _list(tournament.get("disqualified_candidate_ids")))
+    checks = [
+        bool(tournament.get("ran")),
+        not bool(tournament.get("fake_citation_candidate_won")),
+        not bool(tournament.get("generic_candidate_won")),
+        not bool(tournament.get("duplicate_candidate_won")),
+        bool(_dicts(tournament.get("score_records"))),
+    ]
+    if expected_selected:
+        checks.append(selected == expected_selected)
+    if expected_outcome.startswith("reject") or expected_outcome == "agenda":
+        checks.append(not selected or bool(tournament.get("agenda_id")))
+    for candidate in _dicts(fixture.get("candidates")):
+        if str(candidate.get("expected_gate")) in {"reject_generic", "reject_duplicate", "reject_fake_citation"}:
+            checks.append(str(candidate.get("id")) in disqualified or str(candidate.get("maturity")) == "rejected")
+    return round(sum(1 for item in checks if item) / len(checks), 3)
+
+
+def human_feedback_integration(fixture: dict[str, object]) -> float:
+    feedback = _dicts(fixture.get("human_feedback"))
+    preferences = _dict(fixture.get("preferences"))
+    expected = _dict(fixture.get("expected"))
+    if not feedback and not preferences:
+        return 0.0
+    selected_id = str(_dict(fixture.get("tournament")).get("selected_candidate_id", ""))
+    accepted_ids = {str(item.get("idea_id")) for item in feedback if str(item.get("action")) == "accept"}
+    rejected_ids = {str(item.get("idea_id")) for item in feedback if str(item.get("action")) == "reject"}
+    mutation_requests = [item for item in feedback if str(item.get("action")) == "request_mutation"]
+    checks = [
+        bool(feedback),
+        bool(preferences),
+        not bool(rejected_ids & {selected_id}),
+        not selected_id or selected_id in accepted_ids or str(expected.get("outcome")) == "agenda",
+        not bool(mutation_requests) or bool(_dicts(fixture.get("mutations"))),
+    ]
+    if bool(expected.get("human_preference_changed_winner")):
+        checks.append(bool(_dict(fixture.get("tournament")).get("human_preference_applied")))
+    return round(sum(1 for item in checks if item) / len(checks), 3)
+
+
+def research_agenda_quality(fixture: dict[str, object]) -> float:
+    expected = _dict(fixture.get("expected"))
+    agenda = _dict(fixture.get("agenda"))
+    if str(expected.get("outcome")) != "agenda" and not agenda:
+        return 1.0
+    if not agenda:
+        return 0.0
+    steps = _dicts(agenda.get("agenda_steps"))
+    checks = [
+        bool(agenda.get("blocker_summary")),
+        bool(steps),
+        bool(_list(agenda.get("expected_artifacts"))),
+        bool(_list(agenda.get("decision_points"))),
+        bool(_list(agenda.get("stop_conditions"))),
+        not bool(agenda.get("paper_idea_claim")),
+    ]
+    checks.extend(bool(step.get("required_artifact")) and bool(step.get("success_criteria")) for step in steps)
+    return round(sum(1 for item in checks if item) / len(checks), 3)
+
+
+def idea_yield_gate_correctness(fixture: dict[str, object]) -> float:
+    expected = _dict(fixture.get("expected"))
+    gate = _dict(fixture.get("release_gate"))
+    metrics = _dict(fixture.get("idea_yield_metrics"))
+    expected_pass = bool(expected.get("release_gate_pass"))
+    agenda_only = str(expected.get("outcome")) == "agenda"
+    computed_pass = _computed_v2_idea_gate(fixture, allow_agenda_only=bool(gate.get("allow_agenda_only")))
+    checks = [
+        computed_pass == expected_pass,
+        _int(metrics.get("candidate_count")) == len(_dicts(fixture.get("candidates"))),
+        _int(metrics.get("human_accepted_idea_count"))
+        == len([item for item in _dicts(fixture.get("human_feedback")) if str(item.get("action")) == "accept"]),
+        bool(metrics.get("agenda_generated")) == bool(_dict(fixture.get("agenda"))),
+        not (agenda_only and computed_pass and not bool(gate.get("allow_agenda_only"))),
+    ]
+    return round(sum(1 for item in checks if item) / len(checks), 3)
+
+
 def _tokens(text: str) -> list[str]:
     return re.findall(r"[a-z0-9-]+", text.lower())
 
@@ -1656,3 +1930,49 @@ def _computed_v9_release_gate(fixture: dict[str, object]) -> bool:
             bool(_dict(fixture.get("artifact_hygiene")).get("generated")),
         ]
     )
+
+
+def _computed_v2_idea_gate(fixture: dict[str, object], *, allow_agenda_only: bool) -> bool:
+    expected = _dict(fixture.get("expected"))
+    metrics = _dict(fixture.get("idea_yield_metrics"))
+    tournament = _dict(fixture.get("tournament"))
+    selected = str(tournament.get("selected_candidate_id", ""))
+    candidates = {str(item.get("id")): item for item in _dicts(fixture.get("candidates"))}
+    selected_candidate = candidates.get(selected, {})
+    accepted_ids = {str(item.get("idea_id")) for item in _dicts(fixture.get("human_feedback")) if str(item.get("action")) == "accept"}
+    core = all(
+        [
+            bool(fixture.get("topic_portfolio")),
+            bool(candidates),
+            bool(_dicts(fixture.get("mutations"))),
+            bool(_dicts(fixture.get("constructive_gaps"))),
+            bool(_dicts(fixture.get("transfers"))),
+            bool(fixture.get("codex_task_ran") or fixture.get("codex_explicitly_unavailable")),
+            bool(_dicts(fixture.get("novelty_assessments"))),
+            bool(tournament.get("ran")),
+            bool(_dicts(fixture.get("human_feedback")) or _dicts(fixture.get("human_reviews"))),
+            bool(metrics),
+            bool(fixture.get("rejected_ideas_preserved")),
+        ]
+    )
+    no_bad_selected = True
+    if selected_candidate:
+        no_bad_selected = all(
+            [
+                not bool(_list(selected_candidate.get("unresolved_paper_ids"))),
+                not bool(selected_candidate.get("fake_results_claimed")),
+                str(selected_candidate.get("novelty_status")) != "likely_duplicate",
+                str(selected_candidate.get("maturity")) != "rejected",
+                not _generic_idea_title(str(selected_candidate.get("title", ""))),
+            ]
+        )
+    accepted_pass = core and bool(accepted_ids) and bool(selected) and selected in accepted_ids and no_bad_selected
+    agenda_pass = core and not accepted_ids and bool(_dict(fixture.get("agenda"))) and not selected and allow_agenda_only
+    if bool(expected.get("must_fail_bad_idea")):
+        return False
+    return bool(accepted_pass or agenda_pass)
+
+
+def _generic_idea_title(title: str) -> bool:
+    normalized = " ".join(title.lower().split())
+    return normalized in {"", "research idea", "new method", "better ai", "improve system"} or len(_tokens(normalized)) < 4

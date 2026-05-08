@@ -37,6 +37,31 @@ from gapforge.experiments.sweeps import ExperimentSweepManager
 from gapforge.experiments.workspace import ExperimentWorkspaceManager
 from gapforge.export.paper_package import PaperPackageExporter
 from gapforge.fulltext.pdf_parser import FullTextParser
+from gapforge.ideas import (
+    ConstructiveGapGenerator,
+    ConstructiveGapResult,
+    CrossDomainIdeaTransferEngine,
+    IdeaBank,
+    IdeaFeedbackManager,
+    IdeaFeedbackRecord,
+    IdeaGenerationResult,
+    IdeaMutationEngine,
+    IdeaMutationResult,
+    IdeaNoveltyAssessment,
+    IdeaNoveltyLoop,
+    IdeaNoveltyRunResult,
+    IdeaSeedGenerator,
+    IdeaStore,
+    IdeaTournament,
+    IdeaTournamentRunner,
+    IdeaTransferResult,
+    IdeaYieldMetricCalculator,
+    IdeaYieldMetrics,
+    ResearchAgenda,
+    ResearchAgendaManager,
+    TopicPortfolio,
+    TopicPortfolioGenerator,
+)
 from gapforge.ingest import ManualIngestor
 from gapforge.jobs import JobScheduler
 from gapforge.manuscript import (
@@ -122,6 +147,7 @@ from gapforge.release_gate import (
 )
 from gapforge.release_gate.v07 import V07ReleaseGateEnforcer, V07ReleaseGateResult
 from gapforge.release_gate.v08 import V08ReleaseGateEnforcer, V08ReleaseGateResult
+from gapforge.release_gate.v2 import V2ReleaseGateEnforcer, V2ReleaseGateResult
 from gapforge.replication import ReplicationPackageExporter, ReplicationPackageVerifier, ReproductionRunner
 from gapforge.reporting import write_final_report
 from gapforge.results import ErrorAnalysisBuilder, ResultAggregator, ResultParser, ResultStatisticsAnalyzer
@@ -1465,6 +1491,180 @@ def v8_release_gate(
     return result
 
 
+def generate_topic_portfolio(
+    root_topic: str = "",
+    *,
+    project_id: str = "",
+    config: GapForgeConfig | None = None,
+) -> TopicPortfolio:
+    """Generate and persist a v2 topic portfolio for idea discovery."""
+
+    return TopicPortfolioGenerator(_config(config)).generate(root_topic=root_topic, project_id=project_id)
+
+
+def create_idea_bank(
+    project_id: str,
+    root_topic: str,
+    *,
+    config: GapForgeConfig | None = None,
+) -> IdeaBank:
+    """Create first-class v2 idea-bank state for a project."""
+
+    return IdeaStore(_config(config)).create_bank(project_id=project_id, root_topic=root_topic)
+
+
+def generate_ideas(
+    *,
+    project_id: str = "",
+    portfolio_id: str = "",
+    max_candidates: int = 50,
+    config: GapForgeConfig | None = None,
+) -> IdeaGenerationResult:
+    """Generate seed idea candidates from a v2 portfolio and project memory."""
+
+    return IdeaSeedGenerator(_config(config)).generate(
+        project_id=project_id,
+        portfolio_id=portfolio_id,
+        max_candidates=max_candidates,
+    )
+
+
+def mutate_idea(
+    idea_id: str,
+    *,
+    strategy: str = "",
+    config: GapForgeConfig | None = None,
+) -> IdeaMutationResult:
+    """Create an auditable mutation of a weak or rejected idea candidate."""
+
+    return IdeaMutationEngine(_config(config)).mutate_idea(idea_id, strategy=strategy)
+
+
+def generate_constructive_gaps(
+    *,
+    project_id: str = "",
+    campaign_id: str = "",
+    config: GapForgeConfig | None = None,
+) -> ConstructiveGapResult:
+    """Generate constructive benchmark, measurement, protocol, dataset, or negative-result gaps."""
+
+    _require_one_identifier("project_id", project_id, "campaign_id", campaign_id)
+    generator = ConstructiveGapGenerator(_config(config))
+    if project_id:
+        return generator.generate_for_project(project_id)
+    return generator.generate_for_campaign(campaign_id)
+
+
+def transfer_ideas(
+    *,
+    project_id: str = "",
+    topic: str = "",
+    config: GapForgeConfig | None = None,
+) -> IdeaTransferResult:
+    """Run v2 cross-domain idea transfer for a project or standalone topic."""
+
+    _require_one_identifier("project_id", project_id, "topic", topic)
+    engine = CrossDomainIdeaTransferEngine(_config(config))
+    if project_id:
+        return engine.transfer_for_project(project_id)
+    return engine.transfer_for_topic(topic)
+
+
+def run_idea_novelty(
+    *,
+    idea_id: str = "",
+    project_id: str = "",
+    top_k: int = 10,
+    counterevidence_only: bool = False,
+    config: GapForgeConfig | None = None,
+) -> IdeaNoveltyAssessment | IdeaNoveltyRunResult:
+    """Run idea-specific novelty and counterevidence assessment."""
+
+    _require_one_identifier("idea_id", idea_id, "project_id", project_id)
+    loop = IdeaNoveltyLoop(_config(config))
+    if idea_id:
+        return loop.assess_idea(idea_id, top_k=top_k, counterevidence_only=counterevidence_only)
+    return loop.assess_project(project_id, top_k=top_k)
+
+
+def run_idea_tournament(
+    project_id: str,
+    *,
+    top_k: int = 5,
+    config: GapForgeConfig | None = None,
+) -> IdeaTournament:
+    """Score v2 idea candidates and select one viable candidate or an agenda fallback."""
+
+    return IdeaTournamentRunner(_config(config)).run(project_id, top_k=top_k)
+
+
+def add_idea_feedback(
+    idea_id: str,
+    action: str,
+    *,
+    reviewer: str = "human",
+    rationale: str = "",
+    preferred_mutations: list[str] | None = None,
+    notes: str = "",
+    config: GapForgeConfig | None = None,
+) -> IdeaFeedbackRecord:
+    """Record auditable human feedback for a v2 idea candidate."""
+
+    return IdeaFeedbackManager(_config(config)).add_feedback(
+        idea_id=idea_id,
+        action=action,
+        reviewer=reviewer,
+        rationale=rationale,
+        preferred_mutations=preferred_mutations,
+        notes=notes,
+    )
+
+
+def generate_research_agenda(
+    project_id: str,
+    *,
+    blocker_summary: str = "",
+    source_ids: list[str] | None = None,
+    config: GapForgeConfig | None = None,
+) -> ResearchAgenda:
+    """Generate an honest staged research agenda when no idea is defensible yet."""
+
+    return ResearchAgendaManager(_config(config)).generate(
+        project_id,
+        blocker_summary=blocker_summary,
+        source_ids=source_ids,
+    )
+
+
+def idea_yield(
+    project_id: str,
+    *,
+    write_report: bool = False,
+    config: GapForgeConfig | None = None,
+) -> IdeaYieldMetrics:
+    """Compute v2 idea-yield metrics for a project."""
+
+    calculator = IdeaYieldMetricCalculator(_config(config))
+    if write_report:
+        calculator.write_report(project_id)
+    return calculator.compute(project_id)
+
+
+def v2_release_gate(
+    *,
+    allow_agenda_only: bool = False,
+    write_report: bool = False,
+    config: GapForgeConfig | None = None,
+) -> V2ReleaseGateResult:
+    """Evaluate the v2 Idea Discovery Engine release gate."""
+
+    enforcer = V2ReleaseGateEnforcer(_config(config))
+    result = enforcer.evaluate(allow_agenda_only=allow_agenda_only)
+    if write_report:
+        enforcer.write_outputs(result)
+    return result
+
+
 def get_state(run_id: str, *, config: GapForgeConfig | None = None) -> ResearchRunState:
     """Load a persisted run state."""
 
@@ -1591,11 +1791,18 @@ __all__ = [
     "AddPdfResult",
     "CampaignReviewResult",
     "CampaignTaskResult",
+    "ConstructiveGapResult",
+    "IdeaGenerationResult",
+    "IdeaMutationResult",
+    "IdeaNoveltyRunResult",
+    "IdeaTransferResult",
+    "IdeaYieldMetrics",
     "ManuscriptAssetsResult",
     "ParseFullTextResult",
     "RealLiteratureReviewResult",
     "ReportResult",
     "add_pdf",
+    "add_idea_feedback",
     "aggregate_results",
     "benchmark_compare",
     "attest_agent_run",
@@ -1608,6 +1815,7 @@ __all__ = [
     "compute_status",
     "create_campaign",
     "create_campaign_task",
+    "create_idea_bank",
     "create_benchmark_suite",
     "create_direction",
     "create_experiment_manifest",
@@ -1625,12 +1833,18 @@ __all__ = [
     "export_replication_package",
     "export_report",
     "generate_code_tasks",
+    "generate_constructive_gaps",
+    "generate_ideas",
     "generate_manuscript_assets",
+    "generate_research_agenda",
+    "generate_topic_portfolio",
     "get_project",
     "get_state",
     "import_campaign_output",
+    "idea_yield",
     "mature_direction",
     "mine_gaps",
+    "mutate_idea",
     "novelty_check",
     "parse_results",
     "parse_fulltext",
@@ -1648,6 +1862,8 @@ __all__ = [
     "review_campaign",
     "rebuttal_plan",
     "run_error_analysis",
+    "run_idea_novelty",
+    "run_idea_tournament",
     "run_traceability_check",
     "run_real_literature_campaign",
     "run_campaign",
@@ -1659,6 +1875,8 @@ __all__ = [
     "submission_checklist",
     "submission_package",
     "source_health",
+    "transfer_ideas",
+    "v2_release_gate",
     "v4_release_gate",
     "v5_release_gate",
     "v6_release_gate",

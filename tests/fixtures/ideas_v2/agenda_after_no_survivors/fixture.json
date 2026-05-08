@@ -1,0 +1,36 @@
+{
+  "topic": "low false-positive collusion detection in LLM multi-agent systems",
+  "known_paper_ids": ["paper-blocker"],
+  "topic_portfolio": [
+    {"id": "topic-narrow", "transformation_type": "narrower", "expected_search_queries": ["low fpr collusion blockers"], "promise": "Search blockers.", "risk": "No candidate."},
+    {"id": "topic-adjacent", "transformation_type": "adjacent", "expected_search_queries": ["monitor evasion blockers"], "promise": "Adjacent blockers.", "risk": "Still blocked."},
+    {"id": "topic-cross", "transformation_type": "cross_domain", "expected_search_queries": ["cartel screen false positive"], "promise": "Transfer.", "risk": "No evidence."},
+    {"id": "topic-metric", "transformation_type": "metric_shift", "expected_search_queries": ["specificity collusion audit"], "promise": "Metric path.", "risk": "Insufficient corpus."},
+    {"id": "topic-benchmark", "transformation_type": "benchmark_shift", "expected_search_queries": ["collusion audit dataset"], "promise": "Dataset path.", "risk": "Dataset missing."},
+    {"id": "topic-theory", "transformation_type": "theory_shift", "expected_search_queries": ["collusion detection impossibility"], "promise": "Theory path.", "risk": "Hard."}
+  ],
+  "candidates": [
+    {"id": "idea-blocked", "title": "Specific but currently unsupported low-FPR audit protocol", "summary": "Candidate lacks evidence after search.", "contribution_type": "evaluation_protocol", "core_claim": "Needs missing benchmark artifacts.", "proposed_experiment": "Cannot yet run.", "expected_metrics": ["false positive rate"], "novelty_status": "unknown", "maturity": "rejected", "expected_gate": "reject_duplicate"}
+  ],
+  "mutations": [
+    {"source_idea_id": "idea-blocked", "mutated_idea_id": "idea-mutated-blocked", "strategy": "metric_shift", "what_changed": "Changed to specificity metric.", "why_it_may_help": "Could become measurable later.", "inherited_risks": ["missing evidence"], "required_new_searches": ["specificity benchmark missing evidence"]}
+  ],
+  "constructive_gaps": [
+    {"id": "gap-dataset", "contribution_type": "dataset", "minimum_artifact": "Honest versus collusive traces.", "minimum_experiment": "Baseline monitor evaluation.", "required_baselines": ["LLM judge"], "expected_metrics": ["specificity"], "missing_searches": ["dataset feasibility search"]}
+  ],
+  "transfers": [
+    {"id": "transfer-cartel", "source_field": "cartel detection economics", "source_concept": "screening tests", "transfer_mechanism": "Use screen operating points before enforcement.", "required_adaptation": "Map firms to agents.", "what_breaks": "Economic incentives differ.", "required_searches": ["cartel screen specificity"], "target_idea_id": ""}
+  ],
+  "codex_task_ran": true,
+  "novelty_assessments": [
+    {"idea_id": "idea-blocked", "closest_prior_work_ids": ["paper-blocker"], "missing_searches": ["benchmark construction feasibility"], "similarity_summary": "No clean accepted idea survived.", "counterevidence": ["Closest work and missing artifacts block acceptance."], "verdict": "unknown", "novelty_strength": "unknown"}
+  ],
+  "tournament": {"ran": true, "selected_candidate_id": "", "agenda_id": "agenda-low-fpr", "score_records": [{"idea_id": "idea-blocked", "total_score": 0.0, "blockers": ["missing evidence"]}], "disqualified_candidate_ids": ["idea-blocked"]},
+  "preferences": {"preferred_contribution_types": ["benchmark", "measurement"], "risk_tolerance": "low"},
+  "human_feedback": [{"idea_id": "idea-blocked", "action": "reject", "rationale": "No survivor after active search."}],
+  "agenda": {"id": "agenda-low-fpr", "blocker_summary": "No idea passed novelty and evidence gates after mutation and tournament.", "agenda_steps": [{"id": "step-search", "step_type": "search", "required_artifact": "prior-work map", "success_criteria": "closest blockers resolved"}, {"id": "step-dataset", "step_type": "dataset", "required_artifact": "trace corpus", "success_criteria": "baselines can run"}], "expected_artifacts": ["prior-work map", "trace corpus"], "decision_points": ["rerun tournament after artifacts"], "stop_conditions": ["stop if prior work subsumes all variants"]},
+  "idea_yield_metrics": {"candidate_count": 1, "human_accepted_idea_count": 0, "agenda_generated": true},
+  "release_gate": {"allow_agenda_only": true},
+  "rejected_ideas_preserved": true,
+  "expected": {"outcome": "agenda", "release_gate_pass": true}
+}

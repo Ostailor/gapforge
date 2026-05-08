@@ -7,6 +7,7 @@ from pathlib import Path
 
 from gapforge.evals.fixtures import (
     V2_FIXTURE_NAMES,
+    V2_IDEA_FIXTURE_NAMES,
     V3_FIXTURE_NAMES,
     V4_FIXTURE_NAMES,
     V5_FIXTURE_NAMES,
@@ -16,6 +17,7 @@ from gapforge.evals.fixtures import (
     V9_FIXTURE_NAMES,
     EvalFixture,
     load_fixtures,
+    load_v2_idea_fixtures,
     load_v3_fixtures,
     load_v4_fixtures,
     load_v5_fixtures,
@@ -40,7 +42,9 @@ from gapforge.evals.metrics import (
     canonicalization_quality,
     citation_validity_score,
     cli_audit_score,
+    constructive_gap_quality,
     contradiction_detection_score,
+    cross_domain_transfer_quality,
     direction_maturity_accuracy,
     direction_maturity_gate_accuracy_from_fixture,
     docs_audit_score,
@@ -58,16 +62,21 @@ from gapforge.evals.metrics import (
     full_text_coverage_score,
     gap_evidence_matrix_score,
     gap_specificity_score,
+    human_feedback_integration,
     human_review_respect_score,
+    idea_candidate_specificity,
     idea_gate_quality,
+    idea_yield_gate_correctness,
     live_source_coverage_score,
     llm_output_grounding_score,
     low_fpr_underpowered_warning_score,
     manuscript_package_honesty,
     manuscript_traceability_score,
     migration_audit_score,
+    mutation_quality,
     novelty_dossier_completeness_score,
     novelty_gate_accuracy,
+    novelty_loop_quality,
     novelty_research_loop_quality,
     paper_package_honesty,
     pilot_outcome_classification,
@@ -82,6 +91,7 @@ from gapforge.evals.metrics import (
     report_uncertainty_score,
     reproducibility_score,
     reproduction_verification_quality,
+    research_agenda_quality,
     research_direction_quality_proxy,
     result_aggregation_quality,
     result_artifact_grounding,
@@ -98,6 +108,8 @@ from gapforge.evals.metrics import (
     statistical_caution_score,
     stop_reason_correctness,
     submission_package_completeness,
+    topic_portfolio_diversity,
+    tournament_selection_quality,
     unsupported_claim_rate,
     v1_readiness_gate_correctness,
     v5_release_gate_correctness,
@@ -140,6 +152,7 @@ class FixtureEvalResult:
 class EvalReport:
     results: list[FixtureEvalResult]
     v2: bool = False
+    v2_ideas: bool = False
     v3: bool = False
     v4: bool = False
     v5: bool = False
@@ -175,12 +188,15 @@ def run_evals(
     v7: bool = False,
     v8: bool = False,
     v9: bool = False,
+    v2_ideas: bool = False,
 ) -> EvalReport:
     selected = (
         [fixture]
         if fixture
         else (
-            V8_FIXTURE_NAMES
+            V2_IDEA_FIXTURE_NAMES
+            if v2_ideas
+            else V8_FIXTURE_NAMES
             if v8
             else V9_FIXTURE_NAMES
             if v9
@@ -201,6 +217,8 @@ def run_evals(
     )
     if v9:
         fixtures = load_v9_fixtures(selected, fixture_root)
+    elif v2_ideas:
+        fixtures = load_v2_idea_fixtures(selected, fixture_root)
     elif v8:
         fixtures = load_v8_fixtures(selected, fixture_root)
     elif v7:
@@ -219,6 +237,7 @@ def run_evals(
     report = EvalReport(
         results=results,
         v2=v2 or any(item.is_v2 for item in fixtures),
+        v2_ideas=v2_ideas or any(item.is_v2_ideas for item in fixtures),
         v3=v3 or any(item.is_v3 for item in fixtures),
         v4=v4 or any(item.is_v4 for item in fixtures),
         v5=v5 or any(item.is_v5 for item in fixtures),
@@ -268,6 +287,10 @@ def render_eval_report(report: EvalReport) -> str:
         v9_scores = [score for result in report.results if (score := result.scores.v9_overall()) is not None]
         v9_overall = round(sum(v9_scores) / len(v9_scores), 3) if v9_scores else 0.0
         lines.extend([f"v0.9 overall score: **{v9_overall:.3f}**", ""])
+    if report.v2_ideas:
+        v2_idea_scores = [score for result in report.results if (score := result.scores.v2_ideas_overall()) is not None]
+        v2_idea_overall = round(sum(v2_idea_scores) / len(v2_idea_scores), 3) if v2_idea_scores else 0.0
+        lines.extend([f"v2 Idea Discovery overall score: **{v2_idea_overall:.3f}**", ""])
     for result in report.results:
         scores = result.scores
         lines.extend(
@@ -433,6 +456,25 @@ def render_eval_report(report: EvalReport) -> str:
                     "",
                 ]
             )
+        if scores.v2_ideas_overall() is not None:
+            lines.extend(
+                [
+                    "### v2 Idea Discovery Scores",
+                    "",
+                    f"- topic_portfolio_diversity: {scores.topic_portfolio_diversity:.3f}",
+                    f"- idea_candidate_specificity: {scores.idea_candidate_specificity:.3f}",
+                    f"- mutation_quality: {scores.mutation_quality:.3f}",
+                    f"- constructive_gap_quality: {scores.constructive_gap_quality:.3f}",
+                    f"- cross_domain_transfer_quality: {scores.cross_domain_transfer_quality:.3f}",
+                    f"- novelty_loop_quality: {scores.novelty_loop_quality:.3f}",
+                    f"- tournament_selection_quality: {scores.tournament_selection_quality:.3f}",
+                    f"- human_feedback_integration: {scores.human_feedback_integration:.3f}",
+                    f"- research_agenda_quality: {scores.research_agenda_quality:.3f}",
+                    f"- idea_yield_gate_correctness: {scores.idea_yield_gate_correctness:.3f}",
+                    f"- fixture_v2_ideas_overall: {scores.v2_ideas_overall():.3f}",
+                    "",
+                ]
+            )
         failed_checks = _failed_checks(scores, result)
         lines.extend(["### Failed Checks And Suggested Improvements", ""])
         lines.extend(["| Check | Suggested improvement |", "| --- | --- |"])
@@ -573,6 +615,18 @@ def _evaluate_fixture(fixture: EvalFixture) -> FixtureEvalResult:
         scores.docs_audit_score = docs_audit_score(pilot_fixture)
         scores.artifact_hygiene_score = artifact_hygiene_score(pilot_fixture)
         scores.v9_release_gate_correctness = v9_release_gate_correctness(pilot_fixture)
+    if fixture.is_v2_ideas:
+        idea_fixture = fixture.idea_fixture
+        scores.topic_portfolio_diversity = topic_portfolio_diversity(idea_fixture)
+        scores.idea_candidate_specificity = idea_candidate_specificity(idea_fixture)
+        scores.mutation_quality = mutation_quality(idea_fixture)
+        scores.constructive_gap_quality = constructive_gap_quality(idea_fixture)
+        scores.cross_domain_transfer_quality = cross_domain_transfer_quality(idea_fixture)
+        scores.novelty_loop_quality = novelty_loop_quality(idea_fixture)
+        scores.tournament_selection_quality = tournament_selection_quality(idea_fixture)
+        scores.human_feedback_integration = human_feedback_integration(idea_fixture)
+        scores.research_agenda_quality = research_agenda_quality(idea_fixture)
+        scores.idea_yield_gate_correctness = idea_yield_gate_correctness(idea_fixture)
     unsupported = [
         claim.id
         for claim in state.claims

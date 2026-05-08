@@ -9,6 +9,7 @@ from gapforge.evals.benchmark import run_evals
 from gapforge.evals.fixtures import (
     FIXTURE_NAMES,
     V2_FIXTURE_NAMES,
+    V2_IDEA_FIXTURE_NAMES,
     V3_FIXTURE_NAMES,
     V4_FIXTURE_NAMES,
     V5_FIXTURE_NAMES,
@@ -18,6 +19,7 @@ from gapforge.evals.fixtures import (
     V9_FIXTURE_NAMES,
     list_fixtures,
     load_fixture,
+    load_v2_idea_fixture,
     load_v3_fixture,
     load_v4_fixture,
     load_v5_fixture,
@@ -42,10 +44,13 @@ from gapforge.evals.metrics import (
     error_analysis_quality,
     fake_result_rejection,
     gap_evidence_matrix_score,
+    idea_candidate_specificity,
+    idea_yield_gate_correctness,
     live_source_coverage_score,
     low_fpr_underpowered_warning_score,
     manuscript_package_honesty,
     manuscript_traceability_score,
+    mutation_quality,
     novelty_research_loop_quality,
     paper_package_honesty,
     prior_work_recall_gate_score,
@@ -64,6 +69,7 @@ from gapforge.evals.metrics import (
     statistical_caution_score,
     stop_reason_correctness,
     submission_package_completeness,
+    topic_portfolio_diversity,
     unsupported_claim_rate,
     v5_release_gate_correctness,
     v6_release_gate_correctness,
@@ -116,6 +122,39 @@ def test_v3_eval_fixtures_are_complete_and_offline() -> None:
         assert fixture.human_gold_reviewer_objections
         assert fixture.expected_source_coverage is not None
         assert fixture.expected_source_coverage.searched_sources == ["fixture-source"]
+
+
+def test_v2_idea_eval_fixtures_are_complete_and_offline() -> None:
+    for name in V2_IDEA_FIXTURE_NAMES:
+        fixture = load_v2_idea_fixture(name)
+        assert fixture.is_v2_ideas
+        assert fixture.topic
+        assert fixture.idea_fixture["topic_portfolio"]
+        assert fixture.idea_fixture["candidates"]
+        assert fixture.idea_fixture["novelty_assessments"]
+        assert fixture.idea_fixture["tournament"]["ran"] is True
+
+
+def test_v2_idea_eval_accepts_and_rejects_expected_fixtures() -> None:
+    accepted = run_evals(fixture="accepted_measurement_idea", v2_ideas=True, write_report=False).results[0]
+    generic = run_evals(fixture="generic_idea_rejected", v2_ideas=True, write_report=False).results[0]
+    fake = run_evals(fixture="fake_citation_blocked", v2_ideas=True, write_report=False).results[0]
+    duplicate = run_evals(fixture="duplicate_idea_rejected", v2_ideas=True, write_report=False).results[0]
+
+    assert accepted.scores.v2_ideas_overall() is not None
+    assert accepted.scores.idea_yield_gate_correctness == 1.0
+    assert generic.scores.idea_candidate_specificity == 1.0
+    assert fake.scores.tournament_selection_quality == 1.0
+    assert duplicate.scores.novelty_loop_quality == 1.0
+
+
+def test_v2_idea_metric_functions_cover_fixture_payload() -> None:
+    fixture = load_v2_idea_fixture("mutation_rescues_rejected_idea").idea_fixture
+
+    assert topic_portfolio_diversity(fixture) == 1.0
+    assert idea_candidate_specificity(fixture) > 0.8
+    assert mutation_quality(fixture) == 1.0
+    assert idea_yield_gate_correctness(fixture) == 1.0
 
 
 def test_v4_eval_fixtures_are_complete_and_offline() -> None:
@@ -561,6 +600,35 @@ def test_eval_cli_v9_fixture_and_report(tmp_path: Path) -> None:
     assert report.returncode == 0, report.stderr
     assert (tmp_path / "eval_report.md").exists()
     assert "Overall score" in report.stdout
+
+
+def test_eval_cli_v2_ideas_fixture_and_report(tmp_path: Path) -> None:
+    env = {**os.environ, "GAPFORGE_DISABLE_NETWORK": "1"}
+    env["PYTHONPATH"] = str(Path.cwd() / "src")
+    env["GAPFORGE_ROOT"] = str(tmp_path)
+
+    single = subprocess.run(
+        [sys.executable, "-m", "gapforge.cli", "eval", "--fixture", "accepted_measurement_idea", "--v2-ideas"],
+        cwd=Path.cwd(),
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    report = subprocess.run(
+        [sys.executable, "-m", "gapforge.cli", "eval", "--v2-ideas", "--write-report"],
+        cwd=Path.cwd(),
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert single.returncode == 0, single.stderr
+    assert report.returncode == 0, report.stderr
+    assert (tmp_path / "eval_report.md").exists()
+    assert "Overall score" in report.stdout
+    assert "v2 Idea Discovery" in (tmp_path / "eval_report.md").read_text(encoding="utf-8")
 
 
 def test_v2_duplicate_ideas_are_rejected_by_dossier_aware_novelty_gate() -> None:

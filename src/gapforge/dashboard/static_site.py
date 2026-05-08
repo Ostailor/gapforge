@@ -11,6 +11,9 @@ from typing import Any
 
 from gapforge.campaigns import CampaignState
 from gapforge.config import GapForgeConfig
+from gapforge.ideas.metrics import IdeaYieldMetricCalculator
+from gapforge.ideas.store import IdeaStore
+from gapforge.ideas.topic_portfolio import TopicPortfolioGenerator
 from gapforge.manuscript.citations import suspicious_citation_string
 from gapforge.models import (
     AgentActualRunAttestation,
@@ -41,6 +44,7 @@ from gapforge.models import (
 )
 from gapforge.project_memory import ProjectMemoryManager
 from gapforge.release_gate.v08 import V08ReleaseGateEnforcer
+from gapforge.release_gate.v2 import V2ReleaseGateEnforcer, render_v2_release_gate_markdown
 from gapforge.state import ResearchStateManager
 
 PAGES = [
@@ -96,6 +100,21 @@ PAGES = [
     ("v8_release_gate.html", "v8 Release Gate"),
 ]
 
+IDEA_PAGES = [
+    ("topic_portfolio.html", "Topic Portfolio"),
+    ("idea_bank.html", "Idea Bank"),
+    ("idea_candidates.html", "Idea Candidates"),
+    ("mutations.html", "Mutations"),
+    ("constructive_gaps.html", "Constructive Gaps"),
+    ("cross_domain_transfers.html", "Cross-Domain Transfers"),
+    ("idea_novelty.html", "Idea Novelty"),
+    ("idea_tournament.html", "Idea Tournament"),
+    ("human_feedback.html", "Idea Feedback"),
+    ("research_agenda.html", "Research Agenda"),
+    ("idea_yield.html", "Idea Yield"),
+    ("v2_release_gate.html", "v2 Release Gate"),
+]
+
 
 @dataclass(slots=True)
 class DashboardResult:
@@ -119,10 +138,16 @@ class StaticDashboardBuilder:
         context = _DashboardContext.from_run(state)
         return _write_dashboard(Path(state.run_dir) / "dashboard", context)
 
-    def build_project(self, project_id: str, *, include_manuscripts: bool = False) -> DashboardResult:
+    def build_project(self, project_id: str, *, include_manuscripts: bool = False, include_ideas: bool = False) -> DashboardResult:
         program = self.project_manager.load_project(project_id)
         states = [self.state_manager.load_run(run_id) for run_id in program.run_ids]
-        context = _DashboardContext.from_project(program, states, include_manuscripts=include_manuscripts, config=self.config)
+        context = _DashboardContext.from_project(
+            program,
+            states,
+            include_manuscripts=include_manuscripts,
+            include_ideas=include_ideas,
+            config=self.config,
+        )
         return _write_dashboard(Path(program.project.root_dir) / "dashboard", context)
 
     def build_workspace(self, workspace_id: str) -> DashboardResult:
@@ -163,6 +188,8 @@ class _DashboardContext:
         run_states: list[ResearchRunState] | None = None,
         experiments: dict[str, list[dict[str, Any]]] | None = None,
         manuscripts: dict[str, Any] | None = None,
+        ideas: dict[str, Any] | None = None,
+        ideas_enabled: bool = False,
     ) -> None:
         self.title = title
         self.subtitle = subtitle
@@ -184,6 +211,8 @@ class _DashboardContext:
         self.run_states = run_states or []
         self.experiments = experiments or _empty_experiment_context()
         self.manuscripts = manuscripts or _empty_manuscript_context()
+        self.ideas = ideas or _empty_idea_context()
+        self.ideas_enabled = ideas_enabled
 
     @classmethod
     def from_run(cls, state: ResearchRunState) -> _DashboardContext:
@@ -217,6 +246,7 @@ class _DashboardContext:
         states: list[ResearchRunState],
         *,
         include_manuscripts: bool = False,
+        include_ideas: bool = False,
         config: GapForgeConfig | None = None,
     ) -> _DashboardContext:
         coverage_reports = [state.source_coverage for state in states if state.source_coverage is not None]
@@ -257,6 +287,8 @@ class _DashboardContext:
             manuscripts=_load_project_manuscript_context(Path(program.project.root_dir), config)
             if include_manuscripts and config is not None
             else _empty_manuscript_context(),
+            ideas=_load_idea_context(program.project.id, config) if include_ideas and config is not None else _empty_idea_context(),
+            ideas_enabled=include_ideas,
         )
 
     @classmethod
@@ -371,6 +403,23 @@ def _write_dashboard(root: Path, context: _DashboardContext) -> DashboardResult:
         "submission_packages.html": _render_manuscript_submission_packages(context),
         "v8_release_gate.html": _render_v8_release_gate(context),
     }
+    if context.ideas_enabled:
+        pages.update(
+            {
+                "topic_portfolio.html": _render_topic_portfolio(context),
+                "idea_bank.html": _render_idea_bank(context),
+                "idea_candidates.html": _render_idea_candidates(context),
+                "mutations.html": _render_idea_mutations(context),
+                "constructive_gaps.html": _render_idea_constructive_gaps(context),
+                "cross_domain_transfers.html": _render_idea_cross_domain_transfers(context),
+                "idea_novelty.html": _render_idea_novelty(context),
+                "idea_tournament.html": _render_idea_tournament(context),
+                "human_feedback.html": _render_idea_human_feedback(context),
+                "research_agenda.html": _render_idea_research_agenda(context),
+                "idea_yield.html": _render_idea_yield(context),
+                "v2_release_gate.html": _render_v2_release_gate_page(context),
+            }
+        )
     written = []
     for filename, body in pages.items():
         path = root / filename
@@ -381,7 +430,8 @@ def _write_dashboard(root: Path, context: _DashboardContext) -> DashboardResult:
 
 def _page(context: _DashboardContext, current: str, body: str) -> str:
     nav = " ".join(
-        f'<a class="{"active" if filename == current else ""}" href="{_e(filename)}">{_e(label)}</a>' for filename, label in PAGES
+        f'<a class="{"active" if filename == current else ""}" href="{_e(filename)}">{_e(label)}</a>'
+        for filename, label in _pages_for_context(context)
     )
     return f"""<!doctype html>
 <html lang="en">
@@ -430,6 +480,10 @@ def _page(context: _DashboardContext, current: str, body: str) -> str:
 </body>
 </html>
 """
+
+
+def _pages_for_context(context: _DashboardContext) -> list[tuple[str, str]]:
+    return [*PAGES, *IDEA_PAGES] if context.ideas_enabled else PAGES
 
 
 def _render_index(context: _DashboardContext) -> str:
@@ -2069,6 +2123,356 @@ def _render_v8_release_gate(context: _DashboardContext) -> str:
     )
 
 
+def _render_topic_portfolio(context: _DashboardContext) -> str:
+    portfolios = context.ideas["portfolios"]
+    if not portfolios:
+        return "<p>No topic portfolio is available. Build the project dashboard with <code>--include-ideas</code>.</p>"
+    rows = []
+    for portfolio in portfolios:
+        for variant in portfolio.topic_variants:
+            rows.append(
+                [
+                    _code(portfolio.id),
+                    _code(variant.id),
+                    _e(variant.transformation_type),
+                    _e(variant.text),
+                    _e(variant.promise),
+                    _e(variant.risk),
+                    _e("; ".join(variant.expected_search_queries)),
+                    _e(", ".join(variant.likely_contribution_types)),
+                ]
+            )
+    return _filter_box() + _table(["Portfolio", "Variant", "Type", "Topic", "Why It May Work", "Why It May Fail", "Queries", "Types"], rows)
+
+
+def _render_idea_bank(context: _DashboardContext) -> str:
+    state = context.ideas["state"]
+    if state is None or state.idea_bank is None:
+        return "<p>No v2 idea bank is available.</p>"
+    bank = state.idea_bank
+    selected = _idea_by_id(context, bank.selected_candidate_id)
+    rejected = _idea_rejected_candidates(context)
+    return "\n".join(
+        [
+            '<div class="grid">',
+            _metric("Candidates", len(state.candidates)),
+            _metric("Rejected retained", len(rejected)),
+            _metric("Mutations", len(state.mutations)),
+            _metric("Constructive gaps", len(state.constructive_gaps)),
+            _metric("Transfers", len(state.transfer_candidates)),
+            _metric("Tournaments", len(state.tournaments)),
+            "</div>",
+            "<h2>Selected Idea</h2>",
+            _idea_selected_card(selected),
+            "<h2>Rejected Ideas</h2>",
+            _idea_rejected_table(rejected),
+        ]
+    )
+
+
+def _render_idea_candidates(context: _DashboardContext) -> str:
+    state = context.ideas["state"]
+    if state is None:
+        return "<p>No v2 idea candidates are available.</p>"
+    rows = [
+        [
+            _code(candidate.id),
+            _e(candidate.title),
+            _e(candidate.contribution_type),
+            _e(candidate.maturity),
+            _e(candidate.novelty_status),
+            f"{candidate.idea_yield_score:.2f}",
+            _e(candidate.core_claim),
+            _e(candidate.proposed_experiment),
+            _e(candidate.rejection_reason or candidate.likely_failure_mode),
+        ]
+        for candidate in state.candidates
+    ]
+    return _filter_box() + _table(
+        ["ID", "Title", "Type", "Maturity", "Novelty", "Yield", "Core Claim", "Experiment", "Rejection/Failure"],
+        rows,
+    )
+
+
+def _render_idea_mutations(context: _DashboardContext) -> str:
+    state = context.ideas["state"]
+    if state is None:
+        return "<p>No mutation state is available.</p>"
+    rows = [
+        [
+            _code(record.id),
+            _code(record.source_idea_id),
+            _code(record.mutated_idea_id),
+            _e(record.strategy),
+            _e(record.what_changed),
+            _e(record.why_it_may_help),
+            _e("; ".join(record.inherited_risks)),
+            _e("; ".join(record.required_new_searches)),
+        ]
+        for record in state.mutations
+    ]
+    return _filter_box() + _table(
+        ["Record", "Source", "Mutated Idea", "Strategy", "What Changed", "Why It May Help", "Inherited Risks", "New Searches"],
+        rows,
+    )
+
+
+def _render_idea_constructive_gaps(context: _DashboardContext) -> str:
+    state = context.ideas["state"]
+    if state is None:
+        return "<p>No constructive gap state is available.</p>"
+    rows = [
+        [
+            _code(gap.id),
+            _e(gap.title),
+            _e(gap.contribution_type),
+            _e(gap.problem),
+            _e(gap.minimum_artifact),
+            _e(gap.minimum_experiment),
+            _e(", ".join(gap.required_baselines)),
+            _e(", ".join(gap.closest_prior_work_ids)),
+            _e(gap.novelty_risk),
+            _e(gap.reviewer_risk),
+        ]
+        for gap in state.constructive_gaps
+    ]
+    return _filter_box() + _table(
+        [
+            "ID",
+            "Title",
+            "Type",
+            "Problem",
+            "Minimum Artifact",
+            "Minimum Experiment",
+            "Baselines",
+            "Prior Work",
+            "Novelty Risk",
+            "Reviewer Risk",
+        ],
+        rows,
+    )
+
+
+def _render_idea_cross_domain_transfers(context: _DashboardContext) -> str:
+    state = context.ideas["state"]
+    if state is None:
+        return "<p>No cross-domain transfer state is available.</p>"
+    rows = [
+        [
+            _code(transfer.id),
+            _e(transfer.source_field),
+            _e(transfer.source_concept),
+            _e(transfer.target_problem),
+            _e(transfer.transfer_mechanism),
+            _code(transfer.target_idea_id or "search-request"),
+            _e(transfer.required_adaptation),
+            _e(transfer.what_breaks),
+            _e(", ".join(transfer.supporting_source_papers)),
+            _e("; ".join(transfer.required_searches)),
+            _e(transfer.confidence),
+        ]
+        for transfer in state.transfer_candidates
+    ]
+    return _filter_box() + _table(
+        [
+            "ID",
+            "Source Field",
+            "Concept",
+            "Target Problem",
+            "Mechanism",
+            "Target Idea",
+            "Required Adaptation",
+            "What Breaks",
+            "Source Papers",
+            "Searches",
+            "Confidence",
+        ],
+        rows,
+    )
+
+
+def _render_idea_novelty(context: _DashboardContext) -> str:
+    state = context.ideas["state"]
+    if state is None:
+        return "<p>No idea novelty state is available.</p>"
+    rows = [
+        [
+            _code(assessment.id),
+            _code(assessment.idea_id),
+            _e(assessment.verdict),
+            _e(assessment.novelty_strength),
+            _e(", ".join(assessment.closest_prior_work_ids)),
+            _e("; ".join(assessment.missing_searches)),
+            _e("; ".join(assessment.counterevidence)),
+            _e(assessment.required_mutation),
+            _e(assessment.similarity_summary),
+        ]
+        for assessment in state.novelty_assessments
+    ]
+    return _filter_box() + _table(
+        [
+            "Assessment",
+            "Idea",
+            "Verdict",
+            "Strength",
+            "Closest Prior Work",
+            "Missing Searches",
+            "Counterevidence",
+            "Required Mutation",
+            "Similarity",
+        ],
+        rows,
+    )
+
+
+def _render_idea_tournament(context: _DashboardContext) -> str:
+    state = context.ideas["state"]
+    if state is None:
+        return "<p>No idea tournament state is available.</p>"
+    rows = []
+    for tournament in state.tournaments:
+        for record in tournament.score_records:
+            rows.append(
+                [
+                    _code(tournament.id),
+                    _code(record.idea_id),
+                    f"{record.total_score:.3f}",
+                    f"{record.evidence_score:.2f}",
+                    f"{record.novelty_score:.2f}",
+                    f"{record.experimentability_score:.2f}",
+                    f"{record.tractability_score:.2f}",
+                    f"{record.impact_score:.2f}",
+                    f"{record.reviewer_risk_score:.2f}",
+                    f"{record.human_preference_score:.2f}",
+                    _e("; ".join(record.blockers)),
+                    _e(tournament.selection_reason),
+                ]
+            )
+    return _filter_box() + _table(
+        [
+            "Tournament",
+            "Idea",
+            "Total",
+            "Evidence",
+            "Novelty",
+            "Experiment",
+            "Tractability",
+            "Impact",
+            "Reviewer Risk",
+            "Human Pref",
+            "Blockers",
+            "Selection Reason",
+        ],
+        rows,
+    )
+
+
+def _render_idea_human_feedback(context: _DashboardContext) -> str:
+    state = context.ideas["state"]
+    if state is None:
+        return "<p>No idea feedback state is available.</p>"
+    feedback_rows = [
+        [
+            _code(feedback.id),
+            _code(feedback.idea_id),
+            _e(feedback.reviewer),
+            _e(feedback.action),
+            _e(feedback.rationale),
+            _e(", ".join(feedback.preferred_mutations)),
+            _e(feedback.notes),
+        ]
+        for feedback in state.feedback_records
+    ]
+    review_rows = [
+        [
+            _code(review.id),
+            _code(review.idea_id),
+            _e(review.reviewer),
+            _e(review.status),
+            _e(review.novelty_judgment),
+            _e(review.feasibility_judgment),
+            _e(review.impact_judgment),
+            _e("; ".join(review.required_fixes)),
+            _e(review.notes),
+        ]
+        for review in state.reviews
+    ]
+    return "\n".join(
+        [
+            "<h2>Feedback</h2>",
+            _filter_box(),
+            _table(["ID", "Idea", "Reviewer", "Action", "Rationale", "Preferred Mutations", "Notes"], feedback_rows),
+            "<h2>Reviews</h2>",
+            _table(["ID", "Idea", "Reviewer", "Status", "Novelty", "Feasibility", "Impact", "Required Fixes", "Notes"], review_rows),
+        ]
+    )
+
+
+def _render_idea_research_agenda(context: _DashboardContext) -> str:
+    state = context.ideas["state"]
+    if state is None:
+        return "<p>No research agenda state is available.</p>"
+    rows = []
+    for agenda in state.agendas:
+        for step in agenda.agenda_steps:
+            rows.append(
+                [
+                    _code(agenda.id),
+                    _e(agenda.blocker_summary),
+                    _code(step.id),
+                    _e(step.step_type),
+                    _e(step.description),
+                    _e(step.required_artifact),
+                    _e(step.success_criteria),
+                    _e(step.next_decision),
+                    _e("; ".join(agenda.stop_conditions)),
+                ]
+            )
+    return _filter_box() + _table(
+        ["Agenda", "Blockers", "Step", "Type", "Description", "Artifact", "Success Criteria", "Next Decision", "Stop Conditions"],
+        rows,
+    )
+
+
+def _render_idea_yield(context: _DashboardContext) -> str:
+    metrics = context.ideas["metrics"]
+    if metrics is None:
+        return "<p>No idea yield metrics are available.</p>"
+    return "\n".join(
+        [
+            '<div class="grid">',
+            _metric("Topic variants", metrics.topic_variant_count),
+            _metric("Candidates", metrics.candidate_count),
+            _metric("Mutations", metrics.mutation_count),
+            _metric("Constructive gaps", metrics.constructive_gap_count),
+            _metric("Transfers", metrics.cross_domain_transfer_count),
+            _metric("Tournament survivors", metrics.tournament_survivor_count),
+            _metric("Human accepted", metrics.human_accepted_idea_count),
+            _metric("Idea yield rate", f"{metrics.idea_yield_rate:.4f}"),
+            "</div>",
+            "<h2>Gate Counters</h2>",
+            _table(
+                ["Metric", "Value"],
+                [
+                    ["Rejected duplicates", str(metrics.rejected_duplicate_count)],
+                    ["Rejected generic", str(metrics.rejected_generic_count)],
+                    ["Novelty unknown", str(metrics.novelty_unknown_count)],
+                    ["Agenda generated", str(metrics.agenda_generated).lower()],
+                    ["Selected idea", _code(metrics.selected_idea_id or "none")],
+                    ["Agenda", _code(metrics.agenda_id or "none")],
+                ],
+            ),
+        ]
+    )
+
+
+def _render_v2_release_gate_page(context: _DashboardContext) -> str:
+    result = context.ideas["release_gate"]
+    if result is None:
+        return "<p>No v2 release gate report is available. Build with <code>--include-ideas</code> after idea state exists.</p>"
+    return "<pre>" + _e(render_v2_release_gate_markdown(result)) + "</pre>"
+
+
 def _run_artifact_links(state: ResearchRunState) -> list[tuple[str, str]]:
     names = [
         "run_report.md",
@@ -2195,6 +2599,88 @@ def _empty_manuscript_context() -> dict[str, Any]:
         "submission_packages": [],
         "v8_release_gate": {},
     }
+
+
+def _empty_idea_context() -> dict[str, Any]:
+    return {
+        "state": None,
+        "portfolios": [],
+        "metrics": None,
+        "release_gate": None,
+    }
+
+
+def _load_idea_context(project_id: str, config: GapForgeConfig) -> dict[str, Any]:
+    context = _empty_idea_context()
+    try:
+        state = IdeaStore(config).load_state(project_id)
+    except (FileNotFoundError, json.JSONDecodeError, TypeError, ValueError):
+        return context
+    context["state"] = state
+    try:
+        context["portfolios"] = TopicPortfolioGenerator(config).list_project_portfolios(project_id)
+    except (FileNotFoundError, json.JSONDecodeError, TypeError, ValueError):
+        context["portfolios"] = []
+    try:
+        context["metrics"] = IdeaYieldMetricCalculator(config).compute(project_id)
+    except (FileNotFoundError, json.JSONDecodeError, TypeError, ValueError):
+        context["metrics"] = None
+    try:
+        context["release_gate"] = V2ReleaseGateEnforcer(config).evaluate()
+    except (FileNotFoundError, json.JSONDecodeError, TypeError, ValueError):
+        context["release_gate"] = None
+    return context
+
+
+def _idea_by_id(context: _DashboardContext, idea_id: str):
+    state = context.ideas["state"]
+    if state is None or not idea_id:
+        return None
+    return next((candidate for candidate in state.candidates if candidate.id == idea_id), None)
+
+
+def _idea_rejected_candidates(context: _DashboardContext) -> list[Any]:
+    state = context.ideas["state"]
+    if state is None:
+        return []
+    rejected_ids = set(state.idea_bank.rejected_candidate_ids if state.idea_bank is not None else [])
+    return [
+        candidate
+        for candidate in state.candidates
+        if candidate.id in rejected_ids or candidate.maturity == "rejected" or candidate.rejection_reason
+    ]
+
+
+def _idea_selected_card(candidate: Any | None) -> str:
+    if candidate is None:
+        return "<p>No idea is selected. Check tournament and agenda pages for blockers.</p>"
+    return (
+        '<div class="card">'
+        f"<strong>{_e(candidate.title)}</strong><br>"
+        f'<span class="muted">{_e(candidate.id)} · {_e(candidate.contribution_type)} · '
+        f"maturity={_e(candidate.maturity)} · novelty={_e(candidate.novelty_status)}</span>"
+        f"<p>{_e(candidate.summary or 'No summary recorded.')}</p>"
+        f"<p><strong>Core claim:</strong> {_e(candidate.core_claim or 'not recorded')}</p>"
+        f"<p><strong>Experiment:</strong> {_e(candidate.proposed_experiment or 'not recorded')}</p>"
+        "</div>"
+    )
+
+
+def _idea_rejected_table(candidates: list[Any]) -> str:
+    return _table(
+        ["ID", "Title", "Type", "Novelty", "Reason", "Failure Mode"],
+        [
+            [
+                _code(candidate.id),
+                _e(candidate.title),
+                _e(candidate.contribution_type),
+                _e(candidate.novelty_status),
+                _e(candidate.rejection_reason or "not recorded"),
+                _e(candidate.likely_failure_mode or "not recorded"),
+            ]
+            for candidate in candidates
+        ],
+    )
 
 
 def _load_project_manuscript_context(project_dir: Path, config: GapForgeConfig | None) -> dict[str, Any]:

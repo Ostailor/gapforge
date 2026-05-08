@@ -2,6 +2,8 @@
 
 GapForge v1.0 is a stable, evidence-gated research ideation OS. It turns a broad topic into auditable research state: papers, notes, claims, evidence, gaps, novelty dossiers, experiment plans, benchmark records, manuscript packages, reviewer objections, release gates, and reports.
 
+GapForge v2 is the Idea Discovery Engine line. v2 searches across topic portfolios, generates and mutates idea candidates, expands constructive gaps and cross-domain transfers, runs novelty/counterevidence loops and idea tournaments, captures human preference feedback, and measures idea yield. The v2 principle is simple: GapForge should try much harder to find a good idea, but it must not force a bad one.
+
 GapForge v1.0 supports:
 
 - literature campaigns
@@ -12,6 +14,15 @@ GapForge v1.0 supports:
 - manuscript and artifact evaluation packages
 - correct refusal outcomes
 - release gates and compatibility audits
+
+GapForge v2 planning docs:
+
+- [v2 roadmap](docs/V2_ROADMAP.md)
+- [v2 acceptance criteria](docs/V2_ACCEPTANCE_CRITERIA.md)
+- [v2 idea discovery](docs/V2_IDEA_DISCOVERY.md)
+- [v2 idea yield metrics](docs/V2_IDEA_YIELD_METRICS.md)
+- [v2 research agenda mode](docs/V2_RESEARCH_AGENDA_MODE.md)
+- [v2 human feedback](docs/V2_HUMAN_FEEDBACK.md)
 
 GapForge is intentionally skeptical. It can recommend a direction only when evidence gates support one, and it can refuse when literature coverage, novelty evidence, or empirical support is insufficient. It is not an exhaustive autonomous literature reviewer, and it must not fabricate citations, experimental results, venue acceptance, publication readiness, or novelty claims. Deterministic and offline-safe paths remain the default.
 
@@ -28,6 +39,7 @@ GapForge is intentionally skeptical. It can recommend a direction only when evid
 - **v0.9**: external pilot and v1-readiness layer. v0.9 runs one real topic through the full workflow and accepts either a defensible direction or an evidence-backed refusal, with migration, CLI, docs, artifact hygiene, external feedback, and v1-readiness gates.
 - **v0.9.1**: migration remediation patch. v0.9.0 was not v1-ready because the migration/backward compatibility audit failed; v0.9.1 adds historical fixtures, versioned migrators, backup snapshots, and compatibility audit v2 without adding research features.
 - **v1.0.0**: stable evidence-gated release. v1.0.0 passes the v1 readiness gate after v4-v9 evidence, compatibility audit v2, CLI/docs audits, artifact hygiene checks, and an accepted correct-refusal external pilot.
+- **v2.0.0**: Idea Discovery Engine release line. v2 actively searches across topic portfolios for defensible idea candidates using mutation, constructive gap creation, cross-domain transfer, Codex/GPT-5.4 synthesis tasks, active search control, novelty/counterevidence loops, idea tournaments, human feedback, research agenda fallback, and idea yield metrics. The v2 gate requires at least one accepted idea candidate or explicit idea-discovery failure routed to v2.0.1 or v2.1 planning.
 
 ## Why Not Just Summarization?
 
@@ -655,10 +667,24 @@ gapforge init-topic "topic"
 gapforge run "topic"
 gapforge run "topic" --v2 --max-papers 20
 gapforge run "topic" --v3 --project-id <project-id> --build-index --mature-directions
+gapforge topic-portfolio --project-id <project-id>
+gapforge idea-generate --project-id <project-id>
+gapforge mutate-idea --idea-id <idea-id>
+gapforge constructive-gaps --project-id <project-id>
+gapforge transfer-ideas --project-id <project-id>
+gapforge idea-novelty --idea-id <idea-id>
+gapforge idea-tournament --project-id <project-id>
+gapforge idea-feedback --idea-id <idea-id> --action accept
+gapforge research-agenda --project-id <project-id>
+gapforge idea-yield --project-id <project-id> --write-report
+gapforge v2-release-gate --write-report --json
 gapforge dashboard --run-id <run-id>
+gapforge dashboard --project-id <project-id> --include-ideas
 gapforge review-queue --run-id <run-id>
 gapforge audit-artifacts --run-id <run-id>
 ```
+
+The same v2 workflows are scriptable from Python through `gapforge.api`: `generate_topic_portfolio`, `create_idea_bank`, `generate_ideas`, `mutate_idea`, `generate_constructive_gaps`, `transfer_ideas`, `run_idea_novelty`, `run_idea_tournament`, `add_idea_feedback`, `generate_research_agenda`, `idea_yield`, and `v2_release_gate`.
 
 ## Architecture
 
@@ -703,6 +729,8 @@ gapforge eval --v8
 - Benchmark claims are stronger than fixture smoke claims and require benchmark records, real or benchmark-like data, consent where applicable, compute logs, result artifacts, analysis, replication packaging, and review.
 - Manuscript submission-readiness requires traceable claims, known citations, artifact-backed results, artifact evaluation package status, blinding review when applicable, reviewer-objection handling, and human review.
 - v0.9 external pilot success may be a defensible direction or an evidence-backed refusal; v1 readiness is a separate gate.
+- v2 idea seeds are provisional; only accepted idea candidates have survived active search, novelty/counterevidence review, tournament comparison, and human review.
+- v2 research agendas are honest fallback plans, not accepted ideas or paper-ready claims.
 - PDFs, transcripts, and generated dashboards may be unsafe to commit.
 - Human review is required before treating any direction as research-ready.
 

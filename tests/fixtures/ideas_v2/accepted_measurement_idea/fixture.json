@@ -1,0 +1,35 @@
+{
+  "topic": "low false-positive collusion detection in LLM multi-agent systems",
+  "known_paper_ids": ["paper-monitoring", "paper-honest-agents"],
+  "topic_portfolio": [
+    {"id": "topic-narrow", "transformation_type": "narrower", "expected_search_queries": ["honest multi-agent false positive collusion monitor"], "promise": "Targets a measurement study.", "risk": "Honest baselines may be underdefined."},
+    {"id": "topic-adjacent", "transformation_type": "adjacent", "expected_search_queries": ["multi-agent communication audit false alarms"], "promise": "Finds adjacent false-alarm studies.", "risk": "May drift to generic auditing."},
+    {"id": "topic-cross", "transformation_type": "cross_domain", "expected_search_queries": ["industrial anomaly false alarm measurement"], "promise": "Imports false-alarm measurement framing.", "risk": "Transfer may be shallow."},
+    {"id": "topic-metric", "transformation_type": "metric_shift", "expected_search_queries": ["specificity false positive measurement monitor"], "promise": "Makes specificity measurable.", "risk": "Low prevalence assumptions matter."},
+    {"id": "topic-benchmark", "transformation_type": "benchmark_shift", "expected_search_queries": ["honest agent communication benchmark"], "promise": "Can become a reusable corpus.", "risk": "Dataset bias."},
+    {"id": "topic-theory", "transformation_type": "theory_shift", "expected_search_queries": ["base rate false positive monitoring"], "promise": "Explains base-rate traps.", "risk": "May not be enough for paper."}
+  ],
+  "candidates": [
+    {"id": "idea-measurement", "title": "Measurement study of false positives in honest LLM agent collaboration", "summary": "Measure how often collusion monitors flag benign coordination.", "contribution_type": "measurement", "core_claim": "Honest multi-agent traces are needed to calibrate low-FPR collusion monitors.", "proposed_experiment": "Run monitors on honest planning, delegation, and negotiation traces.", "expected_metrics": ["false positive rate", "specificity", "alert categories"], "novelty_status": "plausible", "maturity": "candidate"}
+  ],
+  "mutations": [
+    {"source_idea_id": "idea-method", "mutated_idea_id": "idea-measurement", "strategy": "method_to_measurement", "what_changed": "Reframed a detector as a measurement study.", "why_it_may_help": "Produces evidence before method claims.", "inherited_risks": ["prior audit datasets may overlap"], "required_new_searches": ["honest multi-agent audit false positive"]}
+  ],
+  "constructive_gaps": [
+    {"id": "gap-measurement", "contribution_type": "measurement", "minimum_artifact": "Honest trace suite.", "minimum_experiment": "Measure baseline monitors on honest traces.", "required_baselines": ["LLM judge", "keyword monitor"], "expected_metrics": ["false positive rate", "specificity"], "missing_searches": ["honest agent collusion monitor false positive"]}
+  ],
+  "transfers": [
+    {"id": "transfer-anomaly", "source_field": "industrial anomaly detection", "source_concept": "false alarm auditing", "transfer_mechanism": "Measure alert rates under normal operation before incident recall.", "required_adaptation": "Normal operation becomes honest agent collaboration.", "what_breaks": "Agent language is less stationary.", "required_searches": ["industrial anomaly false alarm audit"], "target_idea_id": ""}
+  ],
+  "codex_task_ran": true,
+  "novelty_assessments": [
+    {"idea_id": "idea-measurement", "closest_prior_work_ids": ["paper-honest-agents"], "similarity_summary": "Prior work studies agents but not monitor false positives under honest collaboration.", "counterevidence": ["Some safety benchmarks include benign traces."], "verdict": "pursue", "novelty_strength": "medium"}
+  ],
+  "tournament": {"ran": true, "selected_candidate_id": "idea-measurement", "score_records": [{"idea_id": "idea-measurement", "total_score": 0.86, "blockers": []}], "disqualified_candidate_ids": []},
+  "preferences": {"preferred_contribution_types": ["measurement"], "risk_tolerance": "low"},
+  "human_feedback": [{"idea_id": "idea-measurement", "action": "accept", "rationale": "Measurement path is tractable and evidence-first."}],
+  "idea_yield_metrics": {"candidate_count": 1, "human_accepted_idea_count": 1, "agenda_generated": false},
+  "release_gate": {"allow_agenda_only": false},
+  "rejected_ideas_preserved": true,
+  "expected": {"outcome": "accepted", "selected_candidate_id": "idea-measurement", "release_gate_pass": true}
+}

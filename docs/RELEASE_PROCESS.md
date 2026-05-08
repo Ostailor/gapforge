@@ -29,8 +29,9 @@ GAPFORGE_DISABLE_NETWORK=1 gapforge report --strict
 12. For v0.4 releases, complete the campaign process in `docs/V0_4_AGENTIC_CAMPAIGNS.md` and `docs/V0_4_REAL_RUN_ACCEPTANCE.md`.
 13. For v0.9 releases, complete the external pilot process in `docs/V0_9_EXTERNAL_PILOT.md`, acceptance criteria in `docs/V0_9_ACCEPTANCE_CRITERIA.md`, and v1 readiness gate in `docs/V0_9_V1_READINESS.md`.
 14. For v0.9.1 migration remediation, follow `docs/V0_9_1_MIGRATION_REMEDIATION.md` and `docs/V1_MIGRATION_AND_COMPATIBILITY.md`.
-15. Commit with a message that records constraints, rejected alternatives if useful, confidence, scope risk, tested commands, and known gaps.
-16. Tag the release only after the checks pass.
+15. For v2 releases, complete the Idea Discovery Engine process in `docs/V2_ROADMAP.md`, `docs/V2_ACCEPTANCE_CRITERIA.md`, `docs/V2_IDEA_DISCOVERY.md`, `docs/V2_IDEA_YIELD_METRICS.md`, `docs/V2_RESEARCH_AGENDA_MODE.md`, and `docs/V2_HUMAN_FEEDBACK.md`.
+16. Commit with a message that records constraints, rejected alternatives if useful, confidence, scope risk, tested commands, and known gaps.
+17. Tag the release only after the checks pass.
 
 ## v0.3 Validation Levels
 
@@ -403,6 +404,71 @@ The compatibility audit must distinguish curated compatibility evidence from mes
 
 If migration fails, restore from `data/migrations/backups/`, inspect `data/migrations/records/`, add an explicit version marker or dedicated migrator, and rerun the dry run plus v2 audit. Do not claim v1 until `gapforge v1-readiness --write-report --json` passes.
 
+## v2 Idea Discovery Engine Gate
+
+v2 must not claim idea-discovery success based on brainstorming volume, a single obvious seed, a tournament ranking, or Codex/GPT-5.4 suggestions. It must actively search for defensible candidates and keep every v1 evidence gate intact.
+
+Before tagging v2, the release process should require:
+
+```bash
+make ci
+make eval
+gapforge eval --v5 --write-report
+gapforge eval --v6 --write-report
+gapforge eval --v7 --write-report
+gapforge eval --v8 --write-report
+gapforge v1-readiness --write-report --json
+gapforge topic-portfolio --project-id <project-id>
+gapforge idea-generate --project-id <project-id> --max-candidates 50
+gapforge mutate-rejected-ideas --project-id <project-id>
+gapforge constructive-gaps --project-id <project-id>
+gapforge transfer-ideas --project-id <project-id>
+gapforge idea-codex-task --project-id <project-id> --type idea_seed_expansion
+gapforge idea-codex-import --task-id <task-id>
+gapforge idea-search --project-id <project-id> --max-iterations 5
+gapforge idea-novelty --project-id <project-id> --top-k 10
+gapforge idea-tournament --project-id <project-id> --top-k 5
+gapforge idea-feedback --idea-id <selected-idea-id> --action accept --rationale "<human review>"
+gapforge idea-yield --project-id <project-id> --write-report
+gapforge dashboard --project-id <project-id> --include-ideas
+gapforge v2-release-gate --write-report --json
+```
+
+If Codex/GPT-5.4 is unavailable, record an explicit unavailability artifact instead of skipping the requirement silently. Do not synthesize replacement citations or results.
+
+The v2 release gate should require:
+
+- deterministic CI remains passing
+- v1 readiness remains passing or any limitation is explicitly documented
+- at least one topic portfolio was searched
+- multiple idea candidates were generated and preserved
+- idea mutation, constructive gap creation, and cross-domain transfer expansion were attempted
+- Codex/GPT-5.4 idea synthesis tasks ran and were validated before import, or explicit unavailability was recorded
+- the active idea search controller recorded decisions and stop reasons
+- novelty and counterevidence loops ran on serious candidates
+- an idea tournament compared candidates under shared criteria
+- human preference feedback and human review were recorded
+- idea yield metrics were generated
+- every accepted idea candidate meets the accepted-candidate standard in `docs/V2_ACCEPTANCE_CRITERIA.md`
+- if no candidate is accepted, a research agenda fallback exists and the release gate records explicit idea-discovery failure
+
+Release notes must distinguish:
+
+- topic portfolios searched
+- candidate counts and mutation lineage
+- constructive gaps and transfer expansions
+- Codex/GPT-5.4 synthesis task status
+- novelty and counterevidence findings
+- tournament results
+- human feedback impact
+- accepted idea candidates, if any
+- rejected candidates and top rejection reasons
+- research agenda fallback status
+- idea yield metrics
+- v2 release-gate outcome
+
+If at least one candidate is accepted, release notes may say `v2 idea discovery passed with accepted candidate`. If no candidate is accepted, release notes must say either `v2 idea discovery failed; v2.0.1 required` or `v2 idea discovery failed; v2.1 planning required`. `gapforge v2-release-gate --allow-agenda-only` is permitted only for an explicit `idea_discovery_incomplete` warning pass. Do not claim v2 success from a fallback agenda.
+
 ## Tagging
 
 Use semantic version tags:
@@ -439,4 +505,6 @@ Release notes should include:
 - Do not claim camera-ready status without explicit acceptance metadata and a completed camera-ready checklist.
 - For v0.9, do not claim external pilot success unless one real topic completed the required pilot path with either a defensible direction or an evidence-backed refusal.
 - Do not claim v1 readiness unless the v1 readiness gate passes as `ready` or `ready_with_explicit_scope`.
+- For v2, do not claim idea-discovery success unless at least one idea candidate is accepted by the v2 release gate.
+- For v2, if no idea candidate is accepted, record explicit idea-discovery failure and plan v2.0.1 or v2.1 instead of claiming success.
 - Do not publish generated `runs/`, caches, or local environment artifacts as source.
