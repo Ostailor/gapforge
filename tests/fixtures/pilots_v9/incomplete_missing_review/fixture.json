@@ -1,0 +1,73 @@
+{
+  "topic": "low false-positive collusion detection in LLM multi-agent systems",
+  "expected": {"outcome_type": "incomplete", "human_accepted": false},
+  "pilot_outcome": {
+    "classified": true,
+    "outcome_type": "incomplete",
+    "blocking_issues": ["human review missing"],
+    "product_failures": false,
+    "blockers": ["incomplete: human review missing"]
+  },
+  "idea_gate": {
+    "ran": true,
+    "acceptance_status": "accepted",
+    "selected_direction_id": "direction-low-fpr-collusion",
+    "rejected_direction_ids": ["generic-monitoring-idea"],
+    "generic_idea_accepted": false,
+    "fake_issue_unresolved": false,
+    "auditable": true
+  },
+  "external_review": {
+    "exists": false,
+    "reviewer_role": "unknown",
+    "scope": [],
+    "accepted_outcome": false,
+    "fake_citation_or_result_accepted": false
+  },
+  "v1_readiness": {
+    "generated": true,
+    "expected_pass": false,
+    "expected_blockers": ["missing human review"],
+    "full_project_report_exists": true,
+    "unresolved_product_failures": false
+  },
+  "migration_audit": {
+    "generated": true,
+    "passed": true,
+    "loaded_old_versions": true,
+    "backups_created": true,
+    "migration_required": false,
+    "migration_failures": false
+  },
+  "cli_audit": {
+    "generated": true,
+    "command_groups": ["project", "campaign", "literature", "codex", "experiment", "benchmark", "manuscript", "release-gate", "safety"],
+    "missing_help": false,
+    "deprecated_aliases_preserved": true,
+    "pilot_help_present": true
+  },
+  "docs_audit": {
+    "generated": true,
+    "quickstarts_present": true,
+    "v1_readiness_docs_present": true,
+    "limitations_visible": true,
+    "overclaim_detected": false,
+    "fake_examples_presented_as_real": false
+  },
+  "artifact_hygiene": {
+    "generated": true,
+    "pdfs_ignored": true,
+    "datasets_ignored": true,
+    "transcripts_redacted_or_ignored": true,
+    "dashboards_ignored": true,
+    "safe_bundles_exclude_restricted": true,
+    "secret_risk_unblocked": false
+  },
+  "v9_release_gate": {
+    "expected_pass": false,
+    "expected_blockers": ["missing review"],
+    "v8_passed_or_documented": true,
+    "pilot_spec_exists": true,
+    "pilot_run_exists": true
+  }
+}

@@ -2,6 +2,62 @@
 
 All notable project changes should be recorded here.
 
+## 0.9.0
+
+GapForge v0.9 is the external pilot and v1-readiness release. It moves beyond fixture-only workflow validation by running the low false-positive collusion detection pilot through the v0.9 pilot machinery, accepting a correct refusal when live-literature evidence and idea-gate artifacts were insufficient for a defensible direction, and adding machine-checkable gates for v1 readiness.
+
+### External Pilot Workflow
+
+- Added the v0.9 external pilot specification and durable pilot runner for `low_fpr_collusion`.
+- Added pilot run records, pilot reports, pilot acceptance summaries, and CLI status/report commands for the external pilot lifecycle.
+- Added the pilot outcome classifier for defensible directions, correct refusals, product failures, and incomplete runs.
+- Added the real idea gate so Codex/GPT-5.4 synthesis can propose directions, but GapForge accepts at most one primary direction and rejects generic or unsupported ideas.
+- Added external review capture for user, domain-expert, engineer, and external-reviewer metadata so the pilot cannot self-certify.
+- Added v9 eval fixtures and metrics covering outcome classification, idea-gate quality, external review completeness, v1 readiness correctness, audits, artifact hygiene, and the v9 release gate.
+
+### v1 Readiness and Release Gates
+
+- Added the v1 readiness gate requiring deterministic CI, v4-v8 gate evidence, accepted v0.9 pilot outcome, human review, no unresolved product failures, migration audit, CLI audit, docs audit, artifact hygiene audit, and an end-to-end project report.
+- Added the v9 release gate requiring the pilot spec, pilot run, outcome classification, idea gate, human review, accepted direction or accepted refusal, audit reports, v1 readiness report generation, and no unresolved product failures.
+- Added schema migration and backward compatibility audit tooling with migration records, backup-before-mutate behavior, and reports for older project/run state.
+- Added CLI usability audit coverage for command grouping, help text, deprecated aliases, and discoverability.
+- Added documentation usability audit coverage for the v0.9 pilot quickstart, lifecycle docs, limitations visibility, and overclaim/fake-evidence checks.
+- Added artifact hygiene audit v2 for generated artifacts, PDFs, datasets, transcripts, dashboards, safe bundles, large files, gitignore verification, and release-gate safety.
+
+### Pilot Outcome
+
+- Pilot topic: `low false-positive collusion detection in LLM multi-agent systems`.
+- Outcome: accepted correct refusal.
+- Accepted direction: none.
+- Refusal basis: live source diagnostics reported degraded arXiv fallback metadata, required live-literature and novelty artifacts were incomplete, and the idea gate found no candidate direction that should be promoted.
+- Product failures: none unresolved in the accepted pilot outcome.
+- v1 readiness: generated but not passed because the migration/backward compatibility audit has not passed.
+- v0.9.1 need: no v0.9.1 is required for a pilot product failure, but v1 remains blocked until migration readiness is resolved; if that remediation is released separately, it should become v0.9.1.
+
+### Validation
+
+- `make ci`
+- `make eval`
+- `gapforge eval --v2 --write-report`
+- `gapforge eval --v3 --write-report`
+- `gapforge eval --v4 --write-report`
+- `gapforge eval --v5 --write-report`
+- `gapforge eval --v6 --write-report`
+- `gapforge eval --v7 --write-report`
+- `gapforge eval --v8 --write-report`
+- `gapforge eval --v9 --write-report`
+- `make v2-smoke`
+- `make v3-smoke`
+- `make v4-smoke`
+- `make v6-smoke`
+- `make v7-smoke`
+- `make v8-smoke`
+- `make v9-smoke`
+- `gapforge v9-release-gate --write-report --json`
+- `gapforge v1-readiness --write-report --json`
+
+No publication readiness, real empirical success, venue submission, or novelty claim is made for v0.9.
+
 ## 0.8.0
 
 GapForge v0.8 is the manuscript, artifact evaluation, and reviewer-rebuttal release. It keeps the v5 literature, v6 empirical, and v7 benchmark/replication gates intact while adding durable manuscript project state, citation discipline, claim-to-paper/result/artifact traceability, venue-aware submission checks, anonymized review packages, artifact-evaluation packaging, reviewer simulation, rebuttal planning, and a v8 release gate that blocks unsupported claims, fake citations, fake results, and premature submission/camera-ready status.

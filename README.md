@@ -2,7 +2,7 @@
 
 GapForge is a Codex-powered Research Ideation OS. It turns a broad topic into auditable research state: papers, notes, claims, evidence, gaps, novelty dossiers, experiment plans, reviewer objections, and reports.
 
-GapForge v0.4 adds campaign-level Codex/GPT-5.4 actual-run workflows on top of the v0.3 semantic, project-memory-aware, optionally LLM-assisted research system. v0.5 extends that path toward live-literature campaign quality: source health, planned search rounds, canonicalization, closest-prior-work recall, human research-quality review, and a v5 release gate. v0.6 adds experiment execution and empirical validation: moving from experiment-ready directions to executed, logged, statistically analyzed, reproducible experiment packages. v0.7 adds real benchmark execution and replication plumbing: benchmark records, explicit dataset consent/cache handling, compute/job abstractions, result aggregation, error analysis, comparison reports, low-FPR power checks, and replication packages. v0.8 adds the manuscript, artifact evaluation, and reviewer-rebuttal release layer: manuscript projects, claim-to-paper traceability, citations/BibTeX, venue templates, section drafting, artifact packages, rebuttal planning, blinding, and submission-readiness gates. GapForge is still not an exhaustive autonomous literature reviewer, and it must not fabricate citations, experimental results, venue acceptance, or novelty claims. Deterministic and offline-safe paths remain the default.
+GapForge v0.4 adds campaign-level Codex/GPT-5.4 actual-run workflows on top of the v0.3 semantic, project-memory-aware, optionally LLM-assisted research system. v0.5 extends that path toward live-literature campaign quality: source health, planned search rounds, canonicalization, closest-prior-work recall, human research-quality review, and a v5 release gate. v0.6 adds experiment execution and empirical validation: moving from experiment-ready directions to executed, logged, statistically analyzed, reproducible experiment packages. v0.7 adds real benchmark execution and replication plumbing: benchmark records, explicit dataset consent/cache handling, compute/job abstractions, result aggregation, error analysis, comparison reports, low-FPR power checks, and replication packages. v0.8 adds the manuscript, artifact evaluation, and reviewer-rebuttal release layer: manuscript projects, claim-to-paper traceability, citations/BibTeX, venue templates, section drafting, artifact packages, rebuttal planning, blinding, and submission-readiness gates. v0.9 is the external pilot and v1-readiness release: one real topic must run end to end, or refuse honestly, before GapForge can claim v1 readiness. GapForge is still not an exhaustive autonomous literature reviewer, and it must not fabricate citations, experimental results, venue acceptance, or novelty claims. Deterministic and offline-safe paths remain the default.
 
 ## Version Lineage
 
@@ -14,6 +14,7 @@ GapForge v0.4 adds campaign-level Codex/GPT-5.4 actual-run workflows on top of t
 - **v0.6**: experiment execution and empirical validation layer. v0.6 distinguishes protocols, scaffolds, smoke runs, pilot/main runs, failed/negative experiments, statistical analyses, reproducibility checks, and artifact-backed empirical claims.
 - **v0.7**: real benchmark execution and replication layer. v0.7 distinguishes fixture smoke, local benchmark, full benchmark, failed jobs, underpowered runs, benchmark comparison, replication packages, and real/local public benchmark validation.
 - **v0.8**: manuscript, artifact evaluation, and reviewer-rebuttal layer. v0.8 distinguishes manuscript-ready, submission-ready, and camera-ready while requiring claim, citation, result, artifact, blinding, and human-review traceability.
+- **v0.9**: external pilot and v1-readiness layer. v0.9 runs one real topic through the full workflow and accepts either a defensible direction or an evidence-backed refusal, with migration, CLI, docs, artifact hygiene, external feedback, and v1-readiness gates.
 
 ## Why Not Just Summarization?
 
@@ -360,6 +361,59 @@ Core boundary:
 
 v0.8 must not fabricate results, citations, BibTeX, novelty, rebuttal evidence, venue acceptance, or camera-ready status. It must not mark a manuscript submission-ready when novelty, result, reproducibility, artifact, citation, blinding, or human-review gates fail.
 
+## v0.9 External Pilot and v1 Readiness
+
+v0.9 is the first real external pilot release. It should run GapForge on one real topic from broad framing through live literature, novelty review, protocol, execution path, artifact package, manuscript draft, reviewer/rebuttal plan, external feedback, and v1 readiness assessment.
+
+The recommended pilot topic is `low false-positive collusion detection in LLM multi-agent systems`.
+
+The v0.9 docs are:
+
+- `docs/V0_9_ROADMAP.md`
+- `docs/V0_9_ACCEPTANCE_CRITERIA.md`
+- `docs/V0_9_EXTERNAL_PILOT.md`
+- `docs/V0_9_V1_READINESS.md`
+- `docs/V0_9_FAILURE_MODES.md`
+- `docs/pilots/low_fpr_collusion/PILOT_SPEC.md`
+- `docs/pilots/low_fpr_collusion/ACCEPTANCE_CRITERIA.md`
+- `docs/pilots/low_fpr_collusion/REVIEW_CHECKLIST.md`
+
+Core boundary:
+
+- v0.9 may pass with a defensible direction or an evidence-backed refusal
+- fixture-only results validate workflow mechanics only
+- no research direction should be forced when novelty, coverage, or feasibility is weak
+- small real runs require run records, logs, result artifacts, analysis, and review before supporting empirical claims
+- external reviewer or pilot feedback is required
+- migration/backward compatibility from v0.8 state must be audited
+- CLI/docs usability and artifact hygiene issues found during the pilot must be fixed, scoped, or recorded
+- v1 cannot be claimed until the v1 readiness gate passes
+
+Suggested pilot path:
+
+```bash
+gapforge pilot-list
+gapforge pilot-spec --name low_fpr_collusion
+gapforge pilot-run --name low_fpr_collusion
+gapforge pilot-status --name low_fpr_collusion
+gapforge real-campaign-dry-run --profile live_low_fpr_collusion --write-report
+gapforge live-source-diagnostic --topic "low false-positive collusion detection in LLM multi-agent systems" --source-profile ai_safety --write-report
+gapforge real-literature-run --profile live_low_fpr_collusion
+gapforge campaign-report --campaign-id <campaign-id>
+gapforge real-literature-review --campaign-id <campaign-id> --reviewer "<expert>"
+gapforge real-literature-acceptance --campaign-id <campaign-id>
+gapforge idea-gate --pilot-id <pilot-id>
+gapforge pilot-outcome --pilot-id <pilot-id>
+gapforge pilot-review --pilot-id <pilot-id> --accept-outcome --reviewer-role external_reviewer
+gapforge pilot-report --pilot-id <pilot-id>
+gapforge compatibility-audit
+gapforge cli-audit --write-report
+gapforge docs-audit --write-report
+gapforge v1-readiness --write-report --json
+```
+
+If the v0.9 CLI surface is incomplete, the pilot must record the gap as a CLI cleanup blocker rather than pretending the command exists in a validated release path.
+
 ### v0.5 Live Literature Campaign Workflow
 
 Use v0.5 when you want GapForge to assess whether a real literature campaign is research-useful, not merely whether the workflow ran.
@@ -627,6 +681,7 @@ gapforge eval --v8
 - Empirical claims are artifact-gated: no run record and result artifact means no supported result claim.
 - Benchmark claims are stronger than fixture smoke claims and require benchmark records, real or benchmark-like data, consent where applicable, compute logs, result artifacts, analysis, replication packaging, and review.
 - Manuscript submission-readiness requires traceable claims, known citations, artifact-backed results, artifact evaluation package status, blinding review when applicable, reviewer-objection handling, and human review.
+- v0.9 external pilot success may be a defensible direction or an evidence-backed refusal; v1 readiness is a separate gate.
 - PDFs, transcripts, and generated dashboards may be unsafe to commit.
 - Human review is required before treating any direction as research-ready.
 
@@ -647,4 +702,5 @@ gapforge export-safe-bundle --project-id <project-id>
 - v0.6: experiment execution and empirical validation with run manifests, result artifacts, statistics, reproducibility checks, failed/negative result handling, and result claim ledger
 - v0.7: real benchmark execution and replication with benchmark registry, dataset consent/cache, compute modes, jobs, sweeps, error/slice analysis, low-FPR power checks, benchmark comparison, and replication packages
 - v0.8: manuscript, artifact evaluation, and reviewer-rebuttal workflow with manuscript projects, claim-to-paper traceability, citation/BibTeX management, venue templates, section drafting, figure/table generation, artifact evaluation packaging, blinding support, submission-readiness gates, and camera-ready checklists
+- v0.9: external pilot and v1 readiness with one real end-to-end topic, live literature, direction/refusal decision, experiment protocol, artifact package, manuscript/rebuttal planning, migration audit, CLI/docs cleanup, artifact hygiene, external feedback, and explicit v1 gate
 - Future: richer layout/OCR extraction, external reference-manager integration, larger distributed experiment runners, and collaborative review workflows

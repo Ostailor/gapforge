@@ -41,6 +41,12 @@ from gapforge.artifact_eval import (
     ArtifactEvaluationPackageExporter,
     ArtifactEvaluationSmokeRunner,
 )
+from gapforge.artifacts.hygiene import (
+    ArtifactHygieneAuditor,
+    render_artifact_hygiene_report,
+    render_gitignore_verification,
+    verify_gitignore_patterns,
+)
 from gapforge.baselines import BaselineRegistry, render_baseline_registry_markdown
 from gapforge.benchmarks import (
     BenchmarkCanaryRunner,
@@ -75,6 +81,7 @@ from gapforge.campaigns.search_agent import CampaignSearchAgent, write_campaign_
 from gapforge.campaigns.task_packs import CAMPAIGN_TASK_OUTPUTS, create_campaign_task_pack
 from gapforge.canaries import CampaignCanaryRunManager, CanaryReviewManager, CanaryRunManager, default_canary_profiles
 from gapforge.claims.project_sync import ProjectClaimGraphManager
+from gapforge.cli_audit import CLICommandAuditor, render_cli_command_audit
 from gapforge.compute import check_environment, detect_compute_environments, render_compute_check, render_compute_status
 from gapforge.config import GapForgeConfig
 from gapforge.dashboard import StaticDashboardBuilder
@@ -90,6 +97,7 @@ from gapforge.diagnostics import (
     write_real_run_diagnostic,
 )
 from gapforge.directions.maturation import DirectionMaturationManager
+from gapforge.docs_audit import DocsAuditor, render_docs_audit
 from gapforge.evals.benchmark import run_evals
 from gapforge.experiment_code import (
     ExperimentCodeScaffolderV2,
@@ -143,6 +151,7 @@ from gapforge.metrics.low_fpr_power import (
     render_low_fpr_check_markdown,
     render_low_fpr_plan_markdown,
 )
+from gapforge.migrations import CompatibilityAuditor, MigrationManager, render_compatibility_audit
 from gapforge.models import (
     AgentTaskSpec,
     IndexManifest,
@@ -162,6 +171,21 @@ from gapforge.novelty.recall_gate import (
 )
 from gapforge.orchestration.budgets import budget_from_name
 from gapforge.orchestrator import Orchestrator
+from gapforge.pilots import (
+    ExternalPilotReviewManager,
+    IdeaGate,
+    PilotRunner,
+    PilotStore,
+    assess_pilot_outcome,
+    get_pilot_spec,
+    render_idea_gate,
+    render_pilot_acceptance,
+    render_pilot_document,
+    render_pilot_list,
+    render_pilot_outcome,
+    render_pilot_report,
+    render_pilot_status_json,
+)
 from gapforge.project_memory import ProjectMemoryManager
 from gapforge.real_literature import (
     RealLiteratureCampaignManager,
@@ -178,7 +202,11 @@ from gapforge.release_gate import (
     V06ReleaseGateEnforcer,
     V07ReleaseGateEnforcer,
     V08ReleaseGateEnforcer,
+    V09ReleaseGateEnforcer,
+    V1ReadinessGate,
     render_v04_release_gate_markdown,
+    render_v09_release_gate_markdown,
+    render_v1_readiness_markdown,
 )
 from gapforge.release_gate.v05 import render_v05_release_gate_markdown
 from gapforge.release_gate.v06 import render_v06_release_gate_markdown
@@ -332,6 +360,68 @@ def build_parser() -> argparse.ArgumentParser:
 
     active_decisions_parser = subparsers.add_parser("active-decisions", help="Print active-loop decision log.")
     active_decisions_parser.add_argument("--run-id", required=True)
+
+    subparsers.add_parser("pilot-list", help="List v0.9 external pilot specs, including the low-FPR collusion pilot.")
+
+    pilot_spec_parser = subparsers.add_parser(
+        "pilot-spec", help="Print the v0.9 pilot scope, acceptance, or review checklist for a named pilot."
+    )
+    pilot_spec_parser.add_argument("--name", required=True)
+    pilot_spec_parser.add_argument("--document", choices=["spec", "acceptance", "review", "all"], default="spec")
+
+    pilot_run_parser = subparsers.add_parser("pilot-run", help="Run the v0.9 external pilot workflow and create a durable pilot record.")
+    pilot_run_parser.add_argument("--name", required=True)
+
+    pilot_status_parser = subparsers.add_parser("pilot-status", help="Print v0.9 pilot status, blockers, artifacts, and acceptance JSON.")
+    pilot_status_scope = pilot_status_parser.add_mutually_exclusive_group(required=True)
+    pilot_status_scope.add_argument("--pilot-id")
+    pilot_status_scope.add_argument("--name")
+
+    pilot_report_parser = subparsers.add_parser("pilot-report", help="Print and write the final durable report for a v0.9 pilot run.")
+    pilot_report_parser.add_argument("--pilot-id", required=True)
+
+    pilot_acceptance_parser = subparsers.add_parser("pilot-acceptance", help="Print whether a v0.9 pilot can count for v1 readiness.")
+    pilot_acceptance_parser.add_argument("--pilot-id", required=True)
+
+    pilot_review_parser = subparsers.add_parser("pilot-review", help="Capture external or user human review for a v0.9 pilot outcome.")
+    pilot_review_parser.add_argument("--pilot-id", required=True)
+    pilot_review_parser.add_argument("--reviewer-name", default="human reviewer")
+    pilot_review_parser.add_argument(
+        "--reviewer-role",
+        choices=["user", "domain_expert", "engineer", "external_reviewer", "unknown"],
+        default="unknown",
+    )
+    pilot_review_parser.add_argument("--scope", action="append", default=[])
+    pilot_review_parser.add_argument("--novelty-assessment", default="")
+    pilot_review_parser.add_argument("--evidence-assessment", default="")
+    pilot_review_parser.add_argument("--experiment-assessment", default="")
+    pilot_review_parser.add_argument("--manuscript-assessment", default="")
+    pilot_review_parser.add_argument("--artifact-assessment", default="")
+    pilot_review_parser.add_argument("--major-concern", action="append", default=[])
+    pilot_review_parser.add_argument("--required-fix", action="append", default=[])
+    pilot_review_parser.add_argument("--notes", default="")
+    pilot_review_decision = pilot_review_parser.add_mutually_exclusive_group()
+    pilot_review_decision.add_argument("--accept-outcome", action="store_true")
+    pilot_review_decision.add_argument("--reject-outcome", action="store_true")
+    pilot_review_parser.add_argument("--reason", default="")
+
+    pilot_review_report_parser = subparsers.add_parser("pilot-review-report", help="Print the auditable human review report for a pilot.")
+    pilot_review_report_parser.add_argument("--pilot-id", required=True)
+
+    pilot_outcome_parser = subparsers.add_parser(
+        "pilot-outcome", help="Classify a v0.9 pilot as direction, refusal, failure, or incomplete."
+    )
+    pilot_outcome_parser.add_argument("--pilot-id", required=True)
+    pilot_outcome_parser.add_argument("--json", action="store_true")
+
+    idea_gate_parser = subparsers.add_parser("idea-gate", help="Select one auditable v0.9 pilot research direction or record refusal.")
+    idea_gate_scope = idea_gate_parser.add_mutually_exclusive_group(required=True)
+    idea_gate_scope.add_argument("--pilot-id")
+    idea_gate_scope.add_argument("--campaign-id")
+    idea_gate_parser.add_argument("--json", action="store_true")
+
+    selected_idea_parser = subparsers.add_parser("selected-idea", help="Print the one selected v0.9 pilot idea, if the gate accepted one.")
+    selected_idea_parser.add_argument("--pilot-id", required=True)
 
     map_parser = subparsers.add_parser("map", help="Build a field map for a topic or existing run.")
     map_parser.add_argument("topic", nargs="?")
@@ -515,6 +605,7 @@ def build_parser() -> argparse.ArgumentParser:
     eval_parser.add_argument("--v6", action="store_true", help="Run v0.6 experiment execution evaluation fixtures.")
     eval_parser.add_argument("--v7", action="store_true", help="Run v0.7 benchmark and replication evaluation fixtures.")
     eval_parser.add_argument("--v8", action="store_true", help="Run v0.8 manuscript submission evaluation fixtures.")
+    eval_parser.add_argument("--v9", action="store_true", help="Run v0.9 pilot and v1-readiness evaluation fixtures.")
     eval_parser.add_argument("--write-report", action="store_true")
 
     report_parser = subparsers.add_parser("report", help="Write final_report.md or final_report.json.")
@@ -943,9 +1034,11 @@ def build_parser() -> argparse.ArgumentParser:
     init_project_parser.add_argument("name")
     init_project_parser.add_argument("--description", default="")
 
-    subparsers.add_parser("list-projects", help="List project memory workspaces.")
+    list_projects_parser = subparsers.add_parser("list-projects", aliases=["project-list"], help="List project memory workspaces.")
+    list_projects_parser.set_defaults(command="list-projects")
 
-    use_project_parser = subparsers.add_parser("use-project", help="Set the active project memory workspace.")
+    use_project_parser = subparsers.add_parser("use-project", aliases=["project-use"], help="Set the active project memory workspace.")
+    use_project_parser.set_defaults(command="use-project")
     use_project_parser.add_argument("project_id")
 
     project_status_parser = subparsers.add_parser("project-status", help="Print project memory status.")
@@ -1144,6 +1237,36 @@ def build_parser() -> argparse.ArgumentParser:
     )
     v8_release_gate_parser.add_argument("--write-report", action="store_true")
     v8_release_gate_parser.add_argument("--json", action="store_true")
+
+    v9_release_gate_parser = subparsers.add_parser("v9-release-gate", help="Enforce the v0.9 external pilot release gate.")
+    v9_release_gate_parser.add_argument("--write-report", action="store_true")
+    v9_release_gate_parser.add_argument("--json", action="store_true")
+
+    v1_readiness_parser = subparsers.add_parser(
+        "v1-readiness", aliases=["v1-gate"], help="Evaluate whether v1 is ready after the v0.9 pilot."
+    )
+    v1_readiness_parser.set_defaults(command="v1-readiness")
+    v1_readiness_parser.add_argument("--write-report", action="store_true")
+    v1_readiness_parser.add_argument("--json", action="store_true")
+
+    cli_audit_parser = subparsers.add_parser("cli-audit", help="Audit command grouping, help text, and v1 CLI discoverability.")
+    cli_audit_parser.add_argument("--write-report", action="store_true")
+
+    docs_audit_parser = subparsers.add_parser("docs-audit", help="Audit v0.9/v1 documentation usability and overclaim safety.")
+    docs_audit_parser.add_argument("--write-report", action="store_true")
+
+    compatibility_audit_parser = subparsers.add_parser("compatibility-audit", help="Audit older project/run load compatibility.")
+    compatibility_audit_parser.add_argument("--json", action="store_true")
+
+    migrate_project_parser = subparsers.add_parser("migrate-project", help="Back up and migrate a project to the latest schema.")
+    migrate_project_parser.add_argument("--project-id", required=True)
+    migrate_project_parser.add_argument("--to-version", default="latest")
+
+    migrate_run_parser = subparsers.add_parser("migrate-run", help="Back up and migrate a run to the latest schema.")
+    migrate_run_parser.add_argument("--run-id", required=True)
+    migrate_run_parser.add_argument("--to-version", default="latest")
+
+    subparsers.add_parser("migration-report", help="Print the latest compatibility audit and migration records.")
 
     rollback_import_parser = subparsers.add_parser("rollback-import", help="Rollback a campaign import by import ID.")
     rollback_import_parser.add_argument("--import-id", required=True)
@@ -1784,6 +1907,16 @@ def build_parser() -> argparse.ArgumentParser:
     export_safe_bundle_parser.add_argument("--project-id", required=True)
     export_safe_bundle_parser.add_argument("--include-pdfs", action="store_true", help="Include PDFs explicitly; unsafe by default.")
 
+    artifact_hygiene_parser = subparsers.add_parser(
+        "artifact-hygiene", help="Run the v1 artifact hygiene audit for generated/private project artifacts."
+    )
+    artifact_hygiene_scope = artifact_hygiene_parser.add_mutually_exclusive_group(required=True)
+    artifact_hygiene_scope.add_argument("--project-id")
+    artifact_hygiene_scope.add_argument("--all", action="store_true")
+    artifact_hygiene_parser.add_argument("--write-report", action="store_true")
+
+    subparsers.add_parser("verify-gitignore", help="Verify .gitignore protects generated/private GapForge artifacts.")
+
     subparsers.add_parser("cache-info", help="Print source cache diagnostics as JSON.")
     subparsers.add_parser("show-state", help="Print latest state.json.")
     subparsers.add_parser("validate-state", help="Validate the latest run state.")
@@ -1844,6 +1977,82 @@ def _dispatch(
             print(path.read_text(encoding="utf-8"), end="")
             return 0
         print("No active decisions recorded.")
+        return 0
+    if args.command == "pilot-list":
+        print(render_pilot_list(), end="")
+        return 0
+    if args.command == "pilot-spec":
+        print(render_pilot_document(config, args.name, args.document), end="")
+        return 0
+    if args.command == "pilot-run":
+        pilot_record = PilotRunner(config).run(args.name)
+        print(json.dumps(to_plain(pilot_record), indent=2))
+        return 0 if pilot_record.status != "product_failure" else 1
+    if args.command == "pilot-status":
+        if args.pilot_id:
+            pilot_record = PilotStore(config).load_record(args.pilot_id)
+            spec = get_pilot_spec(pilot_record.pilot_id)
+            print(render_pilot_status_json(config, spec, pilot_id=args.pilot_id), end="")
+            return 0
+        spec = get_pilot_spec(args.name)
+        print(render_pilot_status_json(config, spec), end="")
+        return 0
+    if args.command == "pilot-report":
+        store = PilotStore(config)
+        pilot_record = store.load_record(args.pilot_id)
+        spec = get_pilot_spec(pilot_record.pilot_id)
+        pilot_summary = store.load_acceptance(args.pilot_id)
+        store.save_acceptance(pilot_record, pilot_summary)
+        pilot_report_text = render_pilot_report(spec, pilot_record, pilot_summary)
+        pilot_report_path = store.record_dir(pilot_record.id) / "pilot_report.md"
+        pilot_report_path.write_text(pilot_report_text, encoding="utf-8")
+        print(pilot_report_text, end="")
+        return 0
+    if args.command == "pilot-acceptance":
+        store = PilotStore(config)
+        pilot_record = store.load_record(args.pilot_id)
+        pilot_summary = store.load_acceptance(args.pilot_id)
+        print(render_pilot_acceptance(pilot_summary), end="")
+        return 0 if pilot_record.status != "product_failure" else 1
+    if args.command == "pilot-review":
+        pilot_review = ExternalPilotReviewManager(config).create_review(
+            args.pilot_id,
+            reviewer_name=args.reviewer_name,
+            reviewer_role=args.reviewer_role,
+            review_scope=args.scope,
+            novelty_assessment=args.novelty_assessment,
+            evidence_assessment=args.evidence_assessment,
+            experiment_assessment=args.experiment_assessment,
+            manuscript_assessment=args.manuscript_assessment,
+            artifact_assessment=args.artifact_assessment,
+            major_concerns=args.major_concern,
+            accept_outcome=args.accept_outcome,
+            reject_outcome=args.reject_outcome,
+            reason=args.reason,
+            required_fixes=args.required_fix,
+            notes=args.notes,
+        )
+        print(json.dumps(to_plain(pilot_review), indent=2))
+        return 0
+    if args.command == "pilot-review-report":
+        print(ExternalPilotReviewManager(config).render_report(args.pilot_id), end="")
+        return 0
+    if args.command == "pilot-outcome":
+        pilot_record = PilotStore(config).load_record(args.pilot_id)
+        pilot_outcome = assess_pilot_outcome(pilot_record, get_pilot_spec(pilot_record.pilot_id))
+        print(render_pilot_outcome(pilot_outcome, as_json=args.json), end="")
+        return 0 if pilot_outcome.outcome_type != "product_failure" else 1
+    if args.command == "idea-gate":
+        gate = IdeaGate(config)
+        idea_assessment = gate.assess_pilot(args.pilot_id) if args.pilot_id else gate.assess_campaign(args.campaign_id)
+        print(render_idea_gate(idea_assessment, as_json=args.json), end="")
+        return 0 if idea_assessment.acceptance_status != "rejected" else 1
+    if args.command == "selected-idea":
+        idea_assessment = IdeaGate(config).load_assessment(args.pilot_id)
+        if not idea_assessment.selected_direction_id:
+            print("No selected direction.")
+            return 1
+        print(idea_assessment.selected_direction_id)
         return 0
     if args.command == "search":
         state = orchestrator.search(
@@ -2207,6 +2416,7 @@ def _dispatch(
             v6=args.v6,
             v7=args.v7,
             v8=args.v8,
+            v9=args.v9,
         )
         target = report.report_path or (config.root / "eval_report.md")
         print(f"Wrote evaluation report to {target}")
@@ -3191,6 +3401,52 @@ def _dispatch(
         else:
             print(render_v08_release_gate_markdown(v8_gate_result), end="")
         return 0 if v8_gate_result.passed else 1
+    if args.command == "v9-release-gate":
+        v9_enforcer = V09ReleaseGateEnforcer(config)
+        v9_gate_result = v9_enforcer.evaluate()
+        if args.write_report:
+            v9_enforcer.write_outputs(v9_gate_result)
+        if args.json:
+            print(json.dumps(v9_gate_result.to_dict(), indent=2))
+        else:
+            print(render_v09_release_gate_markdown(v9_gate_result), end="")
+        return 0 if v9_gate_result.passed else 1
+    if args.command == "v1-readiness":
+        v1_gate = V1ReadinessGate(config)
+        v1_result = v1_gate.evaluate()
+        if args.write_report:
+            v1_gate.write_outputs(v1_result)
+        if args.json:
+            print(json.dumps(v1_result.to_dict(), indent=2))
+        else:
+            print(render_v1_readiness_markdown(v1_result), end="")
+        return 0 if v1_result.passed else 1
+    if args.command == "cli-audit":
+        cli_audit = CLICommandAuditor(config).audit(build_parser(), write=args.write_report)
+        print(render_cli_command_audit(cli_audit), end="")
+        return 0 if not cli_audit.missing_help else 1
+    if args.command == "docs-audit":
+        docs_audit = DocsAuditor(config).audit(write=args.write_report)
+        print(render_docs_audit(docs_audit), end="")
+        return 0 if docs_audit.passed else 1
+    if args.command == "compatibility-audit":
+        audit = CompatibilityAuditor(config).audit(write=True)
+        if args.json:
+            print(json.dumps(to_plain(audit), indent=2))
+        else:
+            print(render_compatibility_audit(audit), end="")
+        return 0 if not audit.migration_required and not audit.migration_failures else 1
+    if args.command == "migrate-project":
+        migration_record = MigrationManager(config).migrate_project(args.project_id, to_version=args.to_version)
+        print(json.dumps(to_plain(migration_record), indent=2))
+        return 0 if migration_record.status == "migrated" else 1
+    if args.command == "migrate-run":
+        migration_record = MigrationManager(config).migrate_run(args.run_id, to_version=args.to_version)
+        print(json.dumps(to_plain(migration_record), indent=2))
+        return 0 if migration_record.status == "migrated" else 1
+    if args.command == "migration-report":
+        print(MigrationManager(config).report(), end="")
+        return 0
     if args.command == "rollback-import":
         rollback_record = rollback_import(config, args.import_id)
         print(json.dumps(to_plain(rollback_record), indent=2))
@@ -4005,6 +4261,21 @@ def _dispatch(
         path = export_safe_project_bundle(config, args.project_id, include_pdfs=args.include_pdfs)
         print(f"Exported safe bundle to {path}")
         return 0
+    if args.command == "artifact-hygiene":
+        hygiene_auditor = ArtifactHygieneAuditor(config)
+        if args.all:
+            hygiene_reports = hygiene_auditor.audit_all(write=args.write_report)
+        else:
+            hygiene_report = hygiene_auditor.audit_project(args.project_id, write=args.write_report)
+            hygiene_reports = [hygiene_report]
+            if args.write_report:
+                hygiene_auditor.write_release_gate_report(hygiene_reports)
+        print(render_artifact_hygiene_report(hygiene_reports), end="")
+        return 0 if hygiene_reports and all(not item.blockers for item in hygiene_reports) else 1
+    if args.command == "verify-gitignore":
+        gitignore_result = verify_gitignore_patterns(config)
+        print(render_gitignore_verification(gitignore_result), end="")
+        return 0 if gitignore_result.passed else 1
     if args.command == "cache-info":
         print(json.dumps(cache_summary(config.cache_dir), indent=2))
         return 0

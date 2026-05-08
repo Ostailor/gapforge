@@ -35,6 +35,70 @@ def test_help_works() -> None:
     assert "init-topic" in result.stdout
 
 
+def test_low_fpr_pilot_spec_files_exist() -> None:
+    pilot_dir = REPO_ROOT / "docs" / "pilots" / "low_fpr_collusion"
+
+    for filename in ["PILOT_SPEC.md", "ACCEPTANCE_CRITERIA.md", "REVIEW_CHECKLIST.md"]:
+        path = pilot_dir / filename
+        assert path.exists(), filename
+
+
+def test_pilot_spec_renders_acceptance_criteria(tmp_path: Path) -> None:
+    result = run_cli(tmp_path, "pilot-spec", "--name", "low_fpr_collusion", "--document", "acceptance")
+
+    assert result.returncode == 0, result.stderr
+    assert "Outcome A: Defensible Direction" in result.stdout
+    assert "Outcome B: Correct Refusal" in result.stdout
+    assert "Outcome C: Product Failure" in result.stdout
+    assert "The system cannot pass the pilot by generating generic ideas" in result.stdout
+
+
+def test_pilot_status_handles_missing_project(tmp_path: Path) -> None:
+    result = run_cli(tmp_path, "pilot-status", "--name", "low_fpr_collusion")
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["name"] == "low_fpr_collusion"
+    assert payload["status"] == "missing_project"
+    assert payload["outcome"] == "not_started"
+    assert payload["required_outputs"]["project_record"]["status"] == "missing"
+    assert payload["docs"]["spec"]["exists"] is True
+
+
+def test_pilot_review_cli_accepts_refusal_and_reports(tmp_path: Path) -> None:
+    run = run_cli(tmp_path, "pilot-run", "--name", "low_fpr_collusion")
+    assert run.returncode == 0, run.stderr
+    pilot_id = json.loads(run.stdout)["id"]
+
+    review = run_cli(
+        tmp_path,
+        "pilot-review",
+        "--pilot-id",
+        pilot_id,
+        "--reviewer-name",
+        "CLI Reviewer",
+        "--reviewer-role",
+        "user",
+        "--accept-outcome",
+        "--reason",
+        "offline fixture refusal is reasonable",
+    )
+    assert review.returncode == 0, review.stderr
+    review_payload = json.loads(review.stdout)
+    assert review_payload["accepted_outcome"] is True
+    assert review_payload["reviewer_name"] == "CLI Reviewer"
+
+    report = run_cli(tmp_path, "pilot-review-report", "--pilot-id", pilot_id)
+    assert report.returncode == 0, report.stderr
+    assert "# External Pilot Review:" in report.stdout
+    assert "CLI Reviewer" in report.stdout
+
+    acceptance = run_cli(tmp_path, "pilot-acceptance", "--pilot-id", pilot_id)
+    assert acceptance.returncode == 0, acceptance.stderr
+    assert "- Passed: true" in acceptance.stdout
+    assert "- Human review: `accepted`" in acceptance.stdout
+
+
 def test_init_topic_creates_run_directory(tmp_path: Path) -> None:
     result = run_cli(tmp_path, "init-topic", "low false positive collusion detection")
     assert result.returncode == 0, result.stderr

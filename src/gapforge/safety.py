@@ -159,6 +159,22 @@ def export_safe_project_bundle(config: GapForgeConfig, project_id: str, *, inclu
     return bundle_root
 
 
+def artifact_hygiene_report(config: GapForgeConfig, project_id: str, *, write: bool = False):
+    """Build the v1 artifact hygiene report while keeping safety.py imports stable."""
+
+    from gapforge.artifacts.hygiene import build_project_artifact_hygiene_report
+
+    return build_project_artifact_hygiene_report(config, project_id, write=write)
+
+
+def verify_gitignore(config: GapForgeConfig):
+    """Verify v1 artifact hygiene ignore patterns."""
+
+    from gapforge.artifacts.hygiene import verify_gitignore_patterns
+
+    return verify_gitignore_patterns(config)
+
+
 def _classify_file(path: Path, root: Path) -> ArtifactClassification:
     relative = str(path.relative_to(root))
     lower = relative.lower()

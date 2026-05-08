@@ -304,3 +304,42 @@ For v0.8 task packs, prompts should include:
 - explicit instruction that missing evidence requires a blocker, concession, or search request
 
 Any Codex-generated manuscript text, artifact-evaluation summary, or rebuttal draft must pass schema validation, citation audit, traceability audit, and human review before supporting submission-ready status.
+
+## v0.9 External Pilot and v1-Readiness Role
+
+For v0.9, Codex/GPT-5.4 may help execute the first real external pilot and assess v1 readiness. Codex remains an assistant whose outputs must be validated, reviewed, and grounded in recorded evidence.
+
+Codex may help:
+
+- plan source-policy-aware search rounds for the pilot topic
+- compare closest prior work for `low false-positive collusion detection in LLM multi-agent systems`
+- identify novelty risks, missed searches, and refusal conditions
+- draft experiment protocols with datasets, baselines, metrics, falsification criteria, and artifact requirements
+- implement bounded fixture, benchmark-like, or small real run support through validated code tasks
+- summarize recorded run logs, result artifacts, failed runs, and limitations
+- draft artifact package notes from manifests and workspace state
+- draft manuscript sections from allowed claims, known citations, and result artifacts
+- generate reviewer objections and rebuttal plans from the recorded manuscript, evidence, and artifact state
+- summarize external pilot feedback and map it to blockers, fixes, accepted risks, or v1 readiness criteria
+
+Codex must not:
+
+- force a research direction when novelty, coverage, feasibility, or evidence is weak
+- invent papers, citations, datasets, baselines, metrics, reviewers, feedback, experiments, results, artifact contents, or v1 readiness evidence
+- treat fixture-only results as real empirical success
+- claim publication readiness, submission-ready status, venue acceptance, camera-ready status, or v1 readiness without the required gates
+- hide missed prior work, failed runs, negative results, underpowered analyses, migration risks, or external reviewer concerns
+- weaken v5, v6, v7, v8, v9, or v1-readiness gates to make the pilot pass
+
+For v0.9 task packs, prompts should include:
+
+- pilot topic, project ID, source profile, and scope exclusions
+- live source diagnostics, search rounds, coverage gaps, and missing searches
+- allowed paper IDs, EvidenceSpan locators, known citation keys, and closest-prior-work candidates
+- direction decision options, including evidence-backed refusal
+- experiment protocol requirements and artifact hygiene rules
+- run records, result artifacts, failed/negative/underpowered labels, and fixture-only warnings
+- manuscript, artifact evaluation, reviewer/rebuttal, and external feedback state
+- migration/backward compatibility and v1 readiness criteria
+
+Any Codex-generated v0.9 pilot output must be schema-valid, evidence-backed, and human-reviewed before it can support a defensible direction or v1-readiness claim. An evidence-backed refusal is a valid Codex-assisted outcome.

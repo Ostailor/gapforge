@@ -158,6 +158,21 @@ class ArtifactClassification:
 
 
 @dataclass(slots=True)
+class ProjectArtifactHygieneReport:
+    project_id: str
+    generated_artifact_count: int = 0
+    unsafe_to_commit_count: int = 0
+    pdf_count: int = 0
+    dataset_count: int = 0
+    transcript_count: int = 0
+    secret_risk_count: int = 0
+    large_file_count: int = 0
+    ignored_status_summary: dict[str, int] = field(default_factory=dict)
+    blockers: list[str] = field(default_factory=list)
+    provenance: Provenance = field(default_factory=lambda: Provenance(created_by_skill="artifact-hygiene"))
+
+
+@dataclass(slots=True)
 class PaperSection:
     id: str
     paper_id: str
@@ -1670,6 +1685,7 @@ class ResearchProject:
     run_ids: list[str] = field(default_factory=list)
     corpus_id: str = ""
     status: str = "active"
+    gapforge_version: str = "v1"
     provenance: Provenance = field(default_factory=lambda: Provenance(created_by_skill="project-memory"))
 
 
@@ -2324,6 +2340,134 @@ class RealLiteratureHumanReview:
     reasons: list[str] = field(default_factory=list)
     required_fixes: list[str] = field(default_factory=list)
     provenance: Provenance = field(default_factory=lambda: Provenance(created_by_skill="real-literature-human-review"))
+
+
+@dataclass(slots=True)
+class PilotSpec:
+    id: str
+    name: str
+    topic: str
+    project_name: str
+    source_profile: str = "generic"
+    required_artifacts: list[str] = field(default_factory=list)
+    acceptance_modes: list[str] = field(default_factory=list)
+    required_reviews: list[str] = field(default_factory=list)
+    provenance: Provenance = field(default_factory=lambda: Provenance(created_by_skill="pilot-spec"))
+
+
+@dataclass(slots=True)
+class PilotRunRecord:
+    id: str
+    pilot_id: str
+    project_id: str = ""
+    campaign_id: str = ""
+    workspace_id: str = ""
+    manuscript_id: str = ""
+    status: str = "planned"
+    outcome_type: str = "unknown"
+    artifact_paths: dict[str, str] = field(default_factory=dict)
+    blockers: list[str] = field(default_factory=list)
+    created_at: str = ""
+    updated_at: str = ""
+    provenance: Provenance = field(default_factory=lambda: Provenance(created_by_skill="pilot-runner"))
+
+
+@dataclass(slots=True)
+class PilotAcceptanceSummary:
+    pilot_id: str
+    passed: bool = False
+    outcome_type: str = "unknown"
+    accepted_direction_id: str = ""
+    refusal_reason: str = ""
+    product_failures: list[str] = field(default_factory=list)
+    human_review_status: str = "missing"
+    release_gate_eligible: bool = False
+    provenance: Provenance = field(default_factory=lambda: Provenance(created_by_skill="pilot-acceptance"))
+
+
+@dataclass(slots=True)
+class ExternalPilotReview:
+    id: str
+    pilot_id: str
+    reviewer_name: str = ""
+    reviewer_role: str = "unknown"
+    reviewed_at: str = ""
+    review_scope: list[str] = field(default_factory=list)
+    novelty_assessment: str = ""
+    evidence_assessment: str = ""
+    experiment_assessment: str = ""
+    manuscript_assessment: str = ""
+    artifact_assessment: str = ""
+    major_concerns: list[str] = field(default_factory=list)
+    accepted_outcome: bool = False
+    required_fixes: list[str] = field(default_factory=list)
+    notes: str = ""
+    provenance: Provenance = field(default_factory=lambda: Provenance(created_by_skill="external-pilot-review"))
+
+
+@dataclass(slots=True)
+class PilotOutcomeAssessment:
+    pilot_id: str
+    outcome_type: str = "incomplete"
+    confidence: str = "low"
+    supporting_evidence: list[str] = field(default_factory=list)
+    blocking_issues: list[str] = field(default_factory=list)
+    required_fixes: list[str] = field(default_factory=list)
+    recommended_next_version: str = "v0.9"
+    provenance: Provenance = field(default_factory=lambda: Provenance(created_by_skill="pilot-outcome"))
+
+
+@dataclass(slots=True)
+class IdeaGateAssessment:
+    pilot_id: str
+    candidate_direction_ids: list[str] = field(default_factory=list)
+    selected_direction_id: str = ""
+    rejected_direction_ids: list[str] = field(default_factory=list)
+    selection_reason: str = ""
+    evidence_score: int = 0
+    novelty_score: int = 0
+    tractability_score: int = 0
+    experimentability_score: int = 0
+    reviewer_risk_score: int = 0
+    acceptance_status: str = "refusal"
+    blockers: list[str] = field(default_factory=list)
+    provenance: Provenance = field(default_factory=lambda: Provenance(created_by_skill="idea-gate"))
+
+
+@dataclass(slots=True)
+class MigrationRecord:
+    id: str
+    source_version: str
+    target_version: str
+    object_type: str
+    object_id: str
+    status: str = "planned"
+    changes: list[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
+    provenance: Provenance = field(default_factory=lambda: Provenance(created_by_skill="migration"))
+
+
+@dataclass(slots=True)
+class CompatibilityAudit:
+    id: str
+    checked_versions: list[str] = field(default_factory=list)
+    loaded_projects: list[str] = field(default_factory=list)
+    loaded_runs: list[str] = field(default_factory=list)
+    migration_required: list[str] = field(default_factory=list)
+    migration_failures: list[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
+    provenance: Provenance = field(default_factory=lambda: Provenance(created_by_skill="compatibility-audit"))
+
+
+@dataclass(slots=True)
+class CLICommandAudit:
+    command_count: int = 0
+    command_groups: dict[str, list[str]] = field(default_factory=dict)
+    duplicate_or_confusing_commands: list[str] = field(default_factory=list)
+    missing_help: list[str] = field(default_factory=list)
+    deprecated_commands: list[str] = field(default_factory=list)
+    recommended_aliases: list[str] = field(default_factory=list)
+    provenance: Provenance = field(default_factory=lambda: Provenance(created_by_skill="cli-audit"))
 
 
 @dataclass(slots=True)

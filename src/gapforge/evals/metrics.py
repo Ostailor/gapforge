@@ -108,6 +108,15 @@ class EvalScores:
     anonymization_safety: float | None = None
     submission_package_completeness: float | None = None
     v8_release_gate_correctness: float | None = None
+    pilot_outcome_classification: float | None = None
+    idea_gate_quality: float | None = None
+    external_review_completeness: float | None = None
+    v1_readiness_gate_correctness: float | None = None
+    migration_audit_score: float | None = None
+    cli_audit_score: float | None = None
+    docs_audit_score: float | None = None
+    artifact_hygiene_score: float | None = None
+    v9_release_gate_correctness: float | None = None
 
     def overall(self) -> float:
         positive = [
@@ -233,6 +242,23 @@ class EvalScores:
             self.anonymization_safety,
             self.submission_package_completeness,
             self.v8_release_gate_correctness,
+        ]
+        present = [value for value in values if value is not None]
+        if not present:
+            return None
+        return round(sum(present) / len(present), 3)
+
+    def v9_overall(self) -> float | None:
+        values = [
+            self.pilot_outcome_classification,
+            self.idea_gate_quality,
+            self.external_review_completeness,
+            self.v1_readiness_gate_correctness,
+            self.migration_audit_score,
+            self.cli_audit_score,
+            self.docs_audit_score,
+            self.artifact_hygiene_score,
+            self.v9_release_gate_correctness,
         ]
         present = [value for value in values if value is not None]
         if not present:
@@ -1338,6 +1364,136 @@ def v8_release_gate_correctness(fixture: dict[str, object]) -> float:
     return round((0.7 * int(computed_pass is False)) + (0.3 * int(bool(expected_blockers))), 3)
 
 
+def pilot_outcome_classification(fixture: dict[str, object]) -> float:
+    expected = _dict(fixture.get("expected"))
+    outcome = _dict(fixture.get("pilot_outcome"))
+    expected_type = str(expected.get("outcome_type", "unknown"))
+    actual_type = str(outcome.get("outcome_type", "unknown"))
+    checks = [actual_type == expected_type, bool(outcome.get("classified"))]
+    blockers = " ".join(str(item) for item in _list(outcome.get("blockers"))).lower()
+    if expected_type == "defensible_direction":
+        checks.extend([bool(outcome.get("accepted_direction_id")), bool(outcome.get("evidence_backed_gap"))])
+    elif expected_type == "correct_refusal":
+        checks.extend([bool(outcome.get("refusal_reason")), bool(outcome.get("missing_searches_or_blockers"))])
+    elif expected_type == "product_failure":
+        checks.append("product_failure" in blockers or bool(outcome.get("product_failures")))
+    elif expected_type == "incomplete":
+        checks.append(bool(outcome.get("blocking_issues")))
+    return round(sum(1 for item in checks if item) / len(checks), 3)
+
+
+def idea_gate_quality(fixture: dict[str, object]) -> float:
+    gate = _dict(fixture.get("idea_gate"))
+    expected = _dict(fixture.get("expected"))
+    expected_type = str(expected.get("outcome_type", "unknown"))
+    selected = str(gate.get("selected_direction_id", ""))
+    rejected = _list(gate.get("rejected_direction_ids"))
+    checks = [
+        bool(gate.get("ran")),
+        len([selected_id for selected_id in [selected] if selected_id]) <= 1,
+        not bool(gate.get("generic_idea_accepted")),
+        not bool(gate.get("fake_issue_unresolved")),
+        bool(gate.get("auditable")),
+    ]
+    if expected_type == "defensible_direction":
+        checks.extend([str(gate.get("acceptance_status")) == "accepted", bool(selected)])
+    else:
+        checks.extend([not selected, str(gate.get("acceptance_status")) in {"refusal", "rejected"} or bool(rejected)])
+    return round(sum(1 for item in checks if item) / len(checks), 3)
+
+
+def external_review_completeness(fixture: dict[str, object]) -> float:
+    review = _dict(fixture.get("external_review"))
+    if not review.get("exists"):
+        return 0.0
+    scope = _list(review.get("scope"))
+    checks = [
+        str(review.get("reviewer_role", "")) in {"user", "domain_expert", "engineer", "external_reviewer"},
+        bool(scope),
+        "novelty" in scope or "refusal" in scope or "product_failure" in scope,
+        "evidence" in scope or "source_coverage" in scope or "artifact" in scope,
+        not bool(review.get("fake_citation_or_result_accepted")),
+        bool(review.get("accepted_outcome")) == bool(_dict(fixture.get("expected")).get("human_accepted")),
+    ]
+    return round(sum(1 for item in checks if item) / len(checks), 3)
+
+
+def v1_readiness_gate_correctness(fixture: dict[str, object]) -> float:
+    expected = _dict(fixture.get("v1_readiness"))
+    expected_pass = bool(expected.get("expected_pass"))
+    computed_pass = _computed_v1_readiness(fixture)
+    if expected_pass:
+        return 1.0 if computed_pass else 0.0
+    expected_blockers = _list(expected.get("expected_blockers"))
+    return round((0.7 * int(computed_pass is False)) + (0.3 * int(bool(expected_blockers))), 3)
+
+
+def migration_audit_score(fixture: dict[str, object]) -> float:
+    audit = _dict(fixture.get("migration_audit"))
+    checks = [
+        bool(audit.get("generated")),
+        bool(audit.get("loaded_old_versions")),
+        bool(audit.get("backups_created")),
+        not bool(audit.get("migration_failures")),
+    ]
+    if bool(audit.get("expected_block")):
+        checks.append(bool(audit.get("migration_required")) or bool(audit.get("migration_failures")))
+    else:
+        checks.append(bool(audit.get("passed")))
+    return round(sum(1 for item in checks if item) / len(checks), 3)
+
+
+def cli_audit_score(fixture: dict[str, object]) -> float:
+    audit = _dict(fixture.get("cli_audit"))
+    groups = set(str(item) for item in _list(audit.get("command_groups")))
+    required = {"project", "campaign", "literature", "codex", "experiment", "benchmark", "manuscript", "release-gate", "safety"}
+    checks = [
+        bool(audit.get("generated")),
+        required <= groups,
+        not bool(audit.get("missing_help")),
+        bool(audit.get("deprecated_aliases_preserved")),
+        bool(audit.get("pilot_help_present")),
+    ]
+    return round(sum(1 for item in checks if item) / len(checks), 3)
+
+
+def docs_audit_score(fixture: dict[str, object]) -> float:
+    audit = _dict(fixture.get("docs_audit"))
+    checks = [
+        bool(audit.get("generated")),
+        bool(audit.get("quickstarts_present")),
+        bool(audit.get("v1_readiness_docs_present")),
+        bool(audit.get("limitations_visible")),
+        not bool(audit.get("overclaim_detected")),
+        not bool(audit.get("fake_examples_presented_as_real")),
+    ]
+    return round(sum(1 for item in checks if item) / len(checks), 3)
+
+
+def artifact_hygiene_score(fixture: dict[str, object]) -> float:
+    audit = _dict(fixture.get("artifact_hygiene"))
+    checks = [
+        bool(audit.get("generated")),
+        bool(audit.get("pdfs_ignored")),
+        bool(audit.get("datasets_ignored")),
+        bool(audit.get("transcripts_redacted_or_ignored")),
+        bool(audit.get("dashboards_ignored")),
+        bool(audit.get("safe_bundles_exclude_restricted")),
+        not bool(audit.get("secret_risk_unblocked")),
+    ]
+    return round(sum(1 for item in checks if item) / len(checks), 3)
+
+
+def v9_release_gate_correctness(fixture: dict[str, object]) -> float:
+    expected = _dict(fixture.get("v9_release_gate"))
+    expected_pass = bool(expected.get("expected_pass"))
+    computed_pass = _computed_v9_release_gate(fixture)
+    if expected_pass:
+        return 1.0 if computed_pass else 0.0
+    expected_blockers = _list(expected.get("expected_blockers"))
+    return round((0.7 * int(computed_pass is False)) + (0.3 * int(bool(expected_blockers))), 3)
+
+
 def _tokens(text: str) -> list[str]:
     return re.findall(r"[a-z0-9-]+", text.lower())
 
@@ -1454,5 +1610,49 @@ def _computed_v8_release_gate(fixture: dict[str, object]) -> bool:
             not bool(_dict(fixture.get("anonymization")).get("leak_expected")),
             not bool(_dict(fixture.get("rebuttal")).get("open_blockers_expected")),
             not bool(_dict(fixture.get("artifact_evaluation")).get("missing_expected")),
+        ]
+    )
+
+
+def _computed_v1_readiness(fixture: dict[str, object]) -> bool:
+    outcome = _dict(fixture.get("pilot_outcome"))
+    return all(
+        [
+            str(outcome.get("outcome_type")) in {"defensible_direction", "correct_refusal"},
+            bool(_dict(fixture.get("external_review")).get("exists")),
+            bool(_dict(fixture.get("external_review")).get("accepted_outcome")),
+            not bool(outcome.get("product_failures")),
+            not bool(_dict(fixture.get("v1_readiness")).get("unresolved_product_failures")),
+            bool(_dict(fixture.get("v1_readiness")).get("full_project_report_exists")),
+            migration_audit_score(fixture) >= 0.8 and not bool(_dict(fixture.get("migration_audit")).get("expected_block")),
+            cli_audit_score(fixture) >= 0.8,
+            docs_audit_score(fixture) >= 0.8,
+            artifact_hygiene_score(fixture) >= 0.8,
+        ]
+    )
+
+
+def _computed_v9_release_gate(fixture: dict[str, object]) -> bool:
+    expected = _dict(fixture.get("expected"))
+    outcome = _dict(fixture.get("pilot_outcome"))
+    gate = _dict(fixture.get("idea_gate"))
+    review = _dict(fixture.get("external_review"))
+    return all(
+        [
+            bool(_dict(fixture.get("v9_release_gate")).get("v8_passed_or_documented")),
+            bool(_dict(fixture.get("v9_release_gate")).get("pilot_spec_exists")),
+            bool(_dict(fixture.get("v9_release_gate")).get("pilot_run_exists")),
+            bool(outcome.get("classified")),
+            bool(review.get("exists")),
+            bool(gate.get("ran")),
+            bool(review.get("accepted_outcome")),
+            str(outcome.get("outcome_type")) in {"defensible_direction", "correct_refusal"},
+            str(outcome.get("outcome_type")) == str(expected.get("outcome_type")),
+            not bool(outcome.get("product_failures")),
+            bool(_dict(fixture.get("v1_readiness")).get("generated")),
+            bool(_dict(fixture.get("migration_audit")).get("generated")),
+            bool(_dict(fixture.get("cli_audit")).get("generated")),
+            bool(_dict(fixture.get("docs_audit")).get("generated")),
+            bool(_dict(fixture.get("artifact_hygiene")).get("generated")),
         ]
     )

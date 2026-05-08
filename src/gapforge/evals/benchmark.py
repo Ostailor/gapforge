@@ -13,6 +13,7 @@ from gapforge.evals.fixtures import (
     V6_FIXTURE_NAMES,
     V7_FIXTURE_NAMES,
     V8_FIXTURE_NAMES,
+    V9_FIXTURE_NAMES,
     EvalFixture,
     load_fixtures,
     load_v3_fixtures,
@@ -21,6 +22,7 @@ from gapforge.evals.fixtures import (
     load_v6_fixtures,
     load_v7_fixtures,
     load_v8_fixtures,
+    load_v9_fixtures,
 )
 from gapforge.evals.metrics import (
     EvalScores,
@@ -29,6 +31,7 @@ from gapforge.evals.metrics import (
     agent_output_validation_strictness,
     anonymization_safety,
     artifact_eval_package_score,
+    artifact_hygiene_score,
     benchmark_comparison_honesty,
     benchmark_execution_integrity,
     benchmark_failure_path_preservation,
@@ -36,9 +39,11 @@ from gapforge.evals.metrics import (
     campaign_report_honesty,
     canonicalization_quality,
     citation_validity_score,
+    cli_audit_score,
     contradiction_detection_score,
     direction_maturity_accuracy,
     direction_maturity_gate_accuracy_from_fixture,
+    docs_audit_score,
     duplicate_detection_rate,
     empirical_claim_validity,
     empirical_review_quality,
@@ -48,20 +53,24 @@ from gapforge.evals.metrics import (
     experiment_code_task_quality,
     experiment_completeness_score,
     experiment_execution_integrity,
+    external_review_completeness,
     fake_result_rejection,
     full_text_coverage_score,
     gap_evidence_matrix_score,
     gap_specificity_score,
     human_review_respect_score,
+    idea_gate_quality,
     live_source_coverage_score,
     llm_output_grounding_score,
     low_fpr_underpowered_warning_score,
     manuscript_package_honesty,
     manuscript_traceability_score,
+    migration_audit_score,
     novelty_dossier_completeness_score,
     novelty_gate_accuracy,
     novelty_research_loop_quality,
     paper_package_honesty,
+    pilot_outcome_classification,
     prior_work_recall_gate_score,
     prior_work_recall_proxy,
     protocol_completeness,
@@ -90,10 +99,12 @@ from gapforge.evals.metrics import (
     stop_reason_correctness,
     submission_package_completeness,
     unsupported_claim_rate,
+    v1_readiness_gate_correctness,
     v5_release_gate_correctness,
     v6_release_gate_correctness,
     v7_release_gate_correctness,
     v8_release_gate_correctness,
+    v9_release_gate_correctness,
     venue_checklist_score,
 )
 from gapforge.experiments.protocol import build_protocol_from_state
@@ -135,6 +146,7 @@ class EvalReport:
     v6: bool = False
     v7: bool = False
     v8: bool = False
+    v9: bool = False
     report_path: Path | None = None
 
     @property
@@ -162,6 +174,7 @@ def run_evals(
     v6: bool = False,
     v7: bool = False,
     v8: bool = False,
+    v9: bool = False,
 ) -> EvalReport:
     selected = (
         [fixture]
@@ -169,6 +182,8 @@ def run_evals(
         else (
             V8_FIXTURE_NAMES
             if v8
+            else V9_FIXTURE_NAMES
+            if v9
             else V7_FIXTURE_NAMES
             if v7
             else V6_FIXTURE_NAMES
@@ -184,7 +199,9 @@ def run_evals(
             else None
         )
     )
-    if v8:
+    if v9:
+        fixtures = load_v9_fixtures(selected, fixture_root)
+    elif v8:
         fixtures = load_v8_fixtures(selected, fixture_root)
     elif v7:
         fixtures = load_v7_fixtures(selected, fixture_root)
@@ -208,6 +225,7 @@ def run_evals(
         v6=v6 or any(item.is_v6 for item in fixtures),
         v7=v7 or any(item.is_v7 for item in fixtures),
         v8=v8 or any(item.is_v8 for item in fixtures),
+        v9=v9 or any(item.is_v9 for item in fixtures),
     )
     if write_report:
         path = (output_dir or Path.cwd()) / "eval_report.md"
@@ -246,6 +264,10 @@ def render_eval_report(report: EvalReport) -> str:
         v8_scores = [score for result in report.results if (score := result.scores.v8_overall()) is not None]
         v8_overall = round(sum(v8_scores) / len(v8_scores), 3) if v8_scores else 0.0
         lines.extend([f"v0.8 overall score: **{v8_overall:.3f}**", ""])
+    if report.v9:
+        v9_scores = [score for result in report.results if (score := result.scores.v9_overall()) is not None]
+        v9_overall = round(sum(v9_scores) / len(v9_scores), 3) if v9_scores else 0.0
+        lines.extend([f"v0.9 overall score: **{v9_overall:.3f}**", ""])
     for result in report.results:
         scores = result.scores
         lines.extend(
@@ -393,6 +415,24 @@ def render_eval_report(report: EvalReport) -> str:
                     "",
                 ]
             )
+        if scores.v9_overall() is not None:
+            lines.extend(
+                [
+                    "### v0.9 Scores",
+                    "",
+                    f"- pilot_outcome_classification: {scores.pilot_outcome_classification:.3f}",
+                    f"- idea_gate_quality: {scores.idea_gate_quality:.3f}",
+                    f"- external_review_completeness: {scores.external_review_completeness:.3f}",
+                    f"- v1_readiness_gate_correctness: {scores.v1_readiness_gate_correctness:.3f}",
+                    f"- migration_audit_score: {scores.migration_audit_score:.3f}",
+                    f"- cli_audit_score: {scores.cli_audit_score:.3f}",
+                    f"- docs_audit_score: {scores.docs_audit_score:.3f}",
+                    f"- artifact_hygiene_score: {scores.artifact_hygiene_score:.3f}",
+                    f"- v9_release_gate_correctness: {scores.v9_release_gate_correctness:.3f}",
+                    f"- fixture_v9_overall: {scores.v9_overall():.3f}",
+                    "",
+                ]
+            )
         failed_checks = _failed_checks(scores, result)
         lines.extend(["### Failed Checks And Suggested Improvements", ""])
         lines.extend(["| Check | Suggested improvement |", "| --- | --- |"])
@@ -522,6 +562,17 @@ def _evaluate_fixture(fixture: EvalFixture) -> FixtureEvalResult:
         scores.anonymization_safety = anonymization_safety(manuscript_fixture)
         scores.submission_package_completeness = submission_package_completeness(manuscript_fixture)
         scores.v8_release_gate_correctness = v8_release_gate_correctness(manuscript_fixture)
+    if fixture.is_v9:
+        pilot_fixture = fixture.pilot_fixture
+        scores.pilot_outcome_classification = pilot_outcome_classification(pilot_fixture)
+        scores.idea_gate_quality = idea_gate_quality(pilot_fixture)
+        scores.external_review_completeness = external_review_completeness(pilot_fixture)
+        scores.v1_readiness_gate_correctness = v1_readiness_gate_correctness(pilot_fixture)
+        scores.migration_audit_score = migration_audit_score(pilot_fixture)
+        scores.cli_audit_score = cli_audit_score(pilot_fixture)
+        scores.docs_audit_score = docs_audit_score(pilot_fixture)
+        scores.artifact_hygiene_score = artifact_hygiene_score(pilot_fixture)
+        scores.v9_release_gate_correctness = v9_release_gate_correctness(pilot_fixture)
     unsupported = [
         claim.id
         for claim in state.claims
@@ -779,6 +830,15 @@ def _failed_checks(scores: EvalScores, result: FixtureEvalResult) -> list[tuple[
         "anonymization_safety": 0.9,
         "submission_package_completeness": 0.9,
         "v8_release_gate_correctness": 1.0,
+        "pilot_outcome_classification": 1.0,
+        "idea_gate_quality": 0.85,
+        "external_review_completeness": 0.8,
+        "v1_readiness_gate_correctness": 1.0,
+        "migration_audit_score": 0.8,
+        "cli_audit_score": 0.8,
+        "docs_audit_score": 0.8,
+        "artifact_hygiene_score": 0.85,
+        "v9_release_gate_correctness": 1.0,
     }
     suggestions = {
         "full_text_coverage_score": "Parse more full text before evaluating research quality.",
@@ -846,6 +906,15 @@ def _failed_checks(scores: EvalScores, result: FixtureEvalResult) -> list[tuple[
         "anonymization_safety": "Detect identity leaks and block anonymous submissions when leaks remain.",
         "submission_package_completeness": "Export auditable submission packages with manuscript, assets, bibliography, and reports.",
         "v8_release_gate_correctness": "Require traceability, artifacts, review/rebuttal, and submission packages before v0.8 readiness.",
+        "pilot_outcome_classification": "Classify direction, refusal, product failure, and incomplete outcomes with explicit evidence.",
+        "idea_gate_quality": "Accept at most one auditable primary direction or preserve a correct refusal.",
+        "external_review_completeness": "Record human/external review scope, role, concerns, and acceptance decision.",
+        "v1_readiness_gate_correctness": "Allow accepted direction/refusal, but block unresolved product failures and missing audits.",
+        "migration_audit_score": "Load older projects/runs, create backups, and surface migration blockers.",
+        "cli_audit_score": "Keep command groups discoverable, help present, and compatibility aliases working.",
+        "docs_audit_score": "Ensure quickstarts, limitations, and no-overclaim docs are present.",
+        "artifact_hygiene_score": "Ignore or redact generated/private artifacts and keep safe bundles restricted.",
+        "v9_release_gate_correctness": "Require pilot spec/run/outcome/review/idea gate and all v1-readiness audits.",
     }
     for name, threshold in thresholds.items():
         value = getattr(scores, name)

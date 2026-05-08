@@ -195,6 +195,36 @@ v0.8 non-goals:
 
 The v0.8 workflow should make incomplete manuscripts safer to review by labeling blockers clearly. It does not make a paper publishable by formatting it.
 
+## v0.9 External Pilot and v1-Readiness Limits
+
+v0.9 is the external pilot and v1-readiness release. It moves beyond fixture validation by requiring one real end-to-end topic, but it still does not prove that GapForge can produce publishable research on demand.
+
+v0.9 must still preserve these limits:
+
+- one external pilot is not broad product validation
+- a defensible direction is not publication readiness
+- an evidence-backed refusal is a valid outcome and must not be treated as product failure by itself
+- live literature coverage can still miss prior work
+- source outages, rate limits, incomplete metadata, and unavailable full text remain material risks
+- closest-prior-work review reduces novelty risk but does not guarantee novelty
+- small real runs may be underpowered and must not be overstated
+- fixture-only runs validate workflow mechanics only and cannot count as empirical success
+- artifact packages are only as complete as their recorded workspaces, manifests, data access, and reproducibility state
+- reviewer simulation remains diagnostic and cannot substitute for external feedback
+- external pilot feedback is useful evidence, not venue acceptance or market validation
+- v1 readiness is a separate gate and cannot be inferred from a successful manuscript draft or pilot run
+
+v0.9 non-goals:
+
+- forcing a research idea when novelty is weak
+- claiming real publication readiness unless all gates pass
+- fabricating experiments, citations, reviewers, artifact contents, or missing data
+- counting fixture-only results as real empirical success
+- weakening release gates to make the external pilot pass
+- calling v1 before the v1 readiness gate passes
+
+The recommended v0.9 pilot topic is `low false-positive collusion detection in LLM multi-agent systems`. If the pilot ends in refusal, release notes should treat the refusal as successful only when the refusal is backed by live search records, closest-prior-work review, human quality review, and clear next evidence requirements.
+
 ## Operational Guidance
 
 Use strict mode and coverage assessment before interpreting outputs:

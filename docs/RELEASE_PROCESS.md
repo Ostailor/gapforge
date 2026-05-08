@@ -27,8 +27,9 @@ GAPFORGE_DISABLE_NETWORK=1 gapforge report --strict
 10. Confirm at least one actual Codex/GPT-5.4 canary has an accepted canary record before using the phrase "actual-run acceptance passed."
 11. Record human review using `docs/REAL_RUN_REVIEW_CHECKLIST.md`.
 12. For v0.4 releases, complete the campaign process in `docs/V0_4_AGENTIC_CAMPAIGNS.md` and `docs/V0_4_REAL_RUN_ACCEPTANCE.md`.
-13. Commit with a message that records constraints, rejected alternatives if useful, confidence, scope risk, tested commands, and known gaps.
-14. Tag the release only after the checks pass.
+13. For v0.9 releases, complete the external pilot process in `docs/V0_9_EXTERNAL_PILOT.md`, acceptance criteria in `docs/V0_9_ACCEPTANCE_CRITERIA.md`, and v1 readiness gate in `docs/V0_9_V1_READINESS.md`.
+14. Commit with a message that records constraints, rejected alternatives if useful, confidence, scope risk, tested commands, and known gaps.
+15. Tag the release only after the checks pass.
 
 ## v0.3 Validation Levels
 
@@ -319,6 +320,66 @@ If the manuscript cannot pass novelty, result, reproducibility, artifact, citati
 
 The Python API mirrors this release path with `gapforge.api.create_manuscript`, `build_bibliography`, `draft_manuscript`, `render_manuscript`, `generate_manuscript_assets`, `run_traceability_check`, `set_venue`, `submission_checklist`, `anonymize_manuscript`, `create_artifact_eval_package`, `manuscript_review`, `rebuttal_plan`, `submission_package`, and `v8_release_gate`.
 
+## v0.9 External Pilot and v1 Readiness Gate
+
+v0.9 must not claim v1 readiness, external research success, or publication readiness based only on fixtures, generated prose, local artifacts, or a polished manuscript. It must run one real external pilot topic end to end and accept either a defensible direction or an evidence-backed refusal.
+
+Before tagging v0.9, the release process should require:
+
+```bash
+make ci
+make eval
+gapforge eval --v5 --write-report
+gapforge eval --v6 --write-report
+gapforge eval --v7 --write-report
+gapforge eval --v8 --write-report
+gapforge v8-release-gate --write-report --json
+gapforge init-project "v0.9 low-FPR collusion pilot"
+gapforge real-campaign-dry-run --profile live_low_fpr_collusion --write-report
+gapforge live-source-diagnostic --topic "low false-positive collusion detection in LLM multi-agent systems" --source-profile ai_safety --write-report
+gapforge real-literature-run --profile live_low_fpr_collusion
+gapforge campaign-report --campaign-id <campaign-id>
+gapforge real-literature-review --campaign-id <campaign-id> --reviewer "<expert>"
+gapforge real-literature-acceptance --campaign-id <campaign-id>
+gapforge v9-release-gate --project-id <project-id> --write-report --json
+gapforge v1-readiness --project-id <project-id> --write-report --json
+```
+
+The exact pilot command path may change during v0.9 CLI cleanup. If a listed command is missing or confusing, the release candidate must document the actual replacement path, update the README/runbook, and classify the issue as fixed, accepted scope, v0.9.1 required, or v1 blocker.
+
+The v0.9 release gate should require:
+
+- deterministic CI remains passing
+- v5 literature, v6 empirical, v7 benchmark/replication, and v8 manuscript gates remain passing or limitations are explicitly documented
+- one named real external pilot topic exists, preferably `low false-positive collusion detection in LLM multi-agent systems`
+- live literature campaign evidence exists, or source failures are recorded and drive an honest blocked/refusal outcome
+- closest prior work, novelty risk, missed searches, and human quality review are recorded
+- the pilot outcome is either a defensible direction or an evidence-backed refusal
+- experiment protocol records datasets, baselines, metrics, falsification criteria, compute assumptions, and artifact requirements
+- any small real run has run records, logs, result artifacts, analysis, and review
+- fixture-only runs are labeled as workflow mechanics and never counted as real empirical success
+- artifact package, manuscript draft, reviewer/rebuttal plan, and external feedback records exist, or blocked/refusal artifacts explain why they do not
+- migration/backward compatibility from v0.8 state is audited
+- CLI workflow cleanup and docs usability findings are fixed, accepted, or scheduled
+- artifact hygiene separates safe-to-commit, private, generated, cache-only, and reviewer-facing artifacts
+- v1 readiness is assessed as `ready`, `ready_with_explicit_scope`, or `not_ready`
+
+Release notes must distinguish:
+
+- external pilot topic and outcome
+- defensible direction versus evidence-backed refusal
+- live source coverage and missed-search limitations
+- fixture smoke versus small real run evidence
+- artifact package and manuscript status
+- reviewer/rebuttal status
+- external feedback findings
+- migration/backward compatibility status
+- CLI/docs usability status
+- v0.9.1 required or not
+- v1 readiness outcome
+
+If no real external pilot was completed, record `v0.9 external pilot not completed`. If the pilot exposes a narrow fixable blocker, record `v0.9 external pilot failed; v0.9.1 required`. Never use v0.9.1 to lower evidence standards or bypass the v1 readiness gate.
+
 ## Tagging
 
 Use semantic version tags:
@@ -353,4 +414,6 @@ Release notes should include:
 - For v0.7, do not claim real benchmark execution or replication unless a real or benchmark-like non-fixture run, compute logs, benchmark artifacts, comparison/error analysis, and replication package prove it.
 - For v0.8, do not claim submission-readiness unless claim traceability, citation/BibTeX audit, artifact-backed results, artifact evaluation package state, blinding checks when applicable, reviewer-objection handling, and human review prove it.
 - Do not claim camera-ready status without explicit acceptance metadata and a completed camera-ready checklist.
+- For v0.9, do not claim external pilot success unless one real topic completed the required pilot path with either a defensible direction or an evidence-backed refusal.
+- Do not claim v1 readiness unless the v1 readiness gate passes as `ready` or `ready_with_explicit_scope`.
 - Do not publish generated `runs/`, caches, or local environment artifacts as source.

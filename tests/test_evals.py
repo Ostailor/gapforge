@@ -15,6 +15,7 @@ from gapforge.evals.fixtures import (
     V6_FIXTURE_NAMES,
     V7_FIXTURE_NAMES,
     V8_FIXTURE_NAMES,
+    V9_FIXTURE_NAMES,
     list_fixtures,
     load_fixture,
     load_v3_fixture,
@@ -23,6 +24,7 @@ from gapforge.evals.fixtures import (
     load_v6_fixture,
     load_v7_fixture,
     load_v8_fixture,
+    load_v9_fixture,
 )
 from gapforge.evals.metrics import (
     actual_run_gate_correctness,
@@ -196,6 +198,24 @@ def test_v8_eval_fixtures_are_complete_and_offline() -> None:
         assert payload["anonymization"]
         assert payload["submission_package"]
         assert payload["v8_release_gate"]
+
+
+def test_v9_eval_fixtures_are_complete_and_offline() -> None:
+    for name in V9_FIXTURE_NAMES:
+        fixture = load_v9_fixture(name)
+        payload = fixture.pilot_fixture
+        assert fixture.is_v9
+        assert fixture.topic
+        assert fixture.papers
+        assert payload["pilot_outcome"]
+        assert payload["idea_gate"]
+        assert payload["external_review"]
+        assert payload["v1_readiness"]
+        assert payload["migration_audit"]
+        assert payload["cli_audit"]
+        assert payload["docs_audit"]
+        assert payload["artifact_hygiene"]
+        assert payload["v9_release_gate"]
 
 
 def test_run_evals_single_fixture_writes_report(tmp_path: Path) -> None:
@@ -462,6 +482,85 @@ def test_run_v8_evals_includes_manuscript_metrics_offline(tmp_path: Path, monkey
     assert "### v0.8 Scores" in text
     assert "v0.8 overall score" in text
     assert "submission_package_completeness" in text
+
+
+def test_run_v9_evals_includes_pilot_metrics_offline(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("GAPFORGE_DISABLE_NETWORK", "1")
+
+    report = run_evals(v9=True, output_dir=tmp_path, write_report=True)
+
+    assert len(report.results) == len(V9_FIXTURE_NAMES)
+    assert all(result.scores.pilot_outcome_classification is not None for result in report.results)
+    assert all(result.scores.v9_release_gate_correctness is not None for result in report.results)
+    text = (tmp_path / "eval_report.md").read_text(encoding="utf-8")
+    assert "### v0.9 Scores" in text
+    assert "v0.9 overall score" in text
+    assert "artifact_hygiene_score" in text
+
+
+def test_v9_accepted_direction_and_refusal_pass() -> None:
+    direction = run_evals(fixture="accepted_direction", v9=True, write_report=False).results[0]
+    refusal = run_evals(fixture="accepted_refusal", v9=True, write_report=False).results[0]
+
+    assert direction.scores.pilot_outcome_classification == 1.0
+    assert direction.scores.v9_release_gate_correctness == 1.0
+    assert refusal.scores.pilot_outcome_classification == 1.0
+    assert refusal.scores.v9_release_gate_correctness == 1.0
+
+
+def test_v9_fake_citation_product_failure_blocks() -> None:
+    result = run_evals(fixture="product_failure_fake_citation", v9=True, write_report=False).results[0]
+
+    assert result.scores.pilot_outcome_classification == 1.0
+    assert result.scores.v9_release_gate_correctness == 1.0
+    assert result.scores.v1_readiness_gate_correctness == 1.0
+
+
+def test_v9_missing_review_blocks() -> None:
+    result = run_evals(fixture="incomplete_missing_review", v9=True, write_report=False).results[0]
+
+    assert result.scores.external_review_completeness == 0.0
+    assert result.scores.v9_release_gate_correctness == 1.0
+    assert result.scores.v1_readiness_gate_correctness == 1.0
+
+
+def test_v9_v1_readiness_fixture_and_migration_blocker() -> None:
+    ready = run_evals(fixture="v1_ready_project", v9=True, write_report=False).results[0]
+    blocked = run_evals(fixture="v1_blocked_migration", v9=True, write_report=False).results[0]
+
+    assert ready.scores.v1_readiness_gate_correctness == 1.0
+    assert ready.scores.v9_release_gate_correctness == 1.0
+    assert blocked.scores.v1_readiness_gate_correctness == 1.0
+    assert blocked.scores.v9_release_gate_correctness == 1.0
+    assert blocked.scores.migration_audit_score < 1.0
+
+
+def test_eval_cli_v9_fixture_and_report(tmp_path: Path) -> None:
+    env = {**os.environ, "GAPFORGE_DISABLE_NETWORK": "1"}
+    env["PYTHONPATH"] = str(Path.cwd() / "src")
+    env["GAPFORGE_ROOT"] = str(tmp_path)
+
+    single = subprocess.run(
+        [sys.executable, "-m", "gapforge.cli", "eval", "--fixture", "accepted_refusal", "--v9"],
+        cwd=Path.cwd(),
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    report = subprocess.run(
+        [sys.executable, "-m", "gapforge.cli", "eval", "--v9", "--write-report"],
+        cwd=Path.cwd(),
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert single.returncode == 0, single.stderr
+    assert report.returncode == 0, report.stderr
+    assert (tmp_path / "eval_report.md").exists()
+    assert "Overall score" in report.stdout
 
 
 def test_v2_duplicate_ideas_are_rejected_by_dossier_aware_novelty_gate() -> None:
