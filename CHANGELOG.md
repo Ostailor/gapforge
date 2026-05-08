@@ -2,6 +2,65 @@
 
 All notable project changes should be recorded here.
 
+## 1.0.0
+
+GapForge v1.0.0 is the stable evidence-gated research ideation release. It promotes the v0.9.1 migration compatibility remediation into the v1 line after the v1 readiness gate passed with v4-v9 release evidence, Compatibility Audit V2, CLI audit, docs audit, artifact hygiene audit, and an accepted external pilot outcome.
+
+### Stable v1 Scope
+
+- Supports literature campaigns with source coverage, search planning, prior-work recall, novelty dossiers, conservative stopping, and human review records.
+- Supports Codex/GPT-5.4 assisted research workflows through validated task packs, direct runner integration, import validation, attestation, and repair paths.
+- Supports experiment execution with manifests, run records, result artifacts, statistics, reproducibility checks, and explicit failed/negative paths.
+- Supports benchmark and replication packages with benchmark records, dataset consent/cache handling, comparison reports, low-FPR power checks, and replication manifests.
+- Supports manuscript and artifact evaluation packages with claim traceability, citations/BibTeX, venue-aware checklists, anonymization, reviewer simulation, rebuttal planning, and artifact-evaluation packaging.
+- Supports correct refusal outcomes when evidence is insufficient for a defensible research direction.
+- Supports release gates, compatibility audits, versioned migrations, backup snapshots, and artifact hygiene checks.
+
+### v1 Readiness Outcome
+
+- v1 readiness passed with no blockers.
+- The v0.9 external pilot outcome was an accepted correct refusal for `low false-positive collusion detection in LLM multi-agent systems`.
+- Correct refusal is valid behavior: GapForge must not force or invent a research idea when novelty, coverage, or support is insufficient.
+- Migration status passed through Compatibility Audit V2 with historical fixtures for v0.1 through v0.9, versioned migrators, validation, backup behavior, unknown-field handling, and explicit warnings for intentionally missing generated fixture artifacts.
+- Artifact safety passed with generated unsafe local artifacts ignored and excluded from curated release evidence.
+
+### Non-Claims and Limitations
+
+- v1.0.0 does not claim GapForge always produces a research idea.
+- v1.0.0 does not claim exhaustive literature review, guaranteed novelty, publishable empirical results, broad benchmark superiority, independent replication, venue submission, venue acceptance, or camera-ready readiness.
+- Live sources can be incomplete, rate-limited, stale, or unavailable.
+- PDF and full-text extraction can miss text, tables, references, equations, and layout.
+- Optional model output remains untrusted until schema-valid, evidence-located, reviewed, and imported.
+- Fixture and smoke outputs validate workflow mechanics only; they are not research-quality evidence.
+
+### Validation
+
+- `make format`
+- `make format-check`
+- `make lint`
+- `make typecheck`
+- `make test`
+- `make eval`
+- `gapforge eval --v2 --write-report`
+- `gapforge eval --v3 --write-report`
+- `gapforge eval --v4 --write-report`
+- `gapforge eval --v5 --write-report`
+- `gapforge eval --v6 --write-report`
+- `gapforge eval --v7 --write-report`
+- `gapforge eval --v8 --write-report`
+- `gapforge eval --v9 --write-report`
+- `make v2-smoke`
+- `make v3-smoke`
+- `make v4-smoke`
+- `make v6-smoke`
+- `make v7-smoke`
+- `make v8-smoke`
+- `make v9-smoke`
+- `gapforge compatibility-audit --v2 --fixtures --write-report`
+- `gapforge migrate-all --dry-run`
+- `gapforge v9-release-gate --write-report --json`
+- `gapforge v1-readiness --write-report --json`
+
 ## 0.9.0
 
 GapForge v0.9 is the external pilot and v1-readiness release. It moves beyond fixture-only workflow validation by running the low false-positive collusion detection pilot through the v0.9 pilot machinery, accepting a correct refusal when live-literature evidence and idea-gate artifacts were insufficient for a defensible direction, and adding machine-checkable gates for v1 readiness.

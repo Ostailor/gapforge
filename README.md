@@ -1,8 +1,19 @@
 # GapForge
 
-GapForge is a Codex-powered Research Ideation OS. It turns a broad topic into auditable research state: papers, notes, claims, evidence, gaps, novelty dossiers, experiment plans, reviewer objections, and reports.
+GapForge v1.0 is a stable, evidence-gated research ideation OS. It turns a broad topic into auditable research state: papers, notes, claims, evidence, gaps, novelty dossiers, experiment plans, benchmark records, manuscript packages, reviewer objections, release gates, and reports.
 
-GapForge v0.4 adds campaign-level Codex/GPT-5.4 actual-run workflows on top of the v0.3 semantic, project-memory-aware, optionally LLM-assisted research system. v0.5 extends that path toward live-literature campaign quality: source health, planned search rounds, canonicalization, closest-prior-work recall, human research-quality review, and a v5 release gate. v0.6 adds experiment execution and empirical validation: moving from experiment-ready directions to executed, logged, statistically analyzed, reproducible experiment packages. v0.7 adds real benchmark execution and replication plumbing: benchmark records, explicit dataset consent/cache handling, compute/job abstractions, result aggregation, error analysis, comparison reports, low-FPR power checks, and replication packages. v0.8 adds the manuscript, artifact evaluation, and reviewer-rebuttal release layer: manuscript projects, claim-to-paper traceability, citations/BibTeX, venue templates, section drafting, artifact packages, rebuttal planning, blinding, and submission-readiness gates. v0.9 is the external pilot and v1-readiness release: one real topic must run end to end, or refuse honestly, before GapForge can claim v1 readiness. GapForge is still not an exhaustive autonomous literature reviewer, and it must not fabricate citations, experimental results, venue acceptance, or novelty claims. Deterministic and offline-safe paths remain the default.
+GapForge v1.0 supports:
+
+- literature campaigns
+- Codex/GPT-5.4 assisted research workflows
+- novelty and prior-work gates
+- experiment execution
+- benchmark and replication packages
+- manuscript and artifact evaluation packages
+- correct refusal outcomes
+- release gates and compatibility audits
+
+GapForge is intentionally skeptical. It can recommend a direction only when evidence gates support one, and it can refuse when literature coverage, novelty evidence, or empirical support is insufficient. It is not an exhaustive autonomous literature reviewer, and it must not fabricate citations, experimental results, venue acceptance, publication readiness, or novelty claims. Deterministic and offline-safe paths remain the default.
 
 ## Version Lineage
 
@@ -16,6 +27,7 @@ GapForge v0.4 adds campaign-level Codex/GPT-5.4 actual-run workflows on top of t
 - **v0.8**: manuscript, artifact evaluation, and reviewer-rebuttal layer. v0.8 distinguishes manuscript-ready, submission-ready, and camera-ready while requiring claim, citation, result, artifact, blinding, and human-review traceability.
 - **v0.9**: external pilot and v1-readiness layer. v0.9 runs one real topic through the full workflow and accepts either a defensible direction or an evidence-backed refusal, with migration, CLI, docs, artifact hygiene, external feedback, and v1-readiness gates.
 - **v0.9.1**: migration remediation patch. v0.9.0 was not v1-ready because the migration/backward compatibility audit failed; v0.9.1 adds historical fixtures, versioned migrators, backup snapshots, and compatibility audit v2 without adding research features.
+- **v1.0.0**: stable evidence-gated release. v1.0.0 passes the v1 readiness gate after v4-v9 evidence, compatibility audit v2, CLI/docs audits, artifact hygiene checks, and an accepted correct-refusal external pilot.
 
 ## Why Not Just Summarization?
 
