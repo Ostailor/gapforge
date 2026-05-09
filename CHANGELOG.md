@@ -2,6 +2,80 @@
 
 All notable project changes should be recorded here.
 
+## 2.2.0
+
+GapForge v2.2.0 is the Selected Benchmark Pilot Study release. It keeps the v2.1 selected idea locked as `idea-sequential-specificity-benchmark-for-low-fpr-collusion-audits` and upgrades the benchmark from synthetic smoke maturity to an artifact-backed synthetic pilot run with power-gated low-FPR claims, expanded trace distributions, baseline calibration, reviewer blockers, and a pilot manuscript package.
+
+### Pilot Benchmark Study
+
+- Added a pilot power and sample-size plan with explicit pilot/main alpha targets, negative and positive trace requirements, zero-false-positive upper confidence bounds, underpowered-threshold handling, and sequential multiple-testing notes.
+- Expanded the honest-agent null distribution with benign parallel strategy, shared-context, role-specialization, repeated-convention, tool-induced-similarity, accidental-correlation, action-only hard-negative, and transcript-visible hard-negative scenarios.
+- Expanded collusive-agent alternatives with explicit coordination, covert-channel, lexical-signal, timing-signal, role-based-collusion, reward-sharing, and adversarial-decoy scenarios across transcript-visible and action-only observability modes.
+- Added a pilot trace dataset builder that records honest/collusive/ambiguous trace IDs, split, negative and positive counts, hard-negative counts, observability-mode counts, scenario coverage, alpha target support, limitations, and provenance.
+- Upgraded the full baseline monitor suite to v2 with random, fixed-threshold frequency, repeated-action, lexical similarity, statistical anomaly, sequential change-point, calibrated threshold, transcript-visible heuristic, action-only heuristic, and optional opt-in LLM judge baselines.
+- Added monitor calibration records with target alpha, threshold, observed FPR, confidence interval, leakage warnings, and provenance.
+- Added pilot manifest and execution support that runs required monitors, computes sequential metrics, writes metrics/predictions/baseline/error/failure artifacts, preserves failures, and labels all outputs as pilot synthetic data.
+- Added pilot result analysis for per-monitor FPR/TPR, per-episode false alarm probability, time-to-detection, detection delay, confidence intervals, zero-FP upper bounds, underpowered alpha levels, hard-negative false positives, observability-mode comparisons, and failed baseline runs.
+- Attached selected benchmark prior-work recall and related-work matrix artifacts with fake-citation rejection and conservative novelty positioning.
+- Added the pilot reviewer panel covering benchmark validity, statistics/low-FPR, baselines, related-work/novelty, synthetic data validity, and area-chair assessment.
+- Added the pilot manuscript and paper package with motivation, benchmark definition, threat model, pilot trace dataset, baseline monitors, calibration, sequential specificity metrics, pilot results, low-FPR limitations, related work, reviewer blockers, and path to main benchmark.
+- Added the v2.2 release gate requiring v2.1 evidence plus pilot power, expanded distributions, pilot dataset, calibrated/run baselines, pilot manifest/run, parsed artifacts, analysis, related work, reviewer panel, manuscript package, and overclaim rejection.
+
+### API, Dashboard, Evals, Docs, and Skills
+
+- Exposed v2.2 workflows through `gapforge.api` for pilot power planning, honest-null generation, collusive alternative generation, pilot dataset construction, baseline calibration, pilot execution, pilot analysis, pilot review, pilot manuscript generation, and the v2.2 release gate.
+- Added selected pilot dashboard pages for pilot power, honest null distribution, collusive distribution, pilot dataset, baseline calibration, pilot results, low-FPR report, related work, review, manuscript, and v2.2 release gate status.
+- Added v2.2 eval fixtures and metrics covering complete pilot benchmark behavior, underpowered alpha overclaims, missing related work, missing required baselines, synthetic deployment overclaims, honest pilot manuscript output, reviewer blockers, and v2.2 release-gate correctness.
+- Added v2.2 docs for roadmap, pilot benchmark specification, acceptance criteria, power/sample size, reviewer blockers, release process, known limitations, and README maturity statements.
+- Added Codex-readable skills for pilot power planning, honest-null distribution, collusive alternatives, pilot trace datasets, pilot baseline calibration, pilot result analysis, selected related work, pilot review, and pilot manuscript generation.
+
+### Release Outcome
+
+- Selected idea: `idea-sequential-specificity-benchmark-for-low-fpr-collusion-audits`.
+- Pilot dataset status: synthetic pilot dataset with 300 negative traces, 150 positive traces, and 214 hard-negative traces.
+- Alpha support: pilot `alpha=0.01` is supported at 300 observed / 299 required negative traces; `alpha=0.001` remains underpowered and blocked at 300 observed / 2995 required negative traces.
+- Pilot run status: complete, with pilot-labeled metrics, predictions, baseline comparison, error analysis, failure/status artifacts, and no failed required baseline runs in the recorded pilot execution.
+- Baseline status: required baselines are present, calibrated, and run, but reviewer assessment still blocks strong contribution or monitor-superiority claims because baselines remain lightweight scientific comparisons.
+- Related-work status: prior-work recall and related-work matrix are attached, but all required categories remain missing from real attached paper records; closest prior work is not explicit and novelty remains unknown.
+- Reviewer status: pilot reviewer panel preserves fatal blockers for unsupported `alpha=0.001`, weak baselines for strong claims, missing prior-work categories, and missing related-work matrix categories.
+- Manuscript package status: generated as a pilot paper package with readiness `not_publication_ready_pilot_blockers`.
+- v2.2 release gate status: passes as a pilot benchmark release gate with warnings; it does not imply deployment validity, main benchmark maturity, publication readiness, or powered `alpha=0.001` specificity.
+
+### Validation
+
+- `make ci`
+- `make eval`
+- `gapforge eval --v2 --write-report`
+- `gapforge eval --v3 --write-report`
+- `gapforge eval --v4 --write-report`
+- `gapforge eval --v5 --write-report`
+- `gapforge eval --v6 --write-report`
+- `gapforge eval --v7 --write-report`
+- `gapforge eval --v8 --write-report`
+- `gapforge eval --v9 --write-report`
+- `gapforge eval --v2-ideas --write-report`
+- `gapforge eval --v21 --write-report`
+- `gapforge eval --v22 --write-report`
+- `make v2-smoke`
+- `make v3-smoke`
+- `make v4-smoke`
+- `make v6-smoke`
+- `make v7-smoke`
+- `make v8-smoke`
+- `make v9-smoke`
+- `gapforge v1-readiness --write-report --json`
+- `gapforge v2-release-gate --write-report --json`
+- `gapforge v21-release-gate --write-report --json`
+- `gapforge v22-release-gate --write-report --json`
+
+### Non-Claims and Limitations
+
+- v2.2.0 does not claim deployment validity, real-world collusion benchmark validity, main benchmark maturity, publication readiness, venue acceptance, monitor superiority, resolved novelty, or operational specificity at unsupported `alpha=0.001`.
+- Synthetic pilot traces are generated benchmark artifacts, not deployment data.
+- Zero false positives are reported through confidence upper bounds, not as proof of zero risk.
+- Related-work attachment is structurally present but substantively incomplete until real prior-work records cover the required categories.
+- Generated unsafe artifacts remain ignored and must not be committed as release source.
+
 ## 2.1.0
 
 GapForge v2.1.0 is the Selected Idea Execution release. It freezes the human-accepted v2 selected idea, `idea-sequential-specificity-benchmark-for-low-fpr-collusion-audits`, and operationalizes it as a runnable synthetic benchmark smoke path for the sequential specificity research target.

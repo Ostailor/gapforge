@@ -137,6 +137,33 @@ def test_static_project_dashboard_shows_directions_and_human_reviews(tmp_path: P
     assert "researcher note" in reviews
 
 
+def test_dashboard_cli_accepts_selected_pilot_flag(tmp_path: Path) -> None:
+    config = GapForgeConfig.from_cwd(tmp_path)
+    program = ProjectMemoryManager(config).create_project("Selected Pilot Dashboard")
+    env = {**os.environ, "PYTHONPATH": str(Path(__file__).resolve().parents[1] / "src")}
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "gapforge.cli",
+            "dashboard",
+            "--project-id",
+            program.project.id,
+            "--include-selected-pilot",
+        ],
+        cwd=tmp_path,
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert (config.project_root / program.project.id / "dashboard" / "pilot_power.html").exists()
+    assert (config.project_root / program.project.id / "dashboard" / "v22_release_gate.html").exists()
+
+
 def test_dashboard_cli_generates_run_dashboard(tmp_path: Path) -> None:
     config = GapForgeConfig.from_cwd(tmp_path)
     state = _dashboard_run(config)

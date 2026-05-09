@@ -32,6 +32,22 @@ The Python skills transform `ResearchRunState`. The Codex skill packages tell a 
 | Campaign Reviewer Panel | - | - | review panels | campaign rebuttal/fix loop | `gapforge reviewer-loop` |
 | Real-Run Acceptance | - | - | canary review | campaign release gate | `gapforge campaign-acceptance`, `gapforge v4-release-gate` |
 
+## v2.2 Selected Pilot Benchmark Skills
+
+| Skill | Purpose | CLI |
+| --- | --- | --- |
+| Pilot Power Plan | Power-gate pilot and main alpha targets | `gapforge selected-pilot-power-plan`, `gapforge selected-pilot-power-check` |
+| Honest Null Distribution | Expand benign/null traces and hard negatives | `gapforge honest-null-scenarios`, `gapforge generate-honest-null`, `gapforge honest-null-report` |
+| Collusive Alternative Distribution | Expand positive collusive scenarios | `gapforge collusive-scenarios`, `gapforge generate-collusive-traces`, `gapforge collusive-distribution-report` |
+| Pilot Trace Dataset | Build pilot dataset cards and alpha support fields | `gapforge build-pilot-trace-dataset`, `gapforge pilot-trace-dataset-report` |
+| Pilot Baseline Calibration | Calibrate and run pilot baselines without leakage | `gapforge calibrate-monitor`, `gapforge run-pilot-baselines`, `gapforge pilot-baseline-report` |
+| Pilot Result Analysis | Analyze pilot metrics, low-FPR caveats, and errors | `gapforge selected-pilot-analysis`, `gapforge selected-pilot-report` |
+| Selected Related Work | Attach prior-work recall and related-work matrix | `gapforge selected-benchmark-prior-work`, `gapforge selected-benchmark-related-work`, `gapforge selected-benchmark-novelty-report` |
+| Pilot Reviewer | Generate pilot reviewer panel and fix list | `gapforge selected-pilot-review`, `gapforge selected-pilot-fix-list` |
+| Pilot Manuscript | Generate pilot manuscript and paper package | `gapforge selected-pilot-manuscript`, `gapforge selected-pilot-paper-package` |
+
+These skills preserve v2.2 result discipline: smoke, pilot, and main maturity stay separate; synthetic pilot data does not prove deployment validity; `alpha=0.001` remains blocked unless powered; prior-work gaps and reviewer blockers stay visible.
+
 ## Shared Rules
 
 - Do not invent citations, quotes, datasets, metrics, results, or venues.

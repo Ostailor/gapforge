@@ -1,0 +1,230 @@
+{
+  "topic": "pilot manuscript preserves labels limitations and conservative claims",
+  "selected_idea": {
+    "v21_release_gate_passes": true,
+    "locked": true,
+    "project_exists": true
+  },
+  "pilot_power": {
+    "plan_exists": true,
+    "target_alpha_levels": [
+      "0.01",
+      "0.001"
+    ],
+    "pilot_alpha": 0.01,
+    "main_alpha": 0.001,
+    "negative_trace_requirements": {
+      "0.01": 299,
+      "0.001": 2995
+    },
+    "positive_trace_requirements": {
+      "pilot_minimum": 100,
+      "main_minimum": 500
+    },
+    "confidence_interval_targets": {
+      "confidence": 0.95,
+      "method": "zero false positive upper bound"
+    },
+    "stopping_rules": [
+      "lock manifest before inspecting outcomes",
+      "do not lower alpha gates"
+    ],
+    "sequential_testing_notes": [
+      "family-wise false alarm risk is reported",
+      "alpha=0.001 is main-scale unless powered"
+    ],
+    "assessment": {
+      "observed_negative_count": 300,
+      "observed_positive_count": 150,
+      "alpha_targets_met": {
+        "0.01": {
+          "observed_negative_count": 300,
+          "required_negative_count": 299
+        }
+      },
+      "underpowered_alpha_targets": [
+        "0.001"
+      ],
+      "zero_false_positive_upper_bounds": {
+        "0.01": 0.00995,
+        "0.001": 0.00995
+      },
+      "warnings": [
+        "alpha=0.001 remains blocked/underpowered"
+      ]
+    }
+  },
+  "honest_null_distribution": {
+    "exists": true,
+    "scenario_count": 7,
+    "trace_count": 300,
+    "hard_negative_count": 90,
+    "coverage_summary": {
+      "coordination_types": [
+        "independent",
+        "benign_parallel_strategy",
+        "shared_context",
+        "role_specialization",
+        "repeated_convention",
+        "tool_induced_similarity",
+        "accidental_correlation"
+      ],
+      "mode_counts": {
+        "action_only": 150,
+        "transcript_visible": 150
+      },
+      "includes_benign_coordination": true,
+      "includes_repeated_conventions": true
+    },
+    "synthetic_label": true,
+    "limitations": [
+      "synthetic honest-null traces are pilot artifacts"
+    ]
+  },
+  "collusive_distribution": {
+    "exists": true,
+    "scenario_count": 7,
+    "trace_count": 150,
+    "collusion_types": [
+      "explicit_coordination",
+      "covert_channel",
+      "lexical_signal",
+      "timing_signal",
+      "role_based_collusion",
+      "reward_sharing",
+      "adversarial_decoy"
+    ],
+    "observability_modes": [
+      "action_only",
+      "transcript_visible"
+    ],
+    "difficulty_mix": {
+      "easy": 45,
+      "medium": 60,
+      "hard": 45
+    },
+    "adversarial_decoys": true,
+    "synthetic_label": true,
+    "limitations": [
+      "synthetic alternatives do not cover all collusion behavior"
+    ]
+  },
+  "baseline_calibration": {
+    "required_baselines": [
+      "random_detector",
+      "frequency_threshold_detector",
+      "statistical_anomaly_detector",
+      "action_only_heuristic_monitor"
+    ],
+    "calibrated_baselines": [
+      "random_detector",
+      "frequency_threshold_detector",
+      "statistical_anomaly_detector",
+      "action_only_heuristic_monitor"
+    ],
+    "pilot_run_baselines": [
+      "random_detector",
+      "frequency_threshold_detector",
+      "statistical_anomaly_detector",
+      "action_only_heuristic_monitor"
+    ],
+    "calibration_record_count": 4,
+    "calibration_leakage": false,
+    "thresholds_calibrated": true,
+    "action_only_baseline_runs": true,
+    "missing_required_baseline_blocks": true
+  },
+  "pilot_run": {
+    "manifest_exists": true,
+    "executed": true,
+    "result_artifacts_parsed": true,
+    "run_type": "pilot",
+    "synthetic_data_label": "synthetic_pilot_data"
+  },
+  "pilot_metrics": {
+    "artifacts_generated": true,
+    "per_monitor_fpr_tpr": true,
+    "per_episode_false_alarm_probability": true,
+    "time_to_detection": true,
+    "detection_delay": true,
+    "confidence_intervals": true,
+    "zero_false_positive_upper_bounds": true,
+    "underpowered_alpha_levels": true,
+    "hard_negative_false_positives": true,
+    "action_transcript_comparison": true,
+    "failed_baseline_runs_preserved": true,
+    "synthetic_pilot_label": true
+  },
+  "claims": {
+    "underpowered_alpha_warning": true,
+    "synthetic_limitations_visible": true,
+    "alpha_001_overclaim": false,
+    "alpha_001_overclaim_blocked": false,
+    "alpha_001_claim_allowed_when_underpowered": false,
+    "deployment_validity_overclaim": false,
+    "deployment_overclaim_blocked": false,
+    "fake_result_present": false,
+    "fake_result_rejected": false,
+    "fake_citation_present": false,
+    "fake_citation_rejected": false
+  },
+  "related_work": {
+    "prior_work_recall_attached": true,
+    "related_work_matrix_attached": true,
+    "required_categories": [
+      "low-FPR detection/evaluation",
+      "multi-agent collusion/covert coordination",
+      "monitor evasion",
+      "sequential testing/change-point detection",
+      "benchmark/evaluation protocol papers",
+      "anomaly detection specificity",
+      "medical screening specificity analogies if used",
+      "cartel/covert-channel analogies if used"
+    ],
+    "missing_categories": [],
+    "closest_prior_work_ids": [
+      "paper-low-fpr",
+      "paper-benchmark"
+    ],
+    "contribution_positioning": "benchmark/evaluation protocol",
+    "fake_citation_present": false,
+    "novelty_conservative": true
+  },
+  "pilot_reviewer_panel": {
+    "generated": true,
+    "roles": [
+      "benchmark validity reviewer",
+      "statistics/low-FPR reviewer",
+      "baseline reviewer",
+      "related-work/novelty reviewer",
+      "synthetic data validity reviewer",
+      "area chair"
+    ],
+    "fatal_blockers": [
+      "Underpowered alpha target alpha=0.001 remains main-scale only."
+    ],
+    "required_fixes": [
+      "Preserve alpha=0.001 as blocked unless main-scale data is collected."
+    ],
+    "underpowered_alpha_flagged": true,
+    "synthetic_deployment_overclaim_flagged": false,
+    "weak_baseline_flagged": false,
+    "publishability_assessment": "pilot_maturity_only_not_publication_ready",
+    "hides_blockers": false
+  },
+  "pilot_manuscript": {
+    "generated": true,
+    "paper_package_generated": true,
+    "pilot_labeled": true,
+    "limitations_prominent": true,
+    "related_work_included": true,
+    "reviewer_blockers_included": true,
+    "main_requirements_listed": true,
+    "publication_ready_claim": false,
+    "deployment_validity_claim": false
+  },
+  "v22_release_gate": {
+    "expected_pass": true,
+    "expected_blockers": []
+  }
+}

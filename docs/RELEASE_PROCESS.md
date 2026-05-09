@@ -31,8 +31,9 @@ GAPFORGE_DISABLE_NETWORK=1 gapforge report --strict
 14. For v0.9.1 migration remediation, follow `docs/V0_9_1_MIGRATION_REMEDIATION.md` and `docs/V1_MIGRATION_AND_COMPATIBILITY.md`.
 15. For v2 releases, complete the Idea Discovery Engine process in `docs/V2_ROADMAP.md`, `docs/V2_ACCEPTANCE_CRITERIA.md`, `docs/V2_IDEA_DISCOVERY.md`, `docs/V2_IDEA_YIELD_METRICS.md`, `docs/V2_RESEARCH_AGENDA_MODE.md`, and `docs/V2_HUMAN_FEEDBACK.md`.
 16. For v2.1 releases, complete the selected-idea execution process in `docs/V2_1_ROADMAP.md`, `docs/V2_1_SELECTED_IDEA.md`, `docs/V2_1_BENCHMARK_SPEC.md`, and `docs/V2_1_ACCEPTANCE_CRITERIA.md`.
-17. Commit with a message that records constraints, rejected alternatives if useful, confidence, scope risk, tested commands, and known gaps.
-18. Tag the release only after the checks pass.
+17. For v2.2 releases, complete the pilot-scale benchmark study process in `docs/V2_2_ROADMAP.md`, `docs/V2_2_PILOT_BENCHMARK.md`, `docs/V2_2_ACCEPTANCE_CRITERIA.md`, `docs/V2_2_POWER_AND_SAMPLE_SIZE.md`, and `docs/V2_2_REVIEWER_BLOCKERS.md`.
+18. Commit with a message that records constraints, rejected alternatives if useful, confidence, scope risk, tested commands, and known gaps.
+19. Tag the release only after the checks pass.
 
 ## v0.3 Validation Levels
 
@@ -549,6 +550,89 @@ Release notes must distinguish:
 
 If the runnable smoke path is missing, release notes must say `v2.1 selected idea execution incomplete; benchmark smoke path not ready`. If smoke runs exist, release notes may say `v2.1 selected idea execution passed with runnable benchmark smoke path`, but must not claim final scientific results, real-world collusion benchmark validity, monitor superiority, or publication readiness.
 
+## v2.2 Pilot-Scale Benchmark Study Gate
+
+v2.2 must not claim pilot-scale benchmark study success from another smoke run, generated prose, unparsed monitor output, or a manuscript package without pilot artifacts. It must require a locked pilot manifest, expanded scenario distributions, full baseline monitor execution or explicit baseline blockers, sequential low-FPR uncertainty analysis, prior-work attachment status, reviewer-blocker classification, and overclaim prevention.
+
+v2.2 continues the locked selected idea:
+
+- Idea ID: `idea-sequential-specificity-benchmark-for-low-fpr-collusion-audits`
+- Title: `Sequential specificity benchmark for low-FPR collusion audits`
+
+Before tagging v2.2, the release process should require:
+
+```bash
+make ci
+make eval
+gapforge v1-readiness --write-report --json
+gapforge v2-release-gate --write-report --json
+gapforge v21-release-gate --write-report --json
+gapforge selected-pilot-power-plan --benchmark-id <benchmark-id>
+gapforge honest-null-scenarios --benchmark-id <benchmark-id>
+gapforge generate-honest-null --benchmark-id <benchmark-id> --count 300
+gapforge honest-null-report --benchmark-id <benchmark-id>
+gapforge collusive-scenarios --benchmark-id <benchmark-id>
+gapforge generate-collusive-traces --benchmark-id <benchmark-id> --count 150
+gapforge collusive-distribution-report --benchmark-id <benchmark-id>
+gapforge build-pilot-trace-dataset --benchmark-id <benchmark-id> --negative-count 300 --positive-count 150
+gapforge selected-pilot-power-check --dataset-id <pilot-dataset-id>
+gapforge calibrate-monitor --benchmark-id <benchmark-id> --monitor frequency --target-alpha 0.01
+gapforge calibrate-monitor --benchmark-id <benchmark-id> --monitor anomaly --target-alpha 0.01
+gapforge calibrate-monitor --benchmark-id <benchmark-id> --monitor action-only --target-alpha 0.01
+gapforge run-pilot-baselines --benchmark-id <benchmark-id> --dataset-id <pilot-dataset-id>
+gapforge pilot-baseline-report --benchmark-id <benchmark-id>
+gapforge selected-pilot-manifest --benchmark-id <benchmark-id> --dataset-id <pilot-dataset-id>
+gapforge selected-pilot-run --benchmark-id <benchmark-id> --manifest-id <pilot-manifest-id>
+gapforge selected-pilot-analysis --execution-id <pilot-execution-id>
+gapforge selected-benchmark-prior-work --benchmark-id <benchmark-id>
+gapforge selected-benchmark-related-work --benchmark-id <benchmark-id>
+gapforge selected-benchmark-novelty-report --benchmark-id <benchmark-id>
+gapforge selected-pilot-review --benchmark-id <benchmark-id>
+gapforge selected-pilot-manuscript --benchmark-id <benchmark-id>
+gapforge selected-pilot-paper-package --benchmark-id <benchmark-id>
+gapforge dashboard --project-id <selected-project-id> --include-selected-pilot
+gapforge v22-release-gate --write-report --json
+```
+
+Equivalent scripts may use `gapforge.api` wrappers. The release candidate must still preserve the same evidence requirements; prose cannot replace a missing manifest, result artifact, power report, baseline output, or blocker table.
+
+The v2.2 release gate should require:
+
+- deterministic CI remains passing
+- v1 readiness, v2 accepted-candidate evidence, and v2.1 smoke evidence remain available
+- selected idea lock is preserved
+- smoke, pilot, and main benchmark maturity are separated in docs and reports
+- pilot run manifest exists with `run_type: pilot`
+- manifest locks benchmark version, generator version, seeds, scenario counts, monitor thresholds, metrics, alpha targets, and expected artifacts before result inspection
+- honest-agent null distribution is expanded beyond smoke fixtures
+- collusive-agent alternative distribution is expanded beyond deterministic smoke fixtures
+- hard-negative traces are present and reported as honest negatives
+- full baseline monitor suite runs, or each missing baseline has an explicit blocker
+- pilot result artifacts are persisted and parsed before analysis
+- sequential low-FPR metrics include confidence intervals or uncertainty bands and repeated-look correction
+- every low-FPR target is classified as supported, underpowered, unsupported, or not requested
+- prior-work recall and related-work matrix are attached, or publication readiness is blocked
+- reviewer blockers are classified as resolved, preserved warnings, or release blockers
+- pilot manuscript package links claims to artifacts and labels missing work
+- no deployment-validity, unsupported `alpha=0.001`, main benchmark, monitor superiority, or publication-readiness claim passes
+
+Release notes must distinguish:
+
+- smoke versus pilot versus main benchmark status
+- pilot manifest and execution status
+- honest-agent, collusive-agent, and hard-negative coverage
+- baseline monitor coverage and missing-baseline blockers
+- low-FPR power and sample-size status
+- sequential specificity and hard-negative false-positive results
+- prior-work recall and related-work matrix status
+- reviewer blocker resolution or preservation
+- pilot manuscript package status
+- unsupported claims and remaining risks
+
+If the pilot manifest or result artifacts are missing, release notes must say `v2.2 pilot benchmark study incomplete; pilot run artifacts not ready`. If pilot artifacts exist but power, prior-work, or reviewer gates preserve warnings, release notes may say `v2.2 pilot benchmark study passed with preserved warnings; low-FPR and publication claims remain limited`. Do not claim deployment validity, operational `alpha=0.001` specificity, main benchmark maturity, or publication readiness unless the artifacts support those exact claims.
+
+The v2.2 release notes should also include a v2.3 handoff section naming the remaining main-study work: unsupported alpha targets and required negative counts, hard-negative gaps, weak or missing baselines, prior-work categories still incomplete, reviewer blockers preserved as warnings, and any synthetic-data external-validity risks.
+
 ## Tagging
 
 Use semantic version tags:
@@ -589,4 +673,7 @@ Release notes should include:
 - For v2, if no idea candidate is accepted, record explicit idea-discovery failure and plan v2.0.1 or v2.1 instead of claiming success.
 - For v2.1, do not claim selected-idea execution success unless the selected idea is frozen and a runnable benchmark smoke path produces result artifacts, analysis, reviewer critique, and a manuscript package update.
 - For v2.1, do not claim final scientific results, real-world benchmark validity, monitor superiority, or publication readiness from synthetic fixtures or smoke runs.
+- For v2.2, do not claim pilot-scale benchmark success unless a locked pilot manifest and artifact-backed pilot results exist.
+- For v2.2, do not claim deployment validity, unsupported `alpha=0.001` operational specificity, main benchmark maturity, monitor superiority, or publication readiness from synthetic pilot data.
+- For v2.2, preserve unresolved reviewer blockers and publication blockers in release notes instead of weakening low-FPR, prior-work, or related-work gates.
 - Do not publish generated `runs/`, caches, or local environment artifacts as source.

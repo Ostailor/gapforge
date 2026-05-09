@@ -18,6 +18,7 @@ from gapforge.evals.fixtures import (
     V8_FIXTURE_NAMES,
     V9_FIXTURE_NAMES,
     V21_FIXTURE_NAMES,
+    V22_FIXTURE_NAMES,
     list_fixtures,
     load_fixture,
     load_v2_idea_fixture,
@@ -29,18 +30,21 @@ from gapforge.evals.fixtures import (
     load_v8_fixture,
     load_v9_fixture,
     load_v21_fixture,
+    load_v22_fixture,
 )
 from gapforge.evals.metrics import (
     actual_run_gate_correctness,
     agent_output_validation_strictness,
     anonymization_safety,
     artifact_eval_package_score,
+    baseline_calibration_quality,
     baseline_suite_completeness,
     benchmark_execution_integrity,
     benchmark_failure_path_preservation,
     benchmark_spec_completeness,
     canonicalization_quality,
     citation_validity_score,
+    collusive_distribution_quality,
     direction_maturity_accuracy,
     direction_maturity_gate_accuracy_from_fixture,
     empirical_claim_validity,
@@ -48,19 +52,25 @@ from gapforge.evals.metrics import (
     error_analysis_quality,
     fake_result_rejection,
     gap_evidence_matrix_score,
+    honest_null_distribution_quality,
     idea_candidate_specificity,
     idea_yield_gate_correctness,
     live_source_coverage_score,
+    low_fpr_overclaim_rejection,
     low_fpr_underpowered_warning_score,
     manuscript_package_honesty,
     manuscript_traceability_score,
     mutation_quality,
     novelty_research_loop_quality,
     paper_package_honesty,
+    pilot_metric_correctness,
+    pilot_power_plan_quality,
+    pilot_reviewer_quality,
     prior_work_recall_gate_score,
     quality_review_gate_correctness,
     real_literature_refusal_quality,
     rebuttal_actionability,
+    related_work_attachment_quality,
     replication_package_quality,
     reproduction_verification_quality,
     result_aggregation_quality,
@@ -85,6 +95,7 @@ from gapforge.evals.metrics import (
     v6_release_gate_correctness,
     v7_release_gate_correctness,
     v8_release_gate_correctness,
+    v22_release_gate_correctness,
     venue_checklist_score,
 )
 from gapforge.models import Claim, ResearchRunState, ResearchTopic, SourceCoverageReport
@@ -726,6 +737,82 @@ def test_v21_selected_benchmark_fixture_metrics() -> None:
     assert underpowered_claim_rejection(fake) == 1.0
     assert selected_benchmark_release_gate_correctness(fake) == 1.0
     assert reviewer_blocker_quality(reviewer) == 1.0
+
+
+def test_v22_eval_fixtures_are_complete_and_offline() -> None:
+    for name in V22_FIXTURE_NAMES:
+        fixture = load_v22_fixture(name)
+        assert fixture.is_v22
+        assert fixture.topic
+        assert fixture.papers
+        payload = fixture.selected_benchmark_v22_fixture
+        assert payload["pilot_power"]
+        assert payload["honest_null_distribution"]
+        assert payload["collusive_distribution"]
+        assert payload["baseline_calibration"]
+        assert payload["pilot_metrics"]
+        assert payload["related_work"]
+        assert payload["pilot_reviewer_panel"]
+        assert payload["v22_release_gate"]
+
+
+def test_eval_cli_v22_fixture_and_report(tmp_path: Path) -> None:
+    env = {**os.environ, "GAPFORGE_DISABLE_NETWORK": "1"}
+    env["PYTHONPATH"] = str(Path.cwd() / "src")
+    env["GAPFORGE_ROOT"] = str(tmp_path)
+
+    single = subprocess.run(
+        [sys.executable, "-m", "gapforge.cli", "eval", "--fixture", "complete_pilot_benchmark", "--v22"],
+        cwd=Path.cwd(),
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    report = subprocess.run(
+        [sys.executable, "-m", "gapforge.cli", "eval", "--v22", "--write-report"],
+        cwd=Path.cwd(),
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert single.returncode == 0, single.stderr
+    assert report.returncode == 0, report.stderr
+    text = (tmp_path / "eval_report.md").read_text(encoding="utf-8")
+    assert "Overall score" in report.stdout
+    assert "v2.2 Pilot Benchmark" in text
+    assert "complete_pilot_benchmark" in text
+
+
+def test_v22_selected_benchmark_fixture_metrics() -> None:
+    complete = load_v22_fixture("complete_pilot_benchmark").selected_benchmark_v22_fixture
+    alpha_overclaim = load_v22_fixture("underpowered_alpha_overclaim").selected_benchmark_v22_fixture
+    missing_related_work = load_v22_fixture("missing_related_work").selected_benchmark_v22_fixture
+    missing_baseline = load_v22_fixture("missing_required_baseline").selected_benchmark_v22_fixture
+    deployment_overclaim = load_v22_fixture("synthetic_deployment_overclaim").selected_benchmark_v22_fixture
+    manuscript_honest = load_v22_fixture("pilot_manuscript_honest").selected_benchmark_v22_fixture
+    reviewer_blockers = load_v22_fixture("pilot_reviewer_blockers").selected_benchmark_v22_fixture
+
+    assert pilot_power_plan_quality(complete) == 1.0
+    assert honest_null_distribution_quality(complete) == 1.0
+    assert collusive_distribution_quality(complete) == 1.0
+    assert baseline_calibration_quality(complete) == 1.0
+    assert pilot_metric_correctness(complete) == 1.0
+    assert related_work_attachment_quality(complete) == 1.0
+    assert pilot_reviewer_quality(complete) == 1.0
+    assert v22_release_gate_correctness(complete) == 1.0
+    assert low_fpr_overclaim_rejection(alpha_overclaim) == 1.0
+    assert v22_release_gate_correctness(alpha_overclaim) == 1.0
+    assert related_work_attachment_quality(missing_related_work) < 0.85
+    assert v22_release_gate_correctness(missing_related_work) == 1.0
+    assert baseline_calibration_quality(missing_baseline) < 0.85
+    assert v22_release_gate_correctness(missing_baseline) == 1.0
+    assert low_fpr_overclaim_rejection(deployment_overclaim) == 1.0
+    assert v22_release_gate_correctness(deployment_overclaim) == 1.0
+    assert manuscript_honest["pilot_manuscript"]["pilot_labeled"] is True
+    assert pilot_reviewer_quality(reviewer_blockers) == 1.0
 
 
 def test_v2_duplicate_ideas_are_rejected_by_dossier_aware_novelty_gate() -> None:

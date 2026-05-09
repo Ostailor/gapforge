@@ -16,6 +16,7 @@ from gapforge.evals.fixtures import (
     V8_FIXTURE_NAMES,
     V9_FIXTURE_NAMES,
     V21_FIXTURE_NAMES,
+    V22_FIXTURE_NAMES,
     EvalFixture,
     load_fixtures,
     load_v2_idea_fixtures,
@@ -27,6 +28,7 @@ from gapforge.evals.fixtures import (
     load_v8_fixtures,
     load_v9_fixtures,
     load_v21_fixtures,
+    load_v22_fixtures,
 )
 from gapforge.evals.metrics import (
     EvalScores,
@@ -36,6 +38,7 @@ from gapforge.evals.metrics import (
     anonymization_safety,
     artifact_eval_package_score,
     artifact_hygiene_score,
+    baseline_calibration_quality,
     baseline_suite_completeness,
     benchmark_comparison_honesty,
     benchmark_execution_integrity,
@@ -46,6 +49,7 @@ from gapforge.evals.metrics import (
     canonicalization_quality,
     citation_validity_score,
     cli_audit_score,
+    collusive_distribution_quality,
     constructive_gap_quality,
     contradiction_detection_score,
     cross_domain_transfer_quality,
@@ -66,6 +70,7 @@ from gapforge.evals.metrics import (
     full_text_coverage_score,
     gap_evidence_matrix_score,
     gap_specificity_score,
+    honest_null_distribution_quality,
     human_feedback_integration,
     human_review_respect_score,
     idea_candidate_specificity,
@@ -73,6 +78,7 @@ from gapforge.evals.metrics import (
     idea_yield_gate_correctness,
     live_source_coverage_score,
     llm_output_grounding_score,
+    low_fpr_overclaim_rejection,
     low_fpr_underpowered_warning_score,
     manuscript_package_honesty,
     manuscript_traceability_score,
@@ -83,13 +89,17 @@ from gapforge.evals.metrics import (
     novelty_loop_quality,
     novelty_research_loop_quality,
     paper_package_honesty,
+    pilot_metric_correctness,
     pilot_outcome_classification,
+    pilot_power_plan_quality,
+    pilot_reviewer_quality,
     prior_work_recall_gate_score,
     prior_work_recall_proxy,
     protocol_completeness,
     quality_review_gate_correctness,
     real_literature_refusal_quality,
     rebuttal_actionability,
+    related_work_attachment_quality,
     related_work_matrix_quality,
     replication_package_quality,
     report_uncertainty_score,
@@ -127,6 +137,7 @@ from gapforge.evals.metrics import (
     v7_release_gate_correctness,
     v8_release_gate_correctness,
     v9_release_gate_correctness,
+    v22_release_gate_correctness,
     venue_checklist_score,
 )
 from gapforge.experiments.protocol import build_protocol_from_state
@@ -171,6 +182,7 @@ class EvalReport:
     v8: bool = False
     v9: bool = False
     v21: bool = False
+    v22: bool = False
     report_path: Path | None = None
 
     @property
@@ -200,6 +212,7 @@ def run_evals(
     v8: bool = False,
     v9: bool = False,
     v21: bool = False,
+    v22: bool = False,
     v2_ideas: bool = False,
 ) -> EvalReport:
     selected = (
@@ -208,6 +221,8 @@ def run_evals(
         else (
             V2_IDEA_FIXTURE_NAMES
             if v2_ideas
+            else V22_FIXTURE_NAMES
+            if v22
             else V21_FIXTURE_NAMES
             if v21
             else V8_FIXTURE_NAMES
@@ -229,7 +244,9 @@ def run_evals(
             else None
         )
     )
-    if v21:
+    if v22:
+        fixtures = load_v22_fixtures(selected, fixture_root)
+    elif v21:
         fixtures = load_v21_fixtures(selected, fixture_root)
     elif v9:
         fixtures = load_v9_fixtures(selected, fixture_root)
@@ -262,6 +279,7 @@ def run_evals(
         v8=v8 or any(item.is_v8 for item in fixtures),
         v9=v9 or any(item.is_v9 for item in fixtures),
         v21=v21 or any(item.is_v21 for item in fixtures),
+        v22=v22 or any(item.is_v22 for item in fixtures),
     )
     if write_report:
         path = (output_dir or Path.cwd()) / "eval_report.md"
@@ -308,6 +326,10 @@ def render_eval_report(report: EvalReport) -> str:
         v21_scores = [score for result in report.results if (score := result.scores.v21_overall()) is not None]
         v21_overall = round(sum(v21_scores) / len(v21_scores), 3) if v21_scores else 0.0
         lines.extend([f"v2.1 Selected Benchmark overall score: **{v21_overall:.3f}**", ""])
+    if report.v22:
+        v22_scores = [score for result in report.results if (score := result.scores.v22_overall()) is not None]
+        v22_overall = round(sum(v22_scores) / len(v22_scores), 3) if v22_scores else 0.0
+        lines.extend([f"v2.2 Pilot Benchmark overall score: **{v22_overall:.3f}**", ""])
     if report.v2_ideas:
         v2_idea_scores = [score for result in report.results if (score := result.scores.v2_ideas_overall()) is not None]
         v2_idea_overall = round(sum(v2_idea_scores) / len(v2_idea_scores), 3) if v2_idea_scores else 0.0
@@ -494,6 +516,24 @@ def render_eval_report(report: EvalReport) -> str:
                     "",
                 ]
             )
+        if scores.v22_overall() is not None:
+            lines.extend(
+                [
+                    "### v2.2 Pilot Benchmark Scores",
+                    "",
+                    f"- pilot_power_plan_quality: {scores.pilot_power_plan_quality:.3f}",
+                    f"- honest_null_distribution_quality: {scores.honest_null_distribution_quality:.3f}",
+                    f"- collusive_distribution_quality: {scores.collusive_distribution_quality:.3f}",
+                    f"- baseline_calibration_quality: {scores.baseline_calibration_quality:.3f}",
+                    f"- pilot_metric_correctness: {scores.pilot_metric_correctness:.3f}",
+                    f"- low_fpr_overclaim_rejection: {scores.low_fpr_overclaim_rejection:.3f}",
+                    f"- related_work_attachment_quality: {scores.related_work_attachment_quality:.3f}",
+                    f"- pilot_reviewer_quality: {scores.pilot_reviewer_quality:.3f}",
+                    f"- v22_release_gate_correctness: {scores.v22_release_gate_correctness:.3f}",
+                    f"- fixture_v22_overall: {scores.v22_overall():.3f}",
+                    "",
+                ]
+            )
         if scores.v2_ideas_overall() is not None:
             lines.extend(
                 [
@@ -663,6 +703,17 @@ def _evaluate_fixture(fixture: EvalFixture) -> FixtureEvalResult:
         scores.underpowered_claim_rejection = underpowered_claim_rejection(selected_benchmark_fixture)
         scores.reviewer_blocker_quality = reviewer_blocker_quality(selected_benchmark_fixture)
         scores.selected_benchmark_release_gate_correctness = selected_benchmark_release_gate_correctness(selected_benchmark_fixture)
+    if fixture.is_v22:
+        selected_benchmark_fixture = fixture.selected_benchmark_v22_fixture or fixture.selected_benchmark_fixture
+        scores.pilot_power_plan_quality = pilot_power_plan_quality(selected_benchmark_fixture)
+        scores.honest_null_distribution_quality = honest_null_distribution_quality(selected_benchmark_fixture)
+        scores.collusive_distribution_quality = collusive_distribution_quality(selected_benchmark_fixture)
+        scores.baseline_calibration_quality = baseline_calibration_quality(selected_benchmark_fixture)
+        scores.pilot_metric_correctness = pilot_metric_correctness(selected_benchmark_fixture)
+        scores.low_fpr_overclaim_rejection = low_fpr_overclaim_rejection(selected_benchmark_fixture)
+        scores.related_work_attachment_quality = related_work_attachment_quality(selected_benchmark_fixture)
+        scores.pilot_reviewer_quality = pilot_reviewer_quality(selected_benchmark_fixture)
+        scores.v22_release_gate_correctness = v22_release_gate_correctness(selected_benchmark_fixture)
     if fixture.is_v2_ideas:
         idea_fixture = fixture.idea_fixture
         scores.topic_portfolio_diversity = topic_portfolio_diversity(idea_fixture)

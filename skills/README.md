@@ -40,6 +40,18 @@ v2.1 selected benchmark skills:
 - `monitor-baselines`
 - `selected-benchmark-review`
 
+v2.2 selected pilot benchmark skills:
+
+- `pilot-power-plan`
+- `honest-null-distribution`
+- `collusive-alternative-distribution`
+- `pilot-trace-dataset`
+- `pilot-baseline-calibration`
+- `pilot-result-analysis`
+- `selected-related-work`
+- `pilot-reviewer`
+- `pilot-manuscript`
+
 Shared rules:
 
 - Do not hallucinate citations, results, venues, datasets, metrics, quotes, or bibliography entries.
@@ -56,3 +68,4 @@ Shared rules:
 - Never count fake-agent outputs as actual Codex/GPT-5.4 acceptance.
 - Never import agent output before validation.
 - For v2.1, remember: synthetic smoke benchmark is not a final research result; low-FPR claims require power; every result claim must be artifact-backed; no fake results.
+- For v2.2, remember: synthetic pilot data is still not deployment evidence; `alpha=0.01` is pilot-gated, `alpha=0.001` is main-scale unless powered, and unresolved reviewer blockers must remain visible.

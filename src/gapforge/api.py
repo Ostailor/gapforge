@@ -152,6 +152,7 @@ from gapforge.release_gate.v07 import V07ReleaseGateEnforcer, V07ReleaseGateResu
 from gapforge.release_gate.v08 import V08ReleaseGateEnforcer, V08ReleaseGateResult
 from gapforge.release_gate.v2 import V2ReleaseGateEnforcer, V2ReleaseGateResult
 from gapforge.release_gate.v21 import V21ReleaseGateEnforcer, V21ReleaseGateResult
+from gapforge.release_gate.v22 import V22ReleaseGateEnforcer, V22ReleaseGateResult
 from gapforge.replication import ReplicationPackageExporter, ReplicationPackageVerifier, ReproductionRunner
 from gapforge.reporting import write_final_report
 from gapforge.results import ErrorAnalysisBuilder, ResultAggregator, ResultParser, ResultStatisticsAnalyzer
@@ -160,8 +161,18 @@ from gapforge.retrieval import build_project_index, build_run_index
 from gapforge.reviewers.empirical import EmpiricalReviewBuilder
 from gapforge.search_strategy import plan_search_strategy as plan_search_strategy_skill
 from gapforge.selected_benchmark import (
+    CollusiveAlternativeManager,
+    HonestNullManager,
     MonitorBaseline,
     MonitorBaselineManager,
+    MonitorCalibrationRecord,
+    PilotAnalysisManager,
+    PilotAnalysisResult,
+    PilotDatasetBuilder,
+    PilotPowerManager,
+    PilotPowerPlan,
+    PilotRunManager,
+    PilotTraceDataset,
     SelectedBenchmarkExperimentRunner,
     SelectedBenchmarkManager,
     SelectedBenchmarkManuscript,
@@ -171,6 +182,10 @@ from gapforge.selected_benchmark import (
     SelectedBenchmarkReviewPanel,
     SelectedBenchmarkRunResult,
     SelectedBenchmarkWorkspaceManager,
+    SelectedPilotExecution,
+    SelectedPilotManuscript,
+    SelectedPilotManuscriptManager,
+    SelectedPilotPaperPackage,
     SequentialMetricManager,
     SequentialMetricResult,
     SequentialSpecificityBenchmarkSpec,
@@ -1825,6 +1840,138 @@ def v21_release_gate(
     """Evaluate the v2.1 selected-idea execution release gate."""
 
     enforcer = V21ReleaseGateEnforcer(_config(config))
+    result = enforcer.evaluate()
+    if write_report:
+        enforcer.write_outputs(result)
+    return result
+
+
+def create_pilot_power_plan(
+    benchmark_id: str,
+    *,
+    config: GapForgeConfig | None = None,
+) -> PilotPowerPlan:
+    """Create the v2.2 pilot/main low-FPR power plan for the selected benchmark."""
+
+    return PilotPowerManager(_config(config)).create_plan(benchmark_id)
+
+
+def generate_honest_null(
+    benchmark_id: str,
+    *,
+    count: int = 300,
+    config: GapForgeConfig | None = None,
+) -> TraceDataset:
+    """Generate synthetic pilot honest/null traces and distribution report."""
+
+    return HonestNullManager(_config(config)).generate(benchmark_id, count=count)
+
+
+def generate_collusive_alternatives(
+    benchmark_id: str,
+    *,
+    count: int = 150,
+    config: GapForgeConfig | None = None,
+) -> TraceDataset:
+    """Generate synthetic pilot collusive alternative traces and distribution report."""
+
+    return CollusiveAlternativeManager(_config(config)).generate(benchmark_id, count=count)
+
+
+def build_pilot_dataset(
+    benchmark_id: str,
+    *,
+    negative_count: int = 300,
+    positive_count: int = 150,
+    config: GapForgeConfig | None = None,
+) -> PilotTraceDataset:
+    """Build the selected-benchmark pilot trace dataset card and alpha support fields."""
+
+    return PilotDatasetBuilder(_config(config)).build(
+        benchmark_id,
+        negative_count=negative_count,
+        positive_count=positive_count,
+    )
+
+
+def calibrate_pilot_baselines(
+    benchmark_id: str,
+    *,
+    target_alpha: float = 0.01,
+    config: GapForgeConfig | None = None,
+) -> list[MonitorCalibrationRecord]:
+    """Calibrate all required pilot baselines that declare calibration requirements."""
+
+    manager = MonitorBaselineManager(_config(config))
+    baselines = manager.load_baselines(benchmark_id) or manager.create_baselines(benchmark_id)
+    records: list[MonitorCalibrationRecord] = []
+    for baseline in baselines:
+        required = bool(baseline.parameters.get("required", False))
+        calibration_required = bool(baseline.parameters.get("calibration_required", False))
+        runnable = baseline.parameters.get("ci_enabled") is not False and baseline.parameters.get("analysis_only") is not True
+        if required and calibration_required and runnable:
+            records.append(manager.calibrate_monitor(benchmark_id, baseline.id, target_alpha=target_alpha))
+    return records
+
+
+def run_selected_pilot(
+    benchmark_id: str,
+    *,
+    dataset_id: str = "",
+    random_seed: int = 20260221,
+    config: GapForgeConfig | None = None,
+) -> SelectedPilotExecution:
+    """Create a pilot manifest and execute required selected-benchmark pilot monitors."""
+
+    cfg = _config(config)
+    resolved_dataset_id = dataset_id or PilotDatasetBuilder(cfg).build(benchmark_id).id
+    manager = PilotRunManager(cfg)
+    manifest = manager.create_manifest(benchmark_id, resolved_dataset_id, random_seed=random_seed)
+    return manager.run(benchmark_id, manifest.id)
+
+
+def analyze_selected_pilot(
+    execution_id: str,
+    *,
+    config: GapForgeConfig | None = None,
+) -> PilotAnalysisResult:
+    """Analyze a saved selected-benchmark pilot execution."""
+
+    return PilotAnalysisManager(_config(config)).analyze(execution_id)
+
+
+def selected_pilot_review(
+    benchmark_id: str,
+    *,
+    config: GapForgeConfig | None = None,
+) -> SelectedBenchmarkReviewPanel:
+    """Run the v2.2 pilot reviewer panel for selected-benchmark evidence."""
+
+    return SelectedBenchmarkReviewerPanelBuilder(_config(config)).pilot_review(benchmark_id)
+
+
+def selected_pilot_manuscript(
+    benchmark_id: str,
+    *,
+    include_paper_package: bool = True,
+    config: GapForgeConfig | None = None,
+) -> SelectedPilotManuscript | SelectedPilotPaperPackage:
+    """Generate the v2.2 pilot manuscript, optionally exporting the pilot paper package."""
+
+    manager = SelectedPilotManuscriptManager(_config(config))
+    if include_paper_package:
+        return manager.paper_package(benchmark_id)
+    return manager.generate(benchmark_id)
+
+
+def v22_release_gate(
+    *,
+    write_report: bool = False,
+    config: GapForgeConfig | None = None,
+) -> V22ReleaseGateResult:
+    """Evaluate the v2.2 selected pilot benchmark release gate."""
+
+    enforcer = V22ReleaseGateEnforcer(_config(config))
     result = enforcer.evaluate()
     if write_report:
         enforcer.write_outputs(result)

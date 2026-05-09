@@ -27,6 +27,11 @@ GapForge v2 planning docs:
 - [v2.1 selected idea](docs/V2_1_SELECTED_IDEA.md)
 - [v2.1 benchmark specification](docs/V2_1_BENCHMARK_SPEC.md)
 - [v2.1 acceptance criteria](docs/V2_1_ACCEPTANCE_CRITERIA.md)
+- [v2.2 pilot benchmark roadmap](docs/V2_2_ROADMAP.md)
+- [v2.2 pilot benchmark specification](docs/V2_2_PILOT_BENCHMARK.md)
+- [v2.2 acceptance criteria](docs/V2_2_ACCEPTANCE_CRITERIA.md)
+- [v2.2 power and sample-size plan](docs/V2_2_POWER_AND_SAMPLE_SIZE.md)
+- [v2.2 reviewer blockers](docs/V2_2_REVIEWER_BLOCKERS.md)
 
 GapForge is intentionally skeptical. It can recommend a direction only when evidence gates support one, and it can refuse when literature coverage, novelty evidence, or empirical support is insufficient. It is not an exhaustive autonomous literature reviewer, and it must not fabricate citations, experimental results, venue acceptance, publication readiness, or novelty claims. Deterministic and offline-safe paths remain the default.
 
@@ -46,6 +51,7 @@ GapForge is intentionally skeptical. It can recommend a direction only when evid
 - **v2.0.0**: Idea Discovery Engine release line. v2 actively searches across topic portfolios for defensible idea candidates using mutation, constructive gap creation, cross-domain transfer, Codex/GPT-5.4 synthesis tasks, active search control, novelty/counterevidence loops, idea tournaments, human feedback, research agenda fallback, and idea yield metrics. The v2 gate requires at least one accepted idea candidate or explicit idea-discovery failure routed to v2.0.1 or v2.1 planning.
 - **v2.0.1**: CI fixture tracking patch. v2.0.1 keeps historical migration fixture JSONs available in clean checkouts without changing product behavior, idea-discovery claims, or the v2.0 selected idea.
 - **v2.1.0**: Selected Idea Execution release. v2.1 freezes the accepted v2.0 idea `idea-sequential-specificity-benchmark-for-low-fpr-collusion-audits` and turns it into a benchmark specification, threat model, task/data generator, baseline suite, sequential specificity metrics, power plan, experiment workspace, smoke benchmark run, result analysis, reviewer critique, and manuscript package update. The smoke path is runnable and artifact-backed, but remains synthetic and underpowered.
+- **v2.2.0**: Pilot-Scale Benchmark Study release. v2.2 requires a pilot run manifest, expanded honest-agent null distribution, expanded collusive-agent alternatives, stronger hard negatives, full baseline monitor suite, pilot result artifacts, sequential low-FPR uncertainty analysis, prior-work and related-work attachment, reviewer-blocker classification, and a pilot manuscript package. It must not claim deployment validity, unsupported `alpha=0.001` operational specificity, main benchmark maturity, or publication readiness from synthetic pilot data.
 
 ## Why Not Just Summarization?
 
@@ -703,6 +709,58 @@ Planning docs:
 - [docs/V2_1_SELECTED_IDEA.md](docs/V2_1_SELECTED_IDEA.md)
 - [docs/V2_1_BENCHMARK_SPEC.md](docs/V2_1_BENCHMARK_SPEC.md)
 - [docs/V2_1_ACCEPTANCE_CRITERIA.md](docs/V2_1_ACCEPTANCE_CRITERIA.md)
+
+## v2.2 Pilot-Scale Benchmark Study
+
+v2.2 is the pilot-scale release for the same locked selected idea. It must require a pilot run, not another smoke-only package:
+
+- powered pilot sample-size plan
+- expanded honest-agent null distribution
+- expanded collusive-agent alternative distribution
+- stronger hard-negative traces
+- full baseline monitor suite
+- locked pilot run manifest
+- pilot result artifacts
+- sequential low-FPR analysis with uncertainty
+- prior-work recall and related-work matrix attachment
+- reviewer blocker resolution or preservation
+- pilot manuscript package
+- no pilot/main overclaiming
+
+v2.2 must keep smoke, pilot, and main benchmark maturity separate. A synthetic pilot can support only the low-FPR claims that its sample size, sequential correction, and uncertainty report support. It must not claim deployment validity, unsupported `alpha=0.001` operational specificity, real deployment evidence, main benchmark maturity, or publication readiness with unresolved prior-work, related-work, baseline, power, or reviewer gates.
+
+Scriptable v2.2 path:
+
+```python
+from gapforge import api
+
+api.create_pilot_power_plan("<benchmark-id>")
+api.generate_honest_null("<benchmark-id>", count=300)
+api.generate_collusive_alternatives("<benchmark-id>", count=150)
+dataset = api.build_pilot_dataset("<benchmark-id>", negative_count=300, positive_count=150)
+api.calibrate_pilot_baselines("<benchmark-id>", target_alpha=0.01)
+execution = api.run_selected_pilot("<benchmark-id>", dataset_id=dataset.id)
+api.analyze_selected_pilot(execution.id)
+api.selected_pilot_review("<benchmark-id>")
+api.selected_pilot_manuscript("<benchmark-id>")
+api.v22_release_gate(write_report=True)
+```
+
+Inspectable dashboard:
+
+```bash
+gapforge dashboard --project-id <selected-project-id> --include-selected-pilot
+```
+
+v2.2 is not the end state. v2.3 remains responsible for main-scale evidence: larger honest/null counts for unsupported alpha targets, stronger external scenario review, more competitive baselines, reproducible main-run manifests, and publication-readiness only if prior-work, related-work, power, and reviewer gates all pass.
+
+Planning docs:
+
+- [docs/V2_2_ROADMAP.md](docs/V2_2_ROADMAP.md)
+- [docs/V2_2_PILOT_BENCHMARK.md](docs/V2_2_PILOT_BENCHMARK.md)
+- [docs/V2_2_ACCEPTANCE_CRITERIA.md](docs/V2_2_ACCEPTANCE_CRITERIA.md)
+- [docs/V2_2_POWER_AND_SAMPLE_SIZE.md](docs/V2_2_POWER_AND_SAMPLE_SIZE.md)
+- [docs/V2_2_REVIEWER_BLOCKERS.md](docs/V2_2_REVIEWER_BLOCKERS.md)
 
 ## Active v0.3 Loop
 

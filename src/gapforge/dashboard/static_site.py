@@ -46,6 +46,7 @@ from gapforge.project_memory import ProjectMemoryManager
 from gapforge.release_gate.v08 import V08ReleaseGateEnforcer
 from gapforge.release_gate.v2 import V2ReleaseGateEnforcer, render_v2_release_gate_markdown
 from gapforge.release_gate.v21 import V21ReleaseGateEnforcer, render_v21_release_gate_markdown
+from gapforge.release_gate.v22 import V22ReleaseGateEnforcer, render_v22_release_gate_markdown
 from gapforge.state import ResearchStateManager
 
 PAGES = [
@@ -129,6 +130,20 @@ SELECTED_IDEA_PAGES = [
     ("v21_release_gate.html", "v2.1 Release Gate"),
 ]
 
+SELECTED_PILOT_PAGES = [
+    ("pilot_power.html", "Pilot Power"),
+    ("honest_null_distribution.html", "Honest Null"),
+    ("collusive_distribution.html", "Collusive Alternatives"),
+    ("pilot_dataset.html", "Pilot Dataset"),
+    ("baseline_calibration.html", "Baseline Calibration"),
+    ("pilot_results.html", "Pilot Results"),
+    ("pilot_low_fpr_report.html", "Pilot Low-FPR"),
+    ("pilot_related_work.html", "Pilot Related Work"),
+    ("pilot_review.html", "Pilot Review"),
+    ("pilot_manuscript.html", "Pilot Manuscript"),
+    ("v22_release_gate.html", "v2.2 Release Gate"),
+]
+
 
 @dataclass(slots=True)
 class DashboardResult:
@@ -159,6 +174,7 @@ class StaticDashboardBuilder:
         include_manuscripts: bool = False,
         include_ideas: bool = False,
         include_selected_idea: bool = False,
+        include_selected_pilot: bool = False,
     ) -> DashboardResult:
         program = self.project_manager.load_project(project_id)
         states = [self.state_manager.load_run(run_id) for run_id in program.run_ids]
@@ -168,6 +184,7 @@ class StaticDashboardBuilder:
             include_manuscripts=include_manuscripts,
             include_ideas=include_ideas,
             include_selected_idea=include_selected_idea,
+            include_selected_pilot=include_selected_pilot,
             config=self.config,
         )
         return _write_dashboard(Path(program.project.root_dir) / "dashboard", context)
@@ -214,6 +231,7 @@ class _DashboardContext:
         selected_idea: dict[str, Any] | None = None,
         ideas_enabled: bool = False,
         selected_idea_enabled: bool = False,
+        selected_pilot_enabled: bool = False,
     ) -> None:
         self.title = title
         self.subtitle = subtitle
@@ -239,6 +257,7 @@ class _DashboardContext:
         self.selected_idea = selected_idea or _empty_selected_idea_context()
         self.ideas_enabled = ideas_enabled
         self.selected_idea_enabled = selected_idea_enabled
+        self.selected_pilot_enabled = selected_pilot_enabled
 
     @classmethod
     def from_run(cls, state: ResearchRunState) -> _DashboardContext:
@@ -274,6 +293,7 @@ class _DashboardContext:
         include_manuscripts: bool = False,
         include_ideas: bool = False,
         include_selected_idea: bool = False,
+        include_selected_pilot: bool = False,
         config: GapForgeConfig | None = None,
     ) -> _DashboardContext:
         coverage_reports = [state.source_coverage for state in states if state.source_coverage is not None]
@@ -316,10 +336,11 @@ class _DashboardContext:
             else _empty_manuscript_context(),
             ideas=_load_idea_context(program.project.id, config) if include_ideas and config is not None else _empty_idea_context(),
             selected_idea=_load_selected_idea_context(program.project.id, config)
-            if include_selected_idea and config is not None
+            if (include_selected_idea or include_selected_pilot) and config is not None
             else _empty_selected_idea_context(),
             ideas_enabled=include_ideas,
             selected_idea_enabled=include_selected_idea,
+            selected_pilot_enabled=include_selected_pilot,
         )
 
     @classmethod
@@ -466,6 +487,22 @@ def _write_dashboard(root: Path, context: _DashboardContext) -> DashboardResult:
                 "v21_release_gate.html": _render_selected_v21_release_gate_page(context),
             }
         )
+    if context.selected_pilot_enabled:
+        pages.update(
+            {
+                "pilot_power.html": _render_pilot_power_page(context),
+                "honest_null_distribution.html": _render_honest_null_distribution_page(context),
+                "collusive_distribution.html": _render_collusive_distribution_page(context),
+                "pilot_dataset.html": _render_pilot_dataset_page(context),
+                "baseline_calibration.html": _render_baseline_calibration_page(context),
+                "pilot_results.html": _render_pilot_results_page(context),
+                "pilot_low_fpr_report.html": _render_pilot_low_fpr_report_page(context),
+                "pilot_related_work.html": _render_pilot_related_work_page(context),
+                "pilot_review.html": _render_pilot_review_page(context),
+                "pilot_manuscript.html": _render_pilot_manuscript_page(context),
+                "v22_release_gate.html": _render_selected_v22_release_gate_page(context),
+            }
+        )
     written = []
     for filename, body in pages.items():
         path = root / filename
@@ -534,6 +571,8 @@ def _pages_for_context(context: _DashboardContext) -> list[tuple[str, str]]:
         pages.extend(IDEA_PAGES)
     if context.selected_idea_enabled:
         pages.extend(SELECTED_IDEA_PAGES)
+    if context.selected_pilot_enabled:
+        pages.extend(SELECTED_PILOT_PAGES)
     return pages
 
 
@@ -2869,6 +2908,326 @@ def _render_selected_v21_release_gate_page(context: _DashboardContext) -> str:
     return "<pre>" + _e(json.dumps(result, indent=2)) + "</pre>"
 
 
+def _render_pilot_power_page(context: _DashboardContext) -> str:
+    plan = _dict(context.selected_idea["pilot_power_plan"])
+    assessment = _dict(context.selected_idea["pilot_power_assessment"])
+    requirements = _dict(plan.get("negative_trace_requirements"))
+    observed = _dict(assessment.get("observed_negative_count_by_alpha"))
+    if not observed:
+        observed = {alpha: assessment.get("observed_negative_count", "") for alpha in requirements}
+    met_keys = _keys_or_values(assessment.get("alpha_targets_met"))
+    rows = [
+        [
+            _e(str(alpha)),
+            _e(str(required)),
+            _e(str(observed.get(str(alpha), observed.get(alpha, "not checked")))),
+            _e("met" if str(alpha) in met_keys else "blocked/unknown"),
+        ]
+        for alpha, required in sorted(requirements.items(), key=lambda item: str(item[0]))
+    ]
+    return "\n".join(
+        [
+            "<h2>Pilot Power and Sample Size</h2>",
+            '<div class="grid">',
+            _metric("Pilot alpha", plan.get("pilot_alpha", "missing")),
+            _metric("Main alpha", plan.get("main_alpha", "missing")),
+            _metric("Observed negatives", assessment.get("observed_negative_count", "not checked")),
+            _metric("Observed positives", assessment.get("observed_positive_count", "not checked")),
+            "</div>",
+            "<h2>Alpha Target Support</h2>",
+            _table(["Alpha", "Required Negative Count", "Observed Negative Count", "Status"], rows),
+            "<h2>Warnings</h2>",
+            _list([str(item) for item in _as_list(assessment.get("warnings"))], css_class="warning"),
+            "<h2>Blockers</h2>",
+            _list([str(item) for item in _as_list(assessment.get("blockers"))], css_class="warning"),
+            "<h2>Sequential Testing Notes</h2>",
+            _list([str(item) for item in _as_list(plan.get("sequential_testing_notes"))]),
+        ]
+    )
+
+
+def _render_honest_null_distribution_page(context: _DashboardContext) -> str:
+    report = _dict(context.selected_idea["honest_null_report"])
+    scenarios = _dict_items(context.selected_idea["honest_null_scenarios"])
+    return "\n".join(
+        [
+            "<h2>Expanded Honest-Agent Null Distribution</h2>",
+            '<div class="grid">',
+            _metric("Trace count", report.get("trace_count", 0)),
+            _metric("Hard negatives", report.get("hard_negative_count", 0)),
+            _metric("Scenarios", len(scenarios)),
+            "</div>",
+            "<h2>Scenario Counts</h2>",
+            _kv_table(sorted(_dict(report.get("scenario_counts")).items())),
+            "<h2>Scenarios</h2>",
+            _scenario_table(scenarios, "coordination_type"),
+            "<h2>Coverage Summary</h2>",
+            _list([str(item) for item in _as_list(report.get("coverage_summary"))]),
+            "<h2>Limitations</h2>",
+            _list([str(item) for item in _as_list(report.get("limitations"))], css_class="warning"),
+        ]
+    )
+
+
+def _render_collusive_distribution_page(context: _DashboardContext) -> str:
+    report = _dict(context.selected_idea["collusive_report"])
+    scenarios = _dict_items(context.selected_idea["collusive_scenarios"])
+    return "\n".join(
+        [
+            "<h2>Expanded Collusive-Agent Alternatives</h2>",
+            '<div class="grid">',
+            _metric("Trace count", report.get("trace_count", 0)),
+            _metric("Collusion types", len(_dict(report.get("scenario_counts")))),
+            _metric("Scenarios", len(scenarios)),
+            "</div>",
+            "<h2>Scenario Counts</h2>",
+            _kv_table(sorted(_dict(report.get("scenario_counts")).items())),
+            "<h2>Difficulty Mix</h2>",
+            _kv_table(sorted(_dict(report.get("difficulty_mix")).items())),
+            "<h2>Scenarios</h2>",
+            _scenario_table(scenarios, "collusion_type"),
+            "<h2>Limitations</h2>",
+            _list([str(item) for item in _as_list(report.get("limitations"))], css_class="warning"),
+        ]
+    )
+
+
+def _render_pilot_dataset_page(context: _DashboardContext) -> str:
+    datasets = _dict_items(context.selected_idea["pilot_datasets"])
+    rows = [
+        [
+            _code(str(dataset.get("id", ""))),
+            _e(dataset.get("split", "")),
+            str(dataset.get("negative_count", 0)),
+            str(dataset.get("positive_count", 0)),
+            str(dataset.get("hard_negative_count", 0)),
+            _e(", ".join(str(item) for item in _as_list(dataset.get("alpha_targets_supported")))),
+            _e("; ".join(str(item) for item in _as_list(dataset.get("limitations")))),
+        ]
+        for dataset in datasets
+    ]
+    card = str(context.selected_idea.get("pilot_dataset_card") or "")
+    return "\n".join(
+        [
+            "<h2>Pilot Trace Dataset</h2>",
+            _table(["Dataset", "Split", "Negative", "Positive", "Hard Negative", "Alpha Targets Supported", "Limitations"], rows),
+            "<h2>Observability Modes</h2>",
+            _kv_table(sorted(_dict((datasets[-1] if datasets else {}).get("observability_mode_counts")).items())),
+            "<h2>Scenario Coverage</h2>",
+            _kv_table(sorted(_dict((datasets[-1] if datasets else {}).get("scenario_coverage")).items())),
+            "<h2>Dataset Card</h2>",
+            "<pre>" + _e(card or "No pilot dataset card is available.") + "</pre>",
+        ]
+    )
+
+
+def _render_baseline_calibration_page(context: _DashboardContext) -> str:
+    records = _dict_items(context.selected_idea["monitor_calibrations"])
+    runs = _dict_items(context.selected_idea["pilot_monitor_runs"])
+    calibration_rows = [
+        [
+            _code(str(record.get("id", ""))),
+            _code(str(record.get("monitor_id", ""))),
+            _code(str(record.get("calibration_dataset_id", ""))),
+            _e(str(record.get("target_alpha", ""))),
+            _e(str(record.get("threshold", ""))),
+            _e(str(record.get("observed_fpr", ""))),
+            _e("; ".join(str(item) for item in _as_list(record.get("warnings")))),
+        ]
+        for record in records
+    ]
+    run_rows = [
+        [
+            _code(str(run.get("id", ""))),
+            _code(str(run.get("monitor_id", ""))),
+            _code(str(run.get("dataset_id", ""))),
+            str(run.get("trace_count", 0)),
+            str(run.get("alert_count", 0)),
+            _e("; ".join(str(item) for item in _as_list(run.get("limitations")))),
+        ]
+        for run in runs
+    ]
+    return "\n".join(
+        [
+            "<h2>Pilot Baseline Calibration</h2>",
+            _table(["Calibration", "Monitor", "Dataset", "Target Alpha", "Threshold", "Observed FPR", "Warnings"], calibration_rows),
+            "<h2>Pilot Baseline Runs</h2>",
+            _table(["Run", "Monitor", "Dataset", "Traces", "Alerts", "Limitations"], run_rows),
+            "<h2>Baseline Report</h2>",
+            "<pre>" + _e(context.selected_idea.get("pilot_baseline_report") or "No pilot baseline report is available.") + "</pre>",
+        ]
+    )
+
+
+def _render_pilot_results_page(context: _DashboardContext) -> str:
+    manifests = _dict_items(context.selected_idea["pilot_manifests"])
+    executions = _dict_items(context.selected_idea["pilot_executions"])
+    analyses = _dict_items(context.selected_idea["pilot_analyses"])
+    return "\n".join(
+        [
+            "<h2>Pilot Result Artifacts</h2>",
+            '<div class="grid">',
+            _metric("Manifests", len(manifests)),
+            _metric("Executions", len(executions)),
+            _metric("Analyses", len(analyses)),
+            _metric("Failed executions", sum(1 for item in executions if item.get("status") == "failed")),
+            "</div>",
+            "<h2>Executions</h2>",
+            _table(
+                ["Execution", "Run Type", "Status", "Dataset", "Synthetic Label", "Warnings/Failures"],
+                [
+                    [
+                        _code(str(item.get("id", ""))),
+                        _e(item.get("run_type", "")),
+                        _e(item.get("status", "")),
+                        _code(str(item.get("dataset_id", ""))),
+                        _e(item.get("synthetic_data_label", "")),
+                        _e("; ".join(str(w) for w in [*_as_list(item.get("warnings")), *_as_list(item.get("failures"))])),
+                    ]
+                    for item in executions
+                ],
+            ),
+            "<h2>Latest Pilot Metrics</h2>",
+            "<pre>" + _e(json.dumps(_dict(context.selected_idea.get("pilot_metrics")), indent=2)) + "</pre>",
+            "<h2>Latest Baseline Comparison</h2>",
+            "<pre>" + _e(json.dumps(_dict(context.selected_idea.get("pilot_baseline_comparison")), indent=2)) + "</pre>",
+        ]
+    )
+
+
+def _render_pilot_low_fpr_report_page(context: _DashboardContext) -> str:
+    report = _dict(context.selected_idea.get("pilot_low_fpr_report"))
+    markdown = str(context.selected_idea.get("pilot_low_fpr_markdown") or "")
+    assessment = _dict(context.selected_idea.get("pilot_power_assessment"))
+    met_keys = _keys_or_values(assessment.get("alpha_targets_met"))
+    underpowered_keys = _keys_or_values(assessment.get("alpha_targets_underpowered"))
+    return "\n".join(
+        [
+            "<h2>Pilot Low-FPR Report</h2>",
+            '<div class="grid">',
+            _metric("Alpha targets met", ", ".join(met_keys) or "none"),
+            _metric("Alpha targets underpowered", ", ".join(underpowered_keys) or "none"),
+            _metric("alpha=0.001 status", "powered" if "0.001" in met_keys else "blocked/underpowered"),
+            "</div>",
+            "<h2>Report</h2>",
+            "<pre>" + _e(markdown or json.dumps(report, indent=2) or "No low-FPR report is available.") + "</pre>",
+            "<h2>Warnings</h2>",
+            _list([str(item) for item in [*_as_list(assessment.get("warnings")), *_as_list(report.get("warnings"))]], css_class="warning"),
+        ]
+    )
+
+
+def _render_pilot_related_work_page(context: _DashboardContext) -> str:
+    recall = _dict(context.selected_idea["selected_prior_work_recall"])
+    matrix = _dict(context.selected_idea["selected_related_work_matrix"])
+    novelty = _dict(context.selected_idea["novelty_positioning"])
+    return "\n".join(
+        [
+            "<h2>Prior-Work Recall</h2>",
+            _kv_table(
+                [
+                    ("Recall ID", recall.get("id", "missing")),
+                    ("Benchmark ID", recall.get("benchmark_id", "missing")),
+                    ("Missing categories", ", ".join(str(item) for item in _as_list(recall.get("missing_categories"))) or "none"),
+                    ("Block strong novelty", recall.get("block_strong_novelty", "unknown")),
+                ]
+            ),
+            "<h2>Related-Work Matrix</h2>",
+            _table(
+                ["Category", "Closest Work", "Positioning"],
+                [
+                    [
+                        _e(entry.get("category", "")),
+                        _e(entry.get("closest_prior_work", entry.get("closest_work", ""))),
+                        _e(entry.get("positioning", "")),
+                    ]
+                    for entry in _dict_items(matrix.get("entries"))
+                ],
+            ),
+            "<h2>Novelty Positioning</h2>",
+            "<pre>" + _e(context.selected_idea.get("novelty_positioning_markdown") or json.dumps(novelty, indent=2)) + "</pre>",
+        ]
+    )
+
+
+def _render_pilot_review_page(context: _DashboardContext) -> str:
+    panel = _dict(context.selected_idea["pilot_review_panel"])
+    fixes_markdown = context.selected_idea.get("pilot_required_fixes_markdown") or json.dumps(
+        _as_list(panel.get("required_fixes")),
+        indent=2,
+    )
+    return "\n".join(
+        [
+            "<h2>Pilot Reviewer Panel</h2>",
+            '<div class="grid">',
+            _metric("Publishability", panel.get("publishability_assessment", "missing")),
+            _metric("Reviewer risk", panel.get("reviewer_risk_score", "missing")),
+            _metric("Fatal blockers", len(_as_list(panel.get("fatal_blockers")))),
+            _metric("Required fixes", len(_as_list(panel.get("required_fixes")))),
+            "</div>",
+            "<h2>Fatal Blockers</h2>",
+            _list([str(item) for item in _as_list(panel.get("fatal_blockers"))], css_class="warning"),
+            "<h2>Required Fixes</h2>",
+            "<pre>" + _e(fixes_markdown) + "</pre>",
+        ]
+    )
+
+
+def _render_pilot_manuscript_page(context: _DashboardContext) -> str:
+    manuscript = _dict(context.selected_idea["pilot_manuscript"])
+    package = _dict(context.selected_idea["pilot_paper_package"])
+    return "\n".join(
+        [
+            "<h2>Pilot Manuscript Package</h2>",
+            _kv_table(
+                [
+                    ("Manuscript ID", manuscript.get("id", "missing")),
+                    ("Title", manuscript.get("title", "missing")),
+                    ("Maturity statement", manuscript.get("maturity_statement", "missing")),
+                    ("Paper package", package.get("id", "missing")),
+                    ("Package readiness", package.get("readiness", "missing")),
+                ]
+            ),
+            "<h2>Reviewer Blockers</h2>",
+            _list([str(item) for item in _as_list(manuscript.get("reviewer_blockers"))], css_class="warning"),
+            "<h2>Limitations</h2>",
+            _list([str(item) for item in _as_list(manuscript.get("limitations"))], css_class="warning"),
+            "<h2>Sections</h2>",
+            _table(
+                ["Section", "Preview"],
+                [[_e(name), _e(str(text)[:260])] for name, text in _dict(manuscript.get("sections")).items()],
+            ),
+        ]
+    )
+
+
+def _render_selected_v22_release_gate_page(context: _DashboardContext) -> str:
+    result = _dict(context.selected_idea["v22_release_gate"])
+    markdown = str(context.selected_idea.get("v22_release_gate_markdown") or "")
+    if markdown:
+        return "<pre>" + _e(markdown) + "</pre>"
+    if not result:
+        return "<p>No v2.2 release gate report is available.</p>"
+    return "<pre>" + _e(json.dumps(result, indent=2)) + "</pre>"
+
+
+def _scenario_table(scenarios: list[dict[str, Any]], type_field: str) -> str:
+    return _table(
+        ["ID", "Name", "Type", "Observability/Difficulty", "False Positive Risk", "Description"],
+        [
+            [
+                _code(str(item.get("id", ""))),
+                _e(item.get("name", "")),
+                _e(item.get(type_field, "")),
+                _e(item.get("observability_mode", item.get("difficulty", ""))),
+                _e(item.get("false_positive_risk", "")),
+                _e(item.get("description", "")),
+            ]
+            for item in scenarios
+        ],
+    )
+
+
 def _run_artifact_links(state: ResearchRunState) -> list[tuple[str, str]]:
     names = [
         "run_report.md",
@@ -3032,6 +3391,37 @@ def _empty_selected_idea_context() -> dict[str, Any]:
         "paper_package": {},
         "v21_release_gate": {},
         "v21_release_gate_markdown": "",
+        "pilot_power_plan": {},
+        "pilot_power_assessments": [],
+        "pilot_power_assessment": {},
+        "honest_null_scenarios": [],
+        "honest_null_report": {},
+        "collusive_scenarios": [],
+        "collusive_report": {},
+        "pilot_datasets": [],
+        "pilot_dataset_card": "",
+        "monitor_calibrations": [],
+        "pilot_monitor_runs": [],
+        "pilot_baseline_report": "",
+        "pilot_manifests": [],
+        "pilot_executions": [],
+        "pilot_analyses": [],
+        "pilot_metrics": {},
+        "pilot_baseline_comparison": {},
+        "pilot_error_analysis": {},
+        "pilot_low_fpr_report": {},
+        "pilot_low_fpr_markdown": "",
+        "pilot_limitations_markdown": "",
+        "selected_prior_work_recall": {},
+        "selected_related_work_matrix": {},
+        "novelty_positioning": {},
+        "novelty_positioning_markdown": "",
+        "pilot_review_panel": {},
+        "pilot_required_fixes_markdown": "",
+        "pilot_manuscript": {},
+        "pilot_paper_package": {},
+        "v22_release_gate": {},
+        "v22_release_gate_markdown": "",
     }
 
 
@@ -3056,6 +3446,29 @@ def _load_selected_idea_context(project_id: str, config: GapForgeConfig) -> dict
     context["fix_list"] = _read_text_safely(benchmark_dir / "reviews" / "fix_list.md")
     context["manuscript"] = _read_json_safely(benchmark_dir / "manuscript" / "selected_benchmark_manuscript.json")
     context["paper_package"] = _read_json_safely(benchmark_dir / "paper_package" / "paper_package.json")
+    context["pilot_power_plan"] = _read_json_safely(benchmark_dir / "pilot_power" / "pilot_power_plan.json")
+    context["pilot_power_assessments"] = _read_json_files_safely(benchmark_dir / "pilot_power", "pilot-power-assessment-*.json")
+    context["pilot_power_assessment"] = _latest_record(context["pilot_power_assessments"])
+    context["honest_null_scenarios"] = _read_json_list_safely(benchmark_dir / "honest_null" / "scenarios.json")
+    context["honest_null_report"] = _read_json_safely(benchmark_dir / "honest_null" / "report.json")
+    context["collusive_scenarios"] = _read_json_list_safely(benchmark_dir / "collusive_alternatives" / "scenarios.json")
+    context["collusive_report"] = _read_json_safely(benchmark_dir / "collusive_alternatives" / "report.json")
+    context["pilot_datasets"] = _read_json_files_safely(benchmark_dir / "pilot_dataset", "*.json")
+    context["pilot_dataset_card"] = _read_text_safely(benchmark_dir / "pilot_dataset" / "dataset_card.md")
+    context["monitor_calibrations"] = _read_json_files_safely(benchmark_dir / "monitor_calibrations", "*.json")
+    context["pilot_baseline_report"] = _read_text_safely(benchmark_dir / "reports" / "pilot_baseline_report.md")
+    context["pilot_manifests"] = _read_json_files_safely(benchmark_dir / "pilot_runs" / "manifests", "*.json")
+    context["pilot_executions"] = _read_json_files_safely(benchmark_dir / "pilot_runs" / "executions", "*/execution.json")
+    context["pilot_analyses"] = _read_json_files_safely(benchmark_dir / "pilot_analysis", "*/analysis_result.json")
+    _load_latest_pilot_analysis_outputs(context)
+    context["selected_prior_work_recall"] = _read_json_safely(benchmark_dir / "related_work" / "selected_prior_work_recall.json")
+    context["selected_related_work_matrix"] = _read_json_safely(benchmark_dir / "related_work" / "selected_related_work_matrix.json")
+    context["novelty_positioning"] = _read_json_safely(benchmark_dir / "related_work" / "novelty_positioning.json")
+    context["novelty_positioning_markdown"] = _read_text_safely(benchmark_dir / "related_work" / "novelty_positioning.md")
+    context["pilot_review_panel"] = _read_json_safely(benchmark_dir / "reviews" / "pilot_review_panel.json")
+    context["pilot_required_fixes_markdown"] = _read_text_safely(benchmark_dir / "reviews" / "required_fixes.md")
+    context["pilot_manuscript"] = _read_json_safely(benchmark_dir / "pilot_manuscript" / "selected_pilot_manuscript.json")
+    context["pilot_paper_package"] = _read_json_safely(benchmark_dir / "pilot_paper_package" / "pilot_paper_package.json")
     for dataset_dir in sorted((benchmark_dir / "trace_datasets").glob("*")):
         if not dataset_dir.is_dir():
             continue
@@ -3064,7 +3477,12 @@ def _load_selected_idea_context(project_id: str, config: GapForgeConfig) -> dict
         context["scenarios"].extend(_read_json_list_safely(dataset_dir / "scenarios.json"))
         context["metric_results"].extend(_read_json_list_safely(dataset_dir / "sequential_metrics.json"))
         for run_path in sorted((dataset_dir / "monitor_predictions").glob("*/run.json")):
+            run_count_before = len(context["monitor_runs"])
             _append_json_safely(context["monitor_runs"], run_path)
+            if len(context["monitor_runs"]) > run_count_before:
+                run = context["monitor_runs"][-1]
+                if any("pilot" in str(item).lower() for item in _as_list(run.get("limitations"))):
+                    context["pilot_monitor_runs"].append(run)
     workspace_root = project_dir / "experiment_workspaces"
     for workspace_dir in sorted(workspace_root.glob("*")):
         selected_config = _read_json_safely(workspace_dir / "configs" / "selected_benchmark_workspace.json")
@@ -3079,13 +3497,45 @@ def _load_selected_idea_context(project_id: str, config: GapForgeConfig) -> dict
         context["result_summaries"].extend(_read_json_files_safely(workspace_dir / "results", "*_summary.json"))
         context["result_summaries"].extend(_read_json_files_safely(workspace_dir / "reports", "result_summary_*.json"))
     try:
-        result = V21ReleaseGateEnforcer(config).evaluate()
-        if not result.project_id or result.project_id == project_id:
-            context["v21_release_gate"] = result.to_dict()
-            context["v21_release_gate_markdown"] = render_v21_release_gate_markdown(result)
+        v21_result = V21ReleaseGateEnforcer(config).evaluate()
+        if not v21_result.project_id or v21_result.project_id == project_id:
+            context["v21_release_gate"] = v21_result.to_dict()
+            context["v21_release_gate_markdown"] = render_v21_release_gate_markdown(v21_result)
     except (FileNotFoundError, json.JSONDecodeError, TypeError, ValueError):
         context["v21_release_gate"] = _read_json_safely(config.data_dir / "release_gate" / "v21_release_gate_latest.json")
+    try:
+        v22_result = V22ReleaseGateEnforcer(config).evaluate()
+        if not v22_result.project_id or v22_result.project_id == project_id:
+            context["v22_release_gate"] = v22_result.to_dict()
+            context["v22_release_gate_markdown"] = render_v22_release_gate_markdown(v22_result)
+    except (FileNotFoundError, json.JSONDecodeError, TypeError, ValueError):
+        context["v22_release_gate"] = _read_json_safely(config.data_dir / "release_gate" / "v22_release_gate_latest.json")
     return context
+
+
+def _latest_record(records: list[dict[str, Any]]) -> dict[str, Any]:
+    return records[-1] if records else {}
+
+
+def _load_latest_pilot_analysis_outputs(context: dict[str, Any]) -> None:
+    analysis = _latest_record(context["pilot_analyses"])
+    output_paths = _dict(analysis.get("output_paths"))
+    json_keys = {
+        "pilot_metrics_json": "pilot_metrics",
+        "pilot_baseline_comparison_json": "pilot_baseline_comparison",
+        "pilot_error_analysis_json": "pilot_error_analysis",
+        "pilot_low_fpr_report_json": "pilot_low_fpr_report",
+    }
+    for source_key, context_key in json_keys.items():
+        value = output_paths.get(source_key)
+        if isinstance(value, str) and value:
+            context[context_key] = _read_json_safely(Path(value))
+    low_fpr_md = output_paths.get("pilot_low_fpr_report_md")
+    if isinstance(low_fpr_md, str) and low_fpr_md:
+        context["pilot_low_fpr_markdown"] = _read_text_safely(Path(low_fpr_md))
+    limitations_md = output_paths.get("pilot_limitations_md")
+    if isinstance(limitations_md, str) and limitations_md:
+        context["pilot_limitations_markdown"] = _read_text_safely(Path(limitations_md))
 
 
 def _load_idea_context(project_id: str, config: GapForgeConfig) -> dict[str, Any]:
@@ -3543,6 +3993,12 @@ def _campaign_live_source_diagnostic(context: _DashboardContext, state: Campaign
 
 def _as_list(value: object) -> list[object]:
     return value if isinstance(value, list) else []
+
+
+def _keys_or_values(value: object) -> list[str]:
+    if isinstance(value, dict):
+        return [str(key) for key in value]
+    return [str(item) for item in _as_list(value)]
 
 
 def _dict(value: object) -> dict[str, Any]:

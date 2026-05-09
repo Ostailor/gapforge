@@ -6,6 +6,7 @@ from pathlib import Path
 
 from gapforge import api
 from gapforge.config import GapForgeConfig
+from gapforge.dashboard import StaticDashboardBuilder
 from gapforge.experiments.workspace import ExperimentWorkspaceManager
 from gapforge.models import (
     BaselineCandidate,
@@ -280,6 +281,50 @@ def test_api_selected_benchmark_v21_workflow(tmp_path: Path) -> None:
     assert gate.passed is True
     assert gate.benchmark_id == spec.id
     assert (config.data_dir / "release_gate" / "v21_release_gate_latest.json").exists()
+
+
+def test_api_selected_pilot_workflow_and_dashboard(tmp_path: Path) -> None:
+    config, selected_project_id = _api_selected_idea_project(tmp_path)
+
+    spec = api.create_selected_benchmark_spec(selected_project_id, config=config)
+    api.create_monitor_baselines(spec.id, config=config)
+    api.run_selected_benchmark_smoke(spec.id, config=config)
+    api.selected_benchmark_review(spec.id, config=config)
+    api.selected_benchmark_manuscript(spec.id, config=config)
+    api.v21_release_gate(write_report=True, config=config)
+
+    plan = api.create_pilot_power_plan(spec.id, config=config)
+    honest = api.generate_honest_null(spec.id, count=300, config=config)
+    collusive = api.generate_collusive_alternatives(spec.id, count=150, config=config)
+    dataset = api.build_pilot_dataset(spec.id, negative_count=300, positive_count=150, config=config)
+    calibrations = api.calibrate_pilot_baselines(spec.id, config=config)
+    execution = api.run_selected_pilot(spec.id, dataset_id=dataset.id, config=config)
+    analysis = api.analyze_selected_pilot(execution.id, config=config)
+    review = api.selected_pilot_review(spec.id, config=config)
+    package = api.selected_pilot_manuscript(spec.id, config=config)
+    gate = api.v22_release_gate(write_report=True, config=config)
+
+    result = StaticDashboardBuilder(config).build_project(selected_project_id, include_selected_pilot=True)
+    low_fpr_html = (result.root / "pilot_low_fpr_report.html").read_text(encoding="utf-8")
+    gate_html = (result.root / "v22_release_gate.html").read_text(encoding="utf-8")
+
+    assert plan.pilot_alpha == 0.01
+    assert honest.split == "pilot_honest_null"
+    assert collusive.split == "pilot_collusive_alternatives"
+    assert dataset.split == "pilot"
+    assert "0.01" in dataset.alpha_targets_supported
+    assert calibrations
+    assert execution.run_type == "pilot"
+    assert analysis.run_type == "pilot"
+    assert review.publishability_assessment
+    assert package.readiness
+    assert gate.benchmark_id == spec.id
+    assert (result.root / "pilot_power.html").exists()
+    assert (result.root / "pilot_results.html").exists()
+    assert (result.root / "pilot_manuscript.html").exists()
+    assert "alpha=0.001" in low_fpr_html
+    assert "blocked/underpowered" in low_fpr_html
+    assert "synthetic" in gate_html.lower()
 
 
 def test_api_create_draft_and_traceability_manuscript(tmp_path: Path) -> None:

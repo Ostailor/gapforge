@@ -308,6 +308,36 @@ v2.1 non-goals:
 
 The v2.1 release gate should require a runnable smoke benchmark path with generated tasks, baseline monitor execution, sequential specificity metrics, result artifacts, analysis, critique, and manuscript package updates. If the smoke path is missing, v2.1 is incomplete.
 
+## v2.2 Pilot-Scale Benchmark Study Limits
+
+v2.2 is the Pilot-Scale Benchmark Study release for the locked selected idea `idea-sequential-specificity-benchmark-for-low-fpr-collusion-audits`. It moves beyond v2.1 smoke maturity, but it still does not turn synthetic pilot data into deployment evidence or main benchmark maturity.
+
+v2.2 must still preserve these limits:
+
+- a pilot run is exploratory unless the power report supports the specific claim being made
+- synthetic pilot traces are not real deployment traces
+- expanded honest-agent and collusive-agent distributions are still design assumptions until externally reviewed
+- hard-negative coverage can expose false positives but cannot prove all benign coordination is covered
+- low-FPR claims require adequate negative counts, sequential correction, and uncertainty reporting
+- `alpha=0.001` operational specificity must not be claimed unless the sample size and corrected interval support it
+- baseline monitors remain comparisons with declared assumptions, not proof of SOTA scientific strength
+- prior-work recall and related-work matrix attachment remain required before publication-readiness claims
+- reviewer blockers must be resolved with artifacts or preserved as visible warnings
+- pilot manuscript packages must distinguish smoke, pilot, and main benchmark maturity
+
+v2.2 non-goals:
+
+- claiming deployment validity
+- treating synthetic pilot data as real-world benchmark validation
+- hiding unresolved reviewer blockers
+- weakening low-FPR power checks
+- converting an underpowered pilot into a main benchmark claim
+- claiming publication readiness while prior-work, related-work, sample-size, baseline, or reviewer gates remain incomplete
+
+The v2.2 release gate should require a locked pilot manifest, artifact-backed pilot results, full baseline execution or explicit baseline blockers, sequential low-FPR analysis with uncertainty, prior-work attachment status, reviewer-blocker classification, and overclaim prevention. If only smoke artifacts exist, v2.2 is incomplete.
+
+v2.2 dashboards and API wrappers make pilot status easier to inspect and script, but they do not change the evidence standard. A green dashboard page means the artifact is present or parsed; it is not a deployment, publication, or main-benchmark certificate. v2.3 remains necessary for main-scale negative counts, externally reviewed scenario realism, stronger baseline comparisons, and any publication-readiness claim.
+
 ## Operational Guidance
 
 Use strict mode and coverage assessment before interpreting outputs:
