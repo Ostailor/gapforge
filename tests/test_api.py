@@ -327,6 +327,45 @@ def test_api_selected_pilot_workflow_and_dashboard(tmp_path: Path) -> None:
     assert "synthetic" in gate_html.lower()
 
 
+def test_api_v23_aliases_and_selected_main_dashboard(tmp_path: Path) -> None:
+    config, selected_project_id = _api_selected_idea_project(tmp_path)
+    spec = api.create_selected_benchmark_spec(selected_project_id, config=config)
+    api.create_monitor_baselines(spec.id, config=config)
+
+    plan = api.create_main_power_plan(spec.id, planned_negative_count=300, planned_positive_count=150, config=config)
+    related = api.complete_related_work(spec.id, config=config)
+    baseline = api.assess_baseline_strength(spec.id, config=config)
+    dataset = api.build_main_dataset(spec.id, negative_count=300, positive_count=150, config=config)
+    decision = api.selected_go_no_go(spec.id, config=config)
+    review = api.selected_publication_review(spec.id, config=config)
+    manuscript = api.selected_main_manuscript(spec.id, include_paper_package=False, config=config)
+
+    result = StaticDashboardBuilder(config).build_project(selected_project_id, include_selected_main=True)
+
+    for page in [
+        "main_power.html",
+        "related_work_completion.html",
+        "baseline_strength.html",
+        "main_dataset.html",
+        "main_results.html",
+        "go_no_go.html",
+        "publication_review.html",
+        "main_manuscript.html",
+        "v23_release_gate.html",
+    ]:
+        assert (result.root / page).exists()
+
+    assert plan.planned_negative_count == 300
+    assert related.novelty_status in {"unknown", "duplicate", "sufficient"}
+    assert isinstance(baseline.strong_claim_allowed, bool)
+    assert dataset.negative_count == 300
+    assert decision.decision in {"revise_benchmark", "run_more_experiments", "no_go", "go_publication_candidate"}
+    assert review.readiness in {"not_ready", "workshop_candidate", "conference_candidate", "no_go"}
+    assert manuscript.benchmark_id == spec.id
+    assert "Fallback-only records do not complete" in (result.root / "related_work_completion.html").read_text(encoding="utf-8")
+    assert "Synthetic-only labels" in (result.root / "main_dataset.html").read_text(encoding="utf-8")
+
+
 def test_api_create_draft_and_traceability_manuscript(tmp_path: Path) -> None:
     config, manuscript_id, execution_id, artifact_ids = _api_manuscript_fixture(tmp_path)
 

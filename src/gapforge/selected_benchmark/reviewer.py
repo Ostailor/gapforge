@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 from gapforge.config import GapForgeConfig
 from gapforge.models import (
@@ -18,7 +20,9 @@ from gapforge.models import (
     to_plain,
 )
 from gapforge.project_memory import ProjectMemoryManager
-from gapforge.selected_benchmark.baselines import MonitorBaselineManager, MonitorCalibrationRecord
+from gapforge.selected_benchmark.baselines import BaselineStrengthAssessment, MonitorBaselineManager, MonitorCalibrationRecord
+from gapforge.selected_benchmark.main_analysis import MainAnalysisManager, MainAnalysisResult
+from gapforge.selected_benchmark.main_power import MainPowerDecision, MainPowerManager
 from gapforge.selected_benchmark.metrics import SequentialMetricManager, SequentialMetricResult
 from gapforge.selected_benchmark.pilot_analysis import PilotAnalysisManager, PilotAnalysisResult
 from gapforge.selected_benchmark.pilot_power import PilotPowerAssessment, PilotPowerManager
@@ -27,6 +31,7 @@ from gapforge.selected_benchmark.related_work import (
     SelectedPriorWorkRecall,
     SelectedRelatedWorkMatrix,
 )
+from gapforge.selected_benchmark.related_work_completion import RelatedWorkCompletionManager, RelatedWorkCompletionStatus
 from gapforge.selected_benchmark.spec import SelectedBenchmarkManager, SequentialSpecificityBenchmarkSpec
 from gapforge.selected_benchmark.threat_model import CollusionThreatModel
 from gapforge.selected_benchmark.trace_generator import SyntheticTraceGenerator, TraceDataset
@@ -62,6 +67,18 @@ class SelectedBenchmarkReviewPanel:
     reviewer_risk_score: float = 1.0
     limitations: list[str] = field(default_factory=list)
     provenance: Provenance = field(default_factory=lambda: Provenance(created_by_skill="selected-benchmark-reviewer-panel"))
+
+
+@dataclass(slots=True)
+class PublicationReadinessReview:
+    id: str
+    benchmark_id: str
+    readiness: str = "not_ready"
+    fatal_blockers: list[str] = field(default_factory=list)
+    major_blockers: list[str] = field(default_factory=list)
+    required_revisions: list[str] = field(default_factory=list)
+    confidence: str = "low"
+    provenance: Provenance = field(default_factory=lambda: Provenance(created_by_skill="selected-publication-readiness-review"))
 
 
 class SelectedBenchmarkReviewerPanelBuilder:
@@ -183,6 +200,68 @@ class SelectedBenchmarkReviewerPanelBuilder:
         (reviews_dir / "required_fixes.json").write_text(json.dumps(to_plain(panel.required_fixes), indent=2) + "\n", encoding="utf-8")
         return report
 
+    def publication_review(self, benchmark_id: str) -> PublicationReadinessReview:
+        context = _PublicationReadinessContext.from_benchmark(self, benchmark_id)
+        fatal_blockers: list[str] = []
+        major_blockers: list[str] = []
+        required_revisions: list[str] = []
+
+        _review_result_evidence(context, major_blockers, required_revisions)
+        _review_related_work_completion(context, fatal_blockers, major_blockers, required_revisions)
+        _review_baseline_strength(context, fatal_blockers, major_blockers, required_revisions)
+        _review_alpha_power_claims(context, fatal_blockers, major_blockers, required_revisions)
+        _review_manuscript_traceability(context, fatal_blockers, major_blockers, required_revisions)
+
+        readiness = _publication_readiness(
+            has_main_results=context.main_analysis is not None,
+            has_pilot_results=context.pilot_analysis is not None,
+            fatal_blockers=fatal_blockers,
+            major_blockers=major_blockers,
+        )
+        if context.main_analysis is None and context.pilot_analysis is not None:
+            required_revisions.append("Pilot-only results may support at most workshop positioning unless strong caveats are explicit.")
+        confidence = _publication_confidence(readiness, context, fatal_blockers=fatal_blockers, major_blockers=major_blockers)
+        review = PublicationReadinessReview(
+            id=f"publication-readiness-review-{benchmark_id}",
+            benchmark_id=benchmark_id,
+            readiness=readiness,
+            fatal_blockers=_unique(fatal_blockers),
+            major_blockers=_unique(major_blockers),
+            required_revisions=_unique(required_revisions),
+            confidence=confidence,
+            provenance=Provenance(
+                created_by_skill="selected-publication-readiness-review",
+                source_ids=_unique(
+                    [
+                        benchmark_id,
+                        context.spec.project_id,
+                        context.main_analysis.id if context.main_analysis else "",
+                        context.pilot_analysis.id if context.pilot_analysis else "",
+                        context.related_work_status.id if context.related_work_status else "",
+                        context.baseline_strength.id if context.baseline_strength else "",
+                        context.main_power_decision.id if context.main_power_decision else "",
+                        *context.manuscript_paths,
+                        *context.traceability_paths,
+                    ]
+                ),
+                timestamp=utc_now_iso(),
+                reasoning_summary=(
+                    "Reviewed main/pilot results, related work, baselines, power decisions, manuscript claims, and traceability."
+                ),
+            ),
+        )
+        self._write_publication_review(review)
+        return review
+
+    def publication_fix_list(self, benchmark_id: str) -> str:
+        review = self._ensure_publication_review(benchmark_id)
+        report = render_publication_fix_list(review)
+        spec = self.benchmark_manager.load_spec(benchmark_id)
+        reviews_dir = self._benchmark_dir(spec.project_id) / "reviews"
+        reviews_dir.mkdir(parents=True, exist_ok=True)
+        (reviews_dir / "main_publication_fix_list.md").write_text(report, encoding="utf-8")
+        return report
+
     def _ensure_panel(self, benchmark_id: str) -> SelectedBenchmarkReviewPanel:
         spec = self.benchmark_manager.load_spec(benchmark_id)
         path = self._benchmark_dir(spec.project_id) / "reviews" / "selected_benchmark_review_panel.json"
@@ -196,6 +275,16 @@ class SelectedBenchmarkReviewerPanelBuilder:
         if path.exists():
             return from_dict(SelectedBenchmarkReviewPanel, json.loads(path.read_text(encoding="utf-8")))
         return self.pilot_review(benchmark_id)
+
+    def _ensure_publication_review(self, benchmark_id: str) -> PublicationReadinessReview:
+        spec = self.benchmark_manager.load_spec(benchmark_id)
+        path = self._benchmark_dir(spec.project_id) / "reviews" / "main_publication_review.json"
+        if path.exists():
+            try:
+                return from_dict(PublicationReadinessReview, json.loads(path.read_text(encoding="utf-8")))
+            except (TypeError, ValueError):
+                pass
+        return self.publication_review(benchmark_id)
 
     def _write_panel(self, panel: SelectedBenchmarkReviewPanel) -> None:
         spec = self.benchmark_manager.load_spec(panel.benchmark_id)
@@ -215,6 +304,14 @@ class SelectedBenchmarkReviewerPanelBuilder:
         (reviews_dir / "required_fixes.json").write_text(json.dumps(to_plain(panel.required_fixes), indent=2) + "\n", encoding="utf-8")
         (reviews_dir / "required_fixes.md").write_text(render_pilot_required_fixes(panel), encoding="utf-8")
         (reviews_dir / "publishability_assessment.md").write_text(render_publishability_assessment(panel), encoding="utf-8")
+
+    def _write_publication_review(self, review: PublicationReadinessReview) -> None:
+        spec = self.benchmark_manager.load_spec(review.benchmark_id)
+        reviews_dir = self._benchmark_dir(spec.project_id) / "reviews"
+        reviews_dir.mkdir(parents=True, exist_ok=True)
+        (reviews_dir / "main_publication_review.json").write_text(json.dumps(to_plain(review), indent=2) + "\n", encoding="utf-8")
+        (reviews_dir / "main_publication_review.md").write_text(render_publication_readiness_review(review), encoding="utf-8")
+        (reviews_dir / "main_publication_fix_list.md").write_text(render_publication_fix_list(review), encoding="utf-8")
 
     def _benchmark_dir(self, project_id: str) -> Path:
         program = self.project_manager.load_project(project_id)
@@ -339,6 +436,49 @@ class _PilotReviewContext:
         )
 
 
+@dataclass(slots=True)
+class _PublicationReadinessContext:
+    spec: SequentialSpecificityBenchmarkSpec
+    main_analysis: MainAnalysisResult | None
+    pilot_analysis: PilotAnalysisResult | None
+    related_work_status: RelatedWorkCompletionStatus | None
+    baseline_strength: BaselineStrengthAssessment | None
+    main_power_decision: MainPowerDecision | None
+    manuscript_payloads: list[dict[str, Any]]
+    manuscript_text: str
+    manuscript_paths: list[str]
+    traceability_payloads: list[dict[str, Any]]
+    traceability_paths: list[str]
+
+    @classmethod
+    def from_benchmark(
+        cls,
+        builder: SelectedBenchmarkReviewerPanelBuilder,
+        benchmark_id: str,
+    ) -> _PublicationReadinessContext:
+        spec = builder.benchmark_manager.load_spec(benchmark_id)
+        main_analysis = _latest_main_analysis(builder, benchmark_id)
+        pilot_analysis = _latest_pilot_analysis(builder, benchmark_id)
+        related_work_status = _related_work_completion_status(builder, benchmark_id)
+        baseline_strength = builder.baseline_manager.assess_baseline_strength(benchmark_id)
+        main_power_decision = MainPowerManager(builder.config).latest_alpha_decision(benchmark_id, alpha_level=0.001)
+        manuscript_payloads, manuscript_text, manuscript_paths = _publication_manuscript_artifacts(builder, spec.project_id)
+        traceability_payloads, traceability_paths = _publication_traceability_artifacts(builder, spec.project_id)
+        return cls(
+            spec=spec,
+            main_analysis=main_analysis,
+            pilot_analysis=pilot_analysis,
+            related_work_status=related_work_status,
+            baseline_strength=baseline_strength,
+            main_power_decision=main_power_decision,
+            manuscript_payloads=manuscript_payloads,
+            manuscript_text=manuscript_text,
+            manuscript_paths=manuscript_paths,
+            traceability_payloads=traceability_payloads,
+            traceability_paths=traceability_paths,
+        )
+
+
 def render_selected_benchmark_review_panel(panel: SelectedBenchmarkReviewPanel) -> str:
     lines = [
         f"# Selected Benchmark Review Panel `{panel.benchmark_id}`",
@@ -440,6 +580,53 @@ def render_publishability_assessment(panel: SelectedBenchmarkReviewPanel) -> str
             "- The area chair may recommend main-scale data or stronger scenarios before contribution claims.",
         ]
     )
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def render_publication_readiness_review(review: PublicationReadinessReview) -> str:
+    lines = [
+        f"# Publication Readiness Review `{review.benchmark_id}`",
+        "",
+        f"- Readiness: `{review.readiness}`",
+        f"- Confidence: `{review.confidence}`",
+        f"- Fatal blockers: {len(review.fatal_blockers)}",
+        f"- Major blockers: {len(review.major_blockers)}",
+        "",
+        "## Fatal Blockers",
+        "",
+    ]
+    lines.extend([f"- {item}" for item in review.fatal_blockers] or ["- none"])
+    lines.extend(["", "## Major Blockers", ""])
+    lines.extend([f"- {item}" for item in review.major_blockers] or ["- none"])
+    lines.extend(["", "## Required Revisions", ""])
+    lines.extend([f"- {item}" for item in review.required_revisions] or ["- none"])
+    lines.extend(["", "## Conservative Claim Boundary", ""])
+    lines.extend(
+        [
+            "- Synthetic-only evidence cannot support deployment-validity claims.",
+            "- Conference-candidate status requires main results, real related-work coverage, required baselines, "
+            "powered alpha claims, and traceability.",
+            "- Pilot-only results can stop at workshop positioning or not-ready status when caveats are insufficient.",
+        ]
+    )
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def render_publication_fix_list(review: PublicationReadinessReview) -> str:
+    lines = [
+        f"# Publication Readiness Fix List `{review.benchmark_id}`",
+        "",
+        f"- Readiness: `{review.readiness}`",
+        f"- Confidence: `{review.confidence}`",
+        "",
+        "## Fatal Fixes",
+        "",
+    ]
+    lines.extend([f"- {item}" for item in review.fatal_blockers] or ["- none"])
+    lines.extend(["", "## Major Fixes", ""])
+    lines.extend([f"- {item}" for item in review.major_blockers] or ["- none"])
+    lines.extend(["", "## Required Revisions", ""])
+    lines.extend([f"- {item}" for item in review.required_revisions] or ["- none"])
     return "\n".join(lines).rstrip() + "\n"
 
 
@@ -937,8 +1124,301 @@ def _deployment_overclaim(text: str) -> bool:
     if not lowered:
         return False
     deployment_markers = ["deployment validity", "operational validity", "real-world deployment", "deployed monitor"]
-    negations = ["does not claim deployment validity", "do not claim deployment validity", "not deployment evidence"]
-    return any(marker in lowered for marker in deployment_markers) and not any(negation in lowered for negation in negations)
+    negations = [
+        "does not claim deployment validity",
+        "do not claim deployment validity",
+        "no deployment validity",
+        "does not establish deployment validity",
+        "do not establish deployment validity",
+        "do not prove real-world deployment validity",
+        "not deployment evidence",
+        "not evidence that a deployed monitor",
+        "cannot establish deployment validity",
+        "cannot support deployment validity claims",
+        "deployment validity is not established",
+        "deployment validity is not claimed",
+        "deployment-validity claims are blocked",
+        "real-world validity is outside scope",
+        "synthetic evidence alone never establishes deployment validity",
+        "no synthetic main result establishes deployment validity",
+        "cannot support deployment-validity claims",
+        "not deployment-validity evidence",
+        "must not be read as deployment validity",
+    ]
+    sentences = re.split(r"(?<=[.!?])\s+", lowered.replace("\n", " "))
+    for sentence in sentences:
+        if any(marker in sentence for marker in deployment_markers) and not any(negation in sentence for negation in negations):
+            return True
+    return False
+
+
+def _latest_main_analysis(builder: SelectedBenchmarkReviewerPanelBuilder, benchmark_id: str) -> MainAnalysisResult | None:
+    try:
+        return MainAnalysisManager(builder.config).load_latest_for_benchmark(benchmark_id)
+    except FileNotFoundError:
+        return None
+
+
+def _related_work_completion_status(
+    builder: SelectedBenchmarkReviewerPanelBuilder,
+    benchmark_id: str,
+) -> RelatedWorkCompletionStatus | None:
+    try:
+        return RelatedWorkCompletionManager(builder.config).load_status(benchmark_id)
+    except (FileNotFoundError, ValueError):
+        return None
+
+
+def _publication_manuscript_artifacts(
+    builder: SelectedBenchmarkReviewerPanelBuilder,
+    project_id: str,
+) -> tuple[list[dict[str, Any]], str, list[str]]:
+    root = builder._benchmark_dir(project_id)
+    payloads: list[dict[str, Any]] = []
+    texts: list[str] = []
+    paths: list[str] = []
+    for directory_name in ["main_manuscript", "pilot_manuscript", "manuscript", "paper_package"]:
+        directory = root / directory_name
+        if not directory.exists():
+            continue
+        for path in sorted(directory.rglob("*")):
+            if not path.is_file() or "traceability" in path.name.lower():
+                continue
+            if path.suffix == ".json":
+                try:
+                    payload = json.loads(path.read_text(encoding="utf-8"))
+                except json.JSONDecodeError:
+                    continue
+                if isinstance(payload, dict):
+                    payloads.append(payload)
+                    texts.append(json.dumps(payload, sort_keys=True))
+                    paths.append(str(path))
+            elif path.suffix in {".md", ".txt"}:
+                text = path.read_text(encoding="utf-8")
+                texts.append(text)
+                paths.append(str(path))
+    return payloads, "\n".join(texts), paths
+
+
+def _publication_traceability_artifacts(
+    builder: SelectedBenchmarkReviewerPanelBuilder,
+    project_id: str,
+) -> tuple[list[dict[str, Any]], list[str]]:
+    root = builder._benchmark_dir(project_id)
+    payloads: list[dict[str, Any]] = []
+    paths: list[str] = []
+    for directory_name in ["main_manuscript", "pilot_manuscript", "manuscript", "paper_package"]:
+        directory = root / directory_name
+        if not directory.exists():
+            continue
+        for path in sorted(directory.rglob("*traceability*.json")):
+            try:
+                payload = json.loads(path.read_text(encoding="utf-8"))
+            except json.JSONDecodeError:
+                continue
+            if isinstance(payload, dict):
+                payloads.append(payload)
+                paths.append(str(path))
+    return payloads, paths
+
+
+def _review_result_evidence(
+    context: _PublicationReadinessContext,
+    major_blockers: list[str],
+    required_revisions: list[str],
+) -> None:
+    if context.main_analysis is None and context.pilot_analysis is None:
+        major_blockers.append("No main or pilot result analysis is available for publication review.")
+        required_revisions.append("Run `gapforge selected-main-analysis` or `gapforge selected-pilot-analysis` before readiness review.")
+        return
+    if context.main_analysis is not None:
+        material_blockers = [item for item in context.main_analysis.publication_blockers if not _deployment_validity_only(item)]
+        if material_blockers:
+            major_blockers.extend(material_blockers)
+            required_revisions.append("Resolve main-result publication blockers before claiming publication readiness.")
+        return
+    required_revisions.append("Results are pilot-only; add main-scale results before conference-candidate positioning.")
+
+
+def _review_related_work_completion(
+    context: _PublicationReadinessContext,
+    fatal_blockers: list[str],
+    major_blockers: list[str],
+    required_revisions: list[str],
+) -> None:
+    status = context.related_work_status
+    if status is None:
+        major_blockers.append("Related work completion status is missing.")
+        required_revisions.append("Run `gapforge selected-related-work-complete` and attach real paper records.")
+        return
+    if status.real_paper_count == 0:
+        fatal_blockers.append("Missing real related work: no required category has real attached paper records.")
+    if status.missing_categories:
+        major_blockers.append("Missing real related work categories: " + ", ".join(status.missing_categories))
+        required_revisions.append("Complete required related-work categories with real paper records; fallback-only records do not count.")
+    if status.novelty_status in {"duplicate", "blocked", "fatal_duplicate"}:
+        fatal_blockers.append(f"Novelty status is fatal: `{status.novelty_status}`.")
+
+
+def _review_baseline_strength(
+    context: _PublicationReadinessContext,
+    fatal_blockers: list[str],
+    major_blockers: list[str],
+    required_revisions: list[str],
+) -> None:
+    assessment = context.baseline_strength
+    if assessment is None:
+        major_blockers.append("Baseline strength assessment is missing.")
+        required_revisions.append("Run `gapforge selected-baseline-strength` before publication review.")
+        return
+    if assessment.missing_baselines:
+        major_blockers.append("Missing required baselines: " + ", ".join(assessment.missing_baselines))
+        required_revisions.append("Implement or restore every required baseline before strong contribution claims.")
+    leakage_blockers = [item for item in assessment.blockers if "leakage" in item.lower()]
+    if leakage_blockers:
+        fatal_blockers.extend(leakage_blockers)
+        required_revisions.append("Recalibrate thresholds on honest/null data only before publication claims.")
+    elif assessment.blockers:
+        major_blockers.extend(assessment.blockers)
+
+
+def _review_alpha_power_claims(
+    context: _PublicationReadinessContext,
+    fatal_blockers: list[str],
+    major_blockers: list[str],
+    required_revisions: list[str],
+) -> None:
+    claims_alpha_0001 = _claims_alpha_0001(context.manuscript_text)
+    decision = context.main_power_decision
+    if decision is None and context.main_analysis is not None:
+        major_blockers.append("Main alpha=0.001 power decision is missing from the review package.")
+        required_revisions.append("Run `gapforge selected-main-alpha-decision --alpha 0.001` and cite the decision in release notes.")
+    if claims_alpha_0001:
+        powered_by_decision = decision is not None and decision.decision == "power"
+        powered_by_results = context.main_analysis is not None and "0.001" in context.main_analysis.powered_alpha_levels
+        if not (powered_by_decision and powered_by_results):
+            fatal_blockers.append(
+                "Underpowered alpha=0.001 claim: manuscript claims alpha=0.001 without a powered main result and power decision."
+            )
+            required_revisions.append(
+                "Remove, downgrade, or defer alpha=0.001 publication claims unless the computed negative trace count is met."
+            )
+    if decision is not None and decision.decision != "power":
+        required_revisions.append(
+            f"Release notes must state alpha={decision.alpha_level:g} decision `{decision.decision}`: {decision.reason}"
+        )
+
+
+def _review_manuscript_traceability(
+    context: _PublicationReadinessContext,
+    fatal_blockers: list[str],
+    major_blockers: list[str],
+    required_revisions: list[str],
+) -> None:
+    if not context.manuscript_payloads and not context.manuscript_text.strip():
+        major_blockers.append("Manuscript package is missing from the publication-readiness review inputs.")
+        required_revisions.append("Generate or attach the manuscript package before publication readiness is claimed.")
+    if _deployment_overclaim(context.manuscript_text) or _payload_flag(context.manuscript_payloads, "deployment_validity_claim"):
+        fatal_blockers.append("Synthetic-only deployment claim is present in the manuscript package.")
+        required_revisions.append("Remove deployment-validity claims or replace them with explicit synthetic-evidence limitations.")
+    if not context.traceability_payloads:
+        major_blockers.append("Traceability report is missing from the manuscript package.")
+        required_revisions.append("Generate a traceability report linking claims to artifacts before publication readiness.")
+        return
+    for payload in context.traceability_payloads:
+        fatal_items = _string_list(payload.get("fatal_blockers")) + _string_list(payload.get("fatal_flaws"))
+        if fatal_items:
+            fatal_blockers.extend(f"Traceability fatal blocker: {item}" for item in fatal_items)
+        status = str(payload.get("status", "")).lower()
+        traceability_passed = payload.get("traceability_passed", True)
+        if status and status not in {"pass", "passed", "ok"}:
+            major_blockers.append(f"Traceability report status is `{status}`.")
+        if traceability_passed is False:
+            major_blockers.append("Traceability report did not pass.")
+
+
+def _publication_readiness(
+    *,
+    has_main_results: bool,
+    has_pilot_results: bool,
+    fatal_blockers: list[str],
+    major_blockers: list[str],
+) -> str:
+    if any(_no_go_blocker(item) for item in fatal_blockers):
+        return "no_go"
+    if fatal_blockers:
+        return "not_ready"
+    if has_main_results and not major_blockers:
+        return "conference_candidate"
+    if has_pilot_results and not major_blockers:
+        return "workshop_candidate"
+    return "not_ready"
+
+
+def _publication_confidence(
+    readiness: str,
+    context: _PublicationReadinessContext,
+    *,
+    fatal_blockers: list[str],
+    major_blockers: list[str],
+) -> str:
+    if readiness == "conference_candidate":
+        return "medium"
+    if readiness == "workshop_candidate":
+        return "medium" if context.related_work_status and context.baseline_strength else "low"
+    if fatal_blockers or major_blockers:
+        return "high"
+    return "low"
+
+
+def _claims_alpha_0001(text: str) -> bool:
+    lowered = text.lower()
+    markers = ["alpha=0.001", "alpha = 0.001", "alpha 0.001", "0.001 specificity", "one-in-a-thousand"]
+    safe_context = [
+        "not claimed",
+        "not claim",
+        "unless powered",
+        "underpowered",
+        "blocked",
+        "dropped",
+        "defer",
+        "missing",
+        "decision is",
+        "decision:",
+    ]
+    sentences = lowered.replace("\n", ".").split(".")
+    for sentence in sentences:
+        if any(marker in sentence for marker in markers) and not any(pattern in sentence for pattern in safe_context):
+            return True
+    return False
+
+
+def _payload_flag(payloads: list[dict[str, Any]], key: str) -> bool:
+    for payload in payloads:
+        value = payload.get(key)
+        if value is True:
+            return True
+        if isinstance(value, str) and value.lower() in {"true", "yes", "claimed"}:
+            return True
+    return False
+
+
+def _string_list(value: object) -> list[str]:
+    if isinstance(value, list):
+        return [str(item) for item in value if str(item)]
+    if isinstance(value, str) and value:
+        return [value]
+    return []
+
+
+def _deployment_validity_only(blocker: str) -> bool:
+    lowered = blocker.lower()
+    return "synthetic-only" in lowered and "deployment-validity" in lowered
+
+
+def _no_go_blocker(blocker: str) -> bool:
+    lowered = blocker.lower()
+    return "duplicate" in lowered or "novelty status is fatal" in lowered or "validity failure" in lowered
 
 
 def _weak_baseline_suite(context: _PilotReviewContext) -> bool:

@@ -17,6 +17,7 @@ from gapforge.evals.fixtures import (
     V9_FIXTURE_NAMES,
     V21_FIXTURE_NAMES,
     V22_FIXTURE_NAMES,
+    V23_FIXTURE_NAMES,
     EvalFixture,
     load_fixtures,
     load_v2_idea_fixtures,
@@ -29,6 +30,7 @@ from gapforge.evals.fixtures import (
     load_v9_fixtures,
     load_v21_fixtures,
     load_v22_fixtures,
+    load_v23_fixtures,
 )
 from gapforge.evals.metrics import (
     EvalScores,
@@ -39,6 +41,7 @@ from gapforge.evals.metrics import (
     artifact_eval_package_score,
     artifact_hygiene_score,
     baseline_calibration_quality,
+    baseline_strength_quality,
     baseline_suite_completeness,
     benchmark_comparison_honesty,
     benchmark_execution_integrity,
@@ -70,6 +73,7 @@ from gapforge.evals.metrics import (
     full_text_coverage_score,
     gap_evidence_matrix_score,
     gap_specificity_score,
+    go_no_go_decision_quality,
     honest_null_distribution_quality,
     human_feedback_integration,
     human_review_respect_score,
@@ -80,6 +84,9 @@ from gapforge.evals.metrics import (
     llm_output_grounding_score,
     low_fpr_overclaim_rejection,
     low_fpr_underpowered_warning_score,
+    main_power_decision_quality,
+    main_result_analysis_quality,
+    manuscript_maturity_honesty,
     manuscript_package_honesty,
     manuscript_traceability_score,
     migration_audit_score,
@@ -96,10 +103,12 @@ from gapforge.evals.metrics import (
     prior_work_recall_gate_score,
     prior_work_recall_proxy,
     protocol_completeness,
+    publication_review_quality,
     quality_review_gate_correctness,
     real_literature_refusal_quality,
     rebuttal_actionability,
     related_work_attachment_quality,
+    related_work_completion_quality,
     related_work_matrix_quality,
     replication_package_quality,
     report_uncertainty_score,
@@ -138,6 +147,7 @@ from gapforge.evals.metrics import (
     v8_release_gate_correctness,
     v9_release_gate_correctness,
     v22_release_gate_correctness,
+    v23_release_gate_correctness,
     venue_checklist_score,
 )
 from gapforge.experiments.protocol import build_protocol_from_state
@@ -183,6 +193,7 @@ class EvalReport:
     v9: bool = False
     v21: bool = False
     v22: bool = False
+    v23: bool = False
     report_path: Path | None = None
 
     @property
@@ -213,39 +224,128 @@ def run_evals(
     v9: bool = False,
     v21: bool = False,
     v22: bool = False,
+    v23: bool = False,
     v2_ideas: bool = False,
 ) -> EvalReport:
-    selected = (
-        [fixture]
-        if fixture
-        else (
-            V2_IDEA_FIXTURE_NAMES
-            if v2_ideas
-            else V22_FIXTURE_NAMES
-            if v22
-            else V21_FIXTURE_NAMES
-            if v21
-            else V8_FIXTURE_NAMES
-            if v8
-            else V9_FIXTURE_NAMES
-            if v9
-            else V7_FIXTURE_NAMES
-            if v7
-            else V6_FIXTURE_NAMES
-            if v6
-            else V5_FIXTURE_NAMES
-            if v5
-            else V4_FIXTURE_NAMES
-            if v4
-            else V3_FIXTURE_NAMES
-            if v3
-            else V2_FIXTURE_NAMES
-            if v2
-            else None
+    version_flag_count = sum([v2, v3, v4, v5, v6, v7, v8, v9, v21, v22, v23, v2_ideas])
+    if fixture or version_flag_count <= 1:
+        selected = (
+            [fixture]
+            if fixture
+            else (
+                V2_IDEA_FIXTURE_NAMES
+                if v2_ideas
+                else V22_FIXTURE_NAMES
+                if v22
+                else V23_FIXTURE_NAMES
+                if v23
+                else V21_FIXTURE_NAMES
+                if v21
+                else V8_FIXTURE_NAMES
+                if v8
+                else V9_FIXTURE_NAMES
+                if v9
+                else V7_FIXTURE_NAMES
+                if v7
+                else V6_FIXTURE_NAMES
+                if v6
+                else V5_FIXTURE_NAMES
+                if v5
+                else V4_FIXTURE_NAMES
+                if v4
+                else V3_FIXTURE_NAMES
+                if v3
+                else V2_FIXTURE_NAMES
+                if v2
+                else None
+            )
         )
+        fixtures = _load_eval_fixtures_for_flags(
+            selected,
+            fixture_root,
+            v2=v2,
+            v3=v3,
+            v4=v4,
+            v5=v5,
+            v6=v6,
+            v7=v7,
+            v8=v8,
+            v9=v9,
+            v21=v21,
+            v22=v22,
+            v23=v23,
+            v2_ideas=v2_ideas,
+        )
+    else:
+        fixtures = []
+        if v2:
+            fixtures.extend(load_fixtures(V2_FIXTURE_NAMES, fixture_root))
+        if v3:
+            fixtures.extend(load_v3_fixtures(V3_FIXTURE_NAMES, fixture_root))
+        if v4:
+            fixtures.extend(load_v4_fixtures(V4_FIXTURE_NAMES, fixture_root))
+        if v5:
+            fixtures.extend(load_v5_fixtures(V5_FIXTURE_NAMES, fixture_root))
+        if v6:
+            fixtures.extend(load_v6_fixtures(V6_FIXTURE_NAMES, fixture_root))
+        if v7:
+            fixtures.extend(load_v7_fixtures(V7_FIXTURE_NAMES, fixture_root))
+        if v8:
+            fixtures.extend(load_v8_fixtures(V8_FIXTURE_NAMES, fixture_root))
+        if v9:
+            fixtures.extend(load_v9_fixtures(V9_FIXTURE_NAMES, fixture_root))
+        if v21:
+            fixtures.extend(load_v21_fixtures(V21_FIXTURE_NAMES, fixture_root))
+        if v22:
+            fixtures.extend(load_v22_fixtures(V22_FIXTURE_NAMES, fixture_root))
+        if v23:
+            fixtures.extend(load_v23_fixtures(V23_FIXTURE_NAMES, fixture_root))
+        if v2_ideas:
+            fixtures.extend(load_v2_idea_fixtures(V2_IDEA_FIXTURE_NAMES, fixture_root))
+    results = [_evaluate_fixture(item) for item in fixtures]
+    report = EvalReport(
+        results=results,
+        v2=v2 or any(item.is_v2 for item in fixtures),
+        v2_ideas=v2_ideas or any(item.is_v2_ideas for item in fixtures),
+        v3=v3 or any(item.is_v3 for item in fixtures),
+        v4=v4 or any(item.is_v4 for item in fixtures),
+        v5=v5 or any(item.is_v5 for item in fixtures),
+        v6=v6 or any(item.is_v6 for item in fixtures),
+        v7=v7 or any(item.is_v7 for item in fixtures),
+        v8=v8 or any(item.is_v8 for item in fixtures),
+        v9=v9 or any(item.is_v9 for item in fixtures),
+        v21=v21 or any(item.is_v21 for item in fixtures),
+        v22=v22 or any(item.is_v22 for item in fixtures),
+        v23=v23 or any(item.is_v23 for item in fixtures),
     )
+    if write_report:
+        path = (output_dir or Path.cwd()) / "eval_report.md"
+        path.write_text(render_eval_report(report), encoding="utf-8")
+        report.report_path = path
+    return report
+
+
+def _load_eval_fixtures_for_flags(
+    selected: list[str] | None,
+    fixture_root: Path | None,
+    *,
+    v2: bool,
+    v3: bool,
+    v4: bool,
+    v5: bool,
+    v6: bool,
+    v7: bool,
+    v8: bool,
+    v9: bool,
+    v21: bool,
+    v22: bool,
+    v23: bool,
+    v2_ideas: bool,
+) -> list[EvalFixture]:
     if v22:
         fixtures = load_v22_fixtures(selected, fixture_root)
+    elif v23:
+        fixtures = load_v23_fixtures(selected, fixture_root)
     elif v21:
         fixtures = load_v21_fixtures(selected, fixture_root)
     elif v9:
@@ -266,26 +366,7 @@ def run_evals(
         fixtures = load_v3_fixtures(selected, fixture_root)
     else:
         fixtures = load_fixtures(selected, fixture_root)
-    results = [_evaluate_fixture(item) for item in fixtures]
-    report = EvalReport(
-        results=results,
-        v2=v2 or any(item.is_v2 for item in fixtures),
-        v2_ideas=v2_ideas or any(item.is_v2_ideas for item in fixtures),
-        v3=v3 or any(item.is_v3 for item in fixtures),
-        v4=v4 or any(item.is_v4 for item in fixtures),
-        v5=v5 or any(item.is_v5 for item in fixtures),
-        v6=v6 or any(item.is_v6 for item in fixtures),
-        v7=v7 or any(item.is_v7 for item in fixtures),
-        v8=v8 or any(item.is_v8 for item in fixtures),
-        v9=v9 or any(item.is_v9 for item in fixtures),
-        v21=v21 or any(item.is_v21 for item in fixtures),
-        v22=v22 or any(item.is_v22 for item in fixtures),
-    )
-    if write_report:
-        path = (output_dir or Path.cwd()) / "eval_report.md"
-        path.write_text(render_eval_report(report), encoding="utf-8")
-        report.report_path = path
-    return report
+    return fixtures
 
 
 def render_eval_report(report: EvalReport) -> str:
@@ -330,6 +411,10 @@ def render_eval_report(report: EvalReport) -> str:
         v22_scores = [score for result in report.results if (score := result.scores.v22_overall()) is not None]
         v22_overall = round(sum(v22_scores) / len(v22_scores), 3) if v22_scores else 0.0
         lines.extend([f"v2.2 Pilot Benchmark overall score: **{v22_overall:.3f}**", ""])
+    if report.v23:
+        v23_scores = [score for result in report.results if (score := result.scores.v23_overall()) is not None]
+        v23_overall = round(sum(v23_scores) / len(v23_scores), 3) if v23_scores else 0.0
+        lines.extend([f"v2.3 Main Benchmark overall score: **{v23_overall:.3f}**", ""])
     if report.v2_ideas:
         v2_idea_scores = [score for result in report.results if (score := result.scores.v2_ideas_overall()) is not None]
         v2_idea_overall = round(sum(v2_idea_scores) / len(v2_idea_scores), 3) if v2_idea_scores else 0.0
@@ -534,6 +619,23 @@ def render_eval_report(report: EvalReport) -> str:
                     "",
                 ]
             )
+        if scores.v23_overall() is not None:
+            lines.extend(
+                [
+                    "### v2.3 Main Benchmark Scores",
+                    "",
+                    f"- main_power_decision_quality: {scores.main_power_decision_quality:.3f}",
+                    f"- related_work_completion_quality: {scores.related_work_completion_quality:.3f}",
+                    f"- baseline_strength_quality: {scores.baseline_strength_quality:.3f}",
+                    f"- main_result_analysis_quality: {scores.main_result_analysis_quality:.3f}",
+                    f"- go_no_go_decision_quality: {scores.go_no_go_decision_quality:.3f}",
+                    f"- publication_review_quality: {scores.publication_review_quality:.3f}",
+                    f"- manuscript_maturity_honesty: {scores.manuscript_maturity_honesty:.3f}",
+                    f"- v23_release_gate_correctness: {scores.v23_release_gate_correctness:.3f}",
+                    f"- fixture_v23_overall: {scores.v23_overall():.3f}",
+                    "",
+                ]
+            )
         if scores.v2_ideas_overall() is not None:
             lines.extend(
                 [
@@ -714,6 +816,16 @@ def _evaluate_fixture(fixture: EvalFixture) -> FixtureEvalResult:
         scores.related_work_attachment_quality = related_work_attachment_quality(selected_benchmark_fixture)
         scores.pilot_reviewer_quality = pilot_reviewer_quality(selected_benchmark_fixture)
         scores.v22_release_gate_correctness = v22_release_gate_correctness(selected_benchmark_fixture)
+    if fixture.is_v23:
+        selected_benchmark_fixture = fixture.selected_benchmark_v23_fixture or fixture.selected_benchmark_fixture
+        scores.main_power_decision_quality = main_power_decision_quality(selected_benchmark_fixture)
+        scores.related_work_completion_quality = related_work_completion_quality(selected_benchmark_fixture)
+        scores.baseline_strength_quality = baseline_strength_quality(selected_benchmark_fixture)
+        scores.main_result_analysis_quality = main_result_analysis_quality(selected_benchmark_fixture)
+        scores.go_no_go_decision_quality = go_no_go_decision_quality(selected_benchmark_fixture)
+        scores.publication_review_quality = publication_review_quality(selected_benchmark_fixture)
+        scores.manuscript_maturity_honesty = manuscript_maturity_honesty(selected_benchmark_fixture)
+        scores.v23_release_gate_correctness = v23_release_gate_correctness(selected_benchmark_fixture)
     if fixture.is_v2_ideas:
         idea_fixture = fixture.idea_fixture
         scores.topic_portfolio_diversity = topic_portfolio_diversity(idea_fixture)
@@ -1000,6 +1112,14 @@ def _failed_checks(scores: EvalScores, result: FixtureEvalResult) -> list[tuple[
         "underpowered_claim_rejection": 1.0,
         "reviewer_blocker_quality": 0.8,
         "selected_benchmark_release_gate_correctness": 1.0,
+        "main_power_decision_quality": 0.85,
+        "related_work_completion_quality": 0.85,
+        "baseline_strength_quality": 0.85,
+        "main_result_analysis_quality": 0.85,
+        "go_no_go_decision_quality": 0.85,
+        "publication_review_quality": 0.85,
+        "manuscript_maturity_honesty": 0.85,
+        "v23_release_gate_correctness": 1.0,
     }
     suggestions = {
         "full_text_coverage_score": "Parse more full text before evaluating research quality.",
@@ -1084,6 +1204,16 @@ def _failed_checks(scores: EvalScores, result: FixtureEvalResult) -> list[tuple[
         "underpowered_claim_rejection": "Block fake results, deployment claims, and strong low-FPR smoke claims.",
         "reviewer_blocker_quality": "Make reviewers expose blockers, required fixes, synthetic limits, and novelty uncertainty.",
         "selected_benchmark_release_gate_correctness": "Require the selected benchmark smoke path and block premature publication claims.",
+        "main_power_decision_quality": "Record a main-scale power plan and explicit alpha=0.001 decision.",
+        "related_work_completion_quality": "Complete required categories with real paper records or keep missing categories visible.",
+        "baseline_strength_quality": "Implement required baselines, report optional LLM judge separately, and block leakage.",
+        "main_result_analysis_quality": (
+            "Back main/pilot analysis with metrics, predictions, comparisons, error analysis, and low-FPR reports."
+        ),
+        "go_no_go_decision_quality": "Produce evidence-backed go/revise/run-more/no-go decisions with visible blockers.",
+        "publication_review_quality": "Keep publication-readiness review conservative and fatal on overclaims.",
+        "manuscript_maturity_honesty": "Label manuscript maturity to match evidence and keep unresolved blockers visible.",
+        "v23_release_gate_correctness": "Allow honest publication/workshop/revise/no-go outcomes but fail mislabeled evidence.",
     }
     for name, threshold in thresholds.items():
         value = getattr(scores, name)

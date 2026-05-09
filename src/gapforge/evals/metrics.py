@@ -144,6 +144,14 @@ class EvalScores:
     related_work_attachment_quality: float | None = None
     pilot_reviewer_quality: float | None = None
     v22_release_gate_correctness: float | None = None
+    main_power_decision_quality: float | None = None
+    related_work_completion_quality: float | None = None
+    baseline_strength_quality: float | None = None
+    main_result_analysis_quality: float | None = None
+    go_no_go_decision_quality: float | None = None
+    publication_review_quality: float | None = None
+    manuscript_maturity_honesty: float | None = None
+    v23_release_gate_correctness: float | None = None
 
     def overall(self) -> float:
         positive = [
@@ -337,6 +345,22 @@ class EvalScores:
             self.related_work_attachment_quality,
             self.pilot_reviewer_quality,
             self.v22_release_gate_correctness,
+        ]
+        present = [value for value in values if value is not None]
+        if not present:
+            return None
+        return round(sum(present) / len(present), 3)
+
+    def v23_overall(self) -> float | None:
+        values = [
+            self.main_power_decision_quality,
+            self.related_work_completion_quality,
+            self.baseline_strength_quality,
+            self.main_result_analysis_quality,
+            self.go_no_go_decision_quality,
+            self.publication_review_quality,
+            self.manuscript_maturity_honesty,
+            self.v23_release_gate_correctness,
         ]
         present = [value for value in values if value is not None]
         if not present:
@@ -2168,6 +2192,198 @@ def v22_release_gate_correctness(fixture: dict[str, object]) -> float:
     return round((0.7 * int(computed_pass is False)) + (0.3 * int(bool(expected_blockers))), 3)
 
 
+def main_power_decision_quality(fixture: dict[str, object]) -> float:
+    power = _dict(fixture.get("main_power"))
+    decision = _dict(power.get("alpha_001_decision"))
+    required_counts = _dict(power.get("required_negative_counts"))
+    planned_counts = _dict(power.get("planned_negative_counts"))
+    required_001 = _int(required_counts.get("0.001"))
+    planned_001 = _int(planned_counts.get("0.001"))
+    decision_value = str(decision.get("decision", ""))
+    checks = [
+        bool(power.get("plan_exists")),
+        "0.001" in {str(item) for item in _list(power.get("target_alpha_levels"))},
+        str(power.get("primary_alpha")) in {"0.01", "0.001"},
+        bool(_dict(power.get("required_positive_counts"))),
+        required_001 > 0,
+        bool(_dict(power.get("confidence_interval_targets"))),
+        bool(_list(power.get("stopping_rules"))),
+        bool(power.get("sequential_multiple_testing_adjustment")),
+        bool(decision),
+        decision_value in {"power", "downgrade", "drop", "defer"},
+        bool(decision.get("reason")),
+        bool(power.get("release_notes_state_alpha_decision")),
+    ]
+    if decision_value == "power":
+        checks.append(planned_001 >= required_001 > 0)
+    else:
+        checks.append(bool(_list(decision.get("blockers"))) or bool(decision.get("reason")))
+    return round(sum(1 for item in checks if item) / len(checks), 3)
+
+
+def related_work_completion_quality(fixture: dict[str, object]) -> float:
+    related = _dict(fixture.get("related_work_completion"))
+    categories = _list(related.get("required_categories"))
+    missing = _list(related.get("missing_categories"))
+    statuses = _dict(related.get("category_statuses"))
+    complete_statuses = [
+        item
+        for item in statuses.values()
+        if isinstance(item, dict) and str(item.get("status")) == "complete" and bool(_list(item.get("real_paper_ids")))
+    ]
+    fallback_only = bool(related.get("fallback_only_counts_as_complete"))
+    checks = [
+        bool(related.get("status_exists")),
+        len(categories) >= 8,
+        _int(related.get("real_paper_count")) >= len(categories) - len(missing),
+        len(complete_statuses) >= len(categories) - len(missing),
+        _int(related.get("fallback_paper_count")) >= 0,
+        not fallback_only,
+        bool(related.get("next_searches_generated")) if missing else True,
+        str(related.get("novelty_status")) in {"unknown", "sufficiently_covered", "duplicate"},
+        not bool(related.get("missing_real_work_hidden")),
+    ]
+    if missing:
+        checks.append(str(related.get("novelty_status")) == "unknown" or str(related.get("novelty_status")) == "duplicate")
+        checks.append(bool(_list(related.get("blockers"))))
+    else:
+        checks.append(str(related.get("novelty_status")) in {"sufficiently_covered", "duplicate"})
+        checks.append(not bool(_list(related.get("blockers"))) or str(related.get("novelty_status")) == "duplicate")
+    return round(sum(1 for item in checks if item) / len(checks), 3)
+
+
+def baseline_strength_quality(fixture: dict[str, object]) -> float:
+    baseline = _dict(fixture.get("baseline_strength"))
+    required = {str(item) for item in _list(baseline.get("required_baselines"))}
+    implemented = {str(item) for item in _list(baseline.get("implemented_baselines"))}
+    missing = required - implemented
+    required_expected = {
+        "sequential_change_point_detector",
+        "calibrated_anomaly_detector",
+        "permutation_null_distribution_detector",
+        "conformal_score_threshold_detector",
+        "action_only_transition_detector",
+        "transcript_visible_semantic_heuristic_detector",
+        "robust_lexical_substitution_monitor",
+    }
+    checks = [
+        bool(baseline.get("assessment_exists")),
+        required_expected.issubset(required),
+        not bool(required - implemented) or bool(baseline.get("missing_required_baselines_block")),
+        str(baseline.get("calibration_status")) in {"calibrated", "blocked_leakage", "incomplete"},
+        not bool(baseline.get("calibration_leakage")) or bool(baseline.get("calibration_leakage_blocks")),
+        bool(baseline.get("optional_llm_judge_reported_separately")),
+        bool(baseline.get("optional_llm_judge_missing_blocks_ci")) is False,
+        bool(baseline.get("strong_claim_allowed")) == (not missing and not bool(baseline.get("calibration_leakage"))),
+        not bool(baseline.get("missing_baselines_hidden")),
+    ]
+    return round(sum(1 for item in checks if item) / len(checks), 3)
+
+
+def main_result_analysis_quality(fixture: dict[str, object]) -> float:
+    result = _dict(fixture.get("main_results"))
+    run_type = str(result.get("run_type", ""))
+    checks = [
+        run_type in {"main", "pilot"},
+        bool(result.get("manifest_exists")) or bool(result.get("pilot_only_decision")),
+        bool(result.get("executed")) or bool(result.get("pilot_only_decision")),
+        bool(result.get("metrics_json")) or run_type == "pilot",
+        bool(result.get("predictions_json")) or run_type == "pilot",
+        bool(result.get("baseline_comparison")) or run_type == "pilot",
+        bool(result.get("error_analysis")) or run_type == "pilot",
+        bool(result.get("low_fpr_report")),
+        bool(result.get("powered_alpha_status_recorded")),
+        bool(result.get("publication_claim_blocked_if_unpowered")),
+        bool(result.get("synthetic_limitations_visible")),
+        not bool(result.get("deployment_validity_claim")),
+    ]
+    return round(sum(1 for item in checks if item) / len(checks), 3)
+
+
+def go_no_go_decision_quality(fixture: dict[str, object]) -> float:
+    decision = _dict(fixture.get("go_no_go"))
+    value = str(decision.get("decision", ""))
+    blockers = _list(decision.get("blockers"))
+    next_steps = _list(decision.get("required_next_steps"))
+    checks = [
+        bool(decision.get("exists")),
+        value in {"go_publication_candidate", "revise_benchmark", "run_more_experiments", "no_go"},
+        bool(decision.get("reason")),
+        bool(_list(decision.get("evidence"))),
+        str(decision.get("confidence")) in {"low", "medium", "high"},
+        bool(next_steps) or value == "go_publication_candidate",
+        not bool(decision.get("publication_candidate_with_fatal_blockers")),
+        not bool(decision.get("hides_blockers")),
+    ]
+    if value == "go_publication_candidate":
+        checks.append(not blockers)
+    else:
+        checks.append(bool(blockers) or bool(next_steps))
+    return round(sum(1 for item in checks if item) / len(checks), 3)
+
+
+def publication_review_quality(fixture: dict[str, object]) -> float:
+    review = _dict(fixture.get("publication_review"))
+    readiness = str(review.get("readiness", ""))
+    fatal = _list(review.get("fatal_blockers"))
+    major = _list(review.get("major_blockers"))
+    revisions = _list(review.get("required_revisions"))
+    checks = [
+        bool(review.get("exists")),
+        readiness in {"not_ready", "workshop_candidate", "conference_candidate", "no_go"},
+        str(review.get("confidence")) in {"low", "medium", "high"},
+        bool(review.get("synthetic_deployment_overclaim_fatal")) or not _claims_deployment_overclaim(fixture),
+        bool(review.get("underpowered_alpha_claim_fatal")) or not _claims_alpha_overclaim(fixture),
+        bool(review.get("missing_real_related_work_major_or_fatal")) or related_work_completion_quality(fixture) >= 0.85,
+        bool(review.get("missing_required_baseline_major_or_fatal")) or baseline_strength_quality(fixture) >= 0.85,
+        bool(review.get("pilot_only_caveats")) or str(_dict(fixture.get("main_results")).get("run_type")) == "main",
+        not bool(review.get("hides_blockers")),
+    ]
+    if readiness == "conference_candidate":
+        checks.append(not fatal and not major and not revisions)
+    elif readiness == "no_go":
+        checks.append(bool(fatal))
+    else:
+        checks.append(bool(fatal) or bool(major) or bool(revisions) or readiness == "workshop_candidate")
+    return round(sum(1 for item in checks if item) / len(checks), 3)
+
+
+def manuscript_maturity_honesty(fixture: dict[str, object]) -> float:
+    manuscript = _dict(fixture.get("manuscript"))
+    status = str(manuscript.get("status", ""))
+    maturity = str(manuscript.get("evidence_maturity", ""))
+    run_type = str(_dict(fixture.get("main_results")).get("run_type", ""))
+    blockers = _list(manuscript.get("unresolved_blockers"))
+    checks = [
+        bool(manuscript.get("package_exists")),
+        status in {"pilot", "workshop_candidate", "publication_candidate", "revise_benchmark", "no_go", "not_ready"},
+        maturity in {"pilot", "main"},
+        bool(manuscript.get("artifact_package_included")),
+        bool(manuscript.get("go_no_go_included")),
+        bool(manuscript.get("reviewer_blockers_visible")),
+        not bool(manuscript.get("deployment_validity_claim")),
+        not bool(manuscript.get("alpha_001_claim")) or _alpha_001_powered_by_fixture(fixture),
+        not bool(manuscript.get("publication_ready_with_fatal_blockers")),
+    ]
+    if run_type == "pilot":
+        checks.append(maturity == "pilot" and status in {"pilot", "workshop_candidate", "not_ready"})
+    elif status == "publication_candidate":
+        checks.append(maturity == "main" and not blockers)
+    else:
+        checks.append(bool(blockers) or status in {"workshop_candidate", "no_go"})
+    return round(sum(1 for item in checks if item) / len(checks), 3)
+
+
+def v23_release_gate_correctness(fixture: dict[str, object]) -> float:
+    expected = _dict(fixture.get("v23_release_gate"))
+    expected_pass = bool(expected.get("expected_pass"))
+    computed_pass = _computed_v23_release_gate(fixture)
+    if expected_pass:
+        return 1.0 if computed_pass else 0.0
+    expected_blockers = _list(expected.get("expected_blockers"))
+    return round((0.7 * int(computed_pass is False)) + (0.3 * int(bool(expected_blockers))), 3)
+
+
 def _tokens(text: str) -> list[str]:
     return re.findall(r"[a-z0-9-]+", text.lower())
 
@@ -2350,6 +2566,87 @@ def _computed_v22_release_gate(fixture: dict[str, object]) -> bool:
             not bool(claims.get("alpha_001_claim_allowed_when_underpowered")),
         ]
     )
+
+
+def _computed_v23_release_gate(fixture: dict[str, object]) -> bool:
+    expected = _dict(fixture.get("v23_release_gate"))
+    decision = str(_dict(fixture.get("go_no_go")).get("decision", ""))
+    readiness = str(_dict(fixture.get("publication_review")).get("readiness", ""))
+    manuscript_status = str(_dict(fixture.get("manuscript")).get("status", ""))
+    mature_decision = _v23_decision_status(decision, readiness, manuscript_status)
+    publication_candidate = mature_decision == "publication_candidate"
+    honest_terminal = mature_decision in {"publication_candidate", "workshop_candidate", "revise_benchmark", "no_go"}
+    visible_related = not bool(_dict(fixture.get("related_work_completion")).get("missing_real_work_hidden"))
+    visible_baselines = not bool(_dict(fixture.get("baseline_strength")).get("missing_baselines_hidden"))
+    no_overclaims = not _claims_alpha_overclaim(fixture) and not _claims_deployment_overclaim(fixture)
+    publication_ok = True
+    if publication_candidate:
+        publication_ok = all(
+            [
+                _alpha_001_powered_by_fixture(fixture),
+                related_work_completion_quality(fixture) >= 0.85,
+                baseline_strength_quality(fixture) >= 0.85,
+                str(_dict(fixture.get("main_results")).get("run_type")) == "main",
+                readiness == "conference_candidate",
+                manuscript_status == "publication_candidate",
+                not _list(_dict(fixture.get("publication_review")).get("fatal_blockers")),
+                not _list(_dict(fixture.get("publication_review")).get("major_blockers")),
+                not _list(_dict(fixture.get("manuscript")).get("unresolved_blockers")),
+            ]
+        )
+    return all(
+        [
+            bool(expected.get("v22_release_gate_passes", True)),
+            main_power_decision_quality(fixture) >= 0.85,
+            bool(_dict(fixture.get("main_power")).get("alpha_001_decision")),
+            bool(_dict(fixture.get("related_work_completion")).get("status_exists")),
+            bool(_dict(fixture.get("baseline_strength")).get("assessment_exists")),
+            bool(_dict(fixture.get("main_dataset")).get("dataset_exists"))
+            or bool(_dict(fixture.get("main_dataset")).get("feasibility_report_exists")),
+            bool(_dict(fixture.get("main_results")).get("executed")) or bool(_dict(fixture.get("main_results")).get("pilot_only_decision")),
+            main_result_analysis_quality(fixture) >= 0.85,
+            go_no_go_decision_quality(fixture) >= 0.85,
+            publication_review_quality(fixture) >= 0.85,
+            manuscript_maturity_honesty(fixture) >= 0.85,
+            honest_terminal,
+            no_overclaims,
+            visible_related,
+            visible_baselines,
+            publication_ok,
+        ]
+    )
+
+
+def _v23_decision_status(decision: str, readiness: str, manuscript_status: str) -> str:
+    if decision == "no_go" or readiness == "no_go" or manuscript_status == "no_go":
+        return "no_go"
+    if decision == "go_publication_candidate" or readiness == "conference_candidate" or manuscript_status == "publication_candidate":
+        return "publication_candidate"
+    if readiness == "workshop_candidate" or manuscript_status == "workshop_candidate":
+        return "workshop_candidate"
+    if decision == "revise_benchmark":
+        return "revise_benchmark"
+    return "unknown"
+
+
+def _claims_alpha_overclaim(fixture: dict[str, object]) -> bool:
+    claims = _dict(fixture.get("claims"))
+    return bool(claims.get("alpha_001_overclaim"))
+
+
+def _claims_deployment_overclaim(fixture: dict[str, object]) -> bool:
+    claims = _dict(fixture.get("claims"))
+    return bool(claims.get("deployment_validity_overclaim"))
+
+
+def _alpha_001_powered_by_fixture(fixture: dict[str, object]) -> bool:
+    power = _dict(fixture.get("main_power"))
+    decision = _dict(power.get("alpha_001_decision"))
+    required = _int(_dict(power.get("required_negative_counts")).get("0.001"))
+    planned = _int(_dict(power.get("planned_negative_counts")).get("0.001"))
+    analysis = _dict(fixture.get("main_results"))
+    powered_levels = {str(item) for item in _list(analysis.get("powered_alpha_levels"))}
+    return str(decision.get("decision")) == "power" and planned >= required > 0 and "0.001" in powered_levels
 
 
 def _computed_v1_readiness(fixture: dict[str, object]) -> bool:

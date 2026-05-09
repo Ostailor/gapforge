@@ -19,6 +19,7 @@ from gapforge.evals.fixtures import (
     V9_FIXTURE_NAMES,
     V21_FIXTURE_NAMES,
     V22_FIXTURE_NAMES,
+    V23_FIXTURE_NAMES,
     list_fixtures,
     load_fixture,
     load_v2_idea_fixture,
@@ -31,6 +32,7 @@ from gapforge.evals.fixtures import (
     load_v9_fixture,
     load_v21_fixture,
     load_v22_fixture,
+    load_v23_fixture,
 )
 from gapforge.evals.metrics import (
     actual_run_gate_correctness,
@@ -38,6 +40,7 @@ from gapforge.evals.metrics import (
     anonymization_safety,
     artifact_eval_package_score,
     baseline_calibration_quality,
+    baseline_strength_quality,
     baseline_suite_completeness,
     benchmark_execution_integrity,
     benchmark_failure_path_preservation,
@@ -52,12 +55,16 @@ from gapforge.evals.metrics import (
     error_analysis_quality,
     fake_result_rejection,
     gap_evidence_matrix_score,
+    go_no_go_decision_quality,
     honest_null_distribution_quality,
     idea_candidate_specificity,
     idea_yield_gate_correctness,
     live_source_coverage_score,
     low_fpr_overclaim_rejection,
     low_fpr_underpowered_warning_score,
+    main_power_decision_quality,
+    main_result_analysis_quality,
+    manuscript_maturity_honesty,
     manuscript_package_honesty,
     manuscript_traceability_score,
     mutation_quality,
@@ -67,10 +74,12 @@ from gapforge.evals.metrics import (
     pilot_power_plan_quality,
     pilot_reviewer_quality,
     prior_work_recall_gate_score,
+    publication_review_quality,
     quality_review_gate_correctness,
     real_literature_refusal_quality,
     rebuttal_actionability,
     related_work_attachment_quality,
+    related_work_completion_quality,
     replication_package_quality,
     reproduction_verification_quality,
     result_aggregation_quality,
@@ -96,6 +105,7 @@ from gapforge.evals.metrics import (
     v7_release_gate_correctness,
     v8_release_gate_correctness,
     v22_release_gate_correctness,
+    v23_release_gate_correctness,
     venue_checklist_score,
 )
 from gapforge.models import Claim, ResearchRunState, ResearchTopic, SourceCoverageReport
@@ -578,6 +588,18 @@ def test_run_v9_evals_includes_pilot_metrics_offline(tmp_path: Path, monkeypatch
     assert "artifact_hygiene_score" in text
 
 
+def test_run_multi_version_evals_loads_each_requested_fixture_family(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("GAPFORGE_DISABLE_NETWORK", "1")
+
+    report = run_evals(v8=True, v9=True, output_dir=tmp_path, write_report=True)
+
+    assert len(report.results) == len(V8_FIXTURE_NAMES) + len(V9_FIXTURE_NAMES)
+    assert any(result.fixture_name == "complete_submission_package" for result in report.results)
+    assert any(result.fixture_name == "accepted_refusal" for result in report.results)
+    assert report.v8 is True
+    assert report.v9 is True
+
+
 def test_run_v21_evals_includes_selected_benchmark_metrics_offline(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("GAPFORGE_DISABLE_NETWORK", "1")
 
@@ -813,6 +835,82 @@ def test_v22_selected_benchmark_fixture_metrics() -> None:
     assert v22_release_gate_correctness(deployment_overclaim) == 1.0
     assert manuscript_honest["pilot_manuscript"]["pilot_labeled"] is True
     assert pilot_reviewer_quality(reviewer_blockers) == 1.0
+
+
+def test_v23_eval_fixtures_are_complete_and_offline() -> None:
+    for name in V23_FIXTURE_NAMES:
+        fixture = load_v23_fixture(name)
+        assert fixture.is_v23
+        assert fixture.topic
+        assert fixture.papers
+        payload = fixture.selected_benchmark_v23_fixture
+        assert payload["main_power"]
+        assert payload["related_work_completion"]
+        assert payload["baseline_strength"]
+        assert payload["main_results"]
+        assert payload["go_no_go"]
+        assert payload["publication_review"]
+        assert payload["manuscript"]
+        assert payload["v23_release_gate"]
+
+
+def test_eval_cli_v23_fixture_and_report(tmp_path: Path) -> None:
+    env = {**os.environ, "GAPFORGE_DISABLE_NETWORK": "1"}
+    env["PYTHONPATH"] = str(Path.cwd() / "src")
+    env["GAPFORGE_ROOT"] = str(tmp_path)
+
+    single = subprocess.run(
+        [sys.executable, "-m", "gapforge.cli", "eval", "--fixture", "complete_publication_candidate", "--v23"],
+        cwd=Path.cwd(),
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    report = subprocess.run(
+        [sys.executable, "-m", "gapforge.cli", "eval", "--v23", "--write-report"],
+        cwd=Path.cwd(),
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert single.returncode == 0, single.stderr
+    assert report.returncode == 0, report.stderr
+    text = (tmp_path / "eval_report.md").read_text(encoding="utf-8")
+    assert "Overall score" in report.stdout
+    assert "v2.3 Main Benchmark" in text
+    assert "complete_publication_candidate" in text
+
+
+def test_v23_selected_benchmark_fixture_metrics() -> None:
+    complete = load_v23_fixture("complete_publication_candidate").selected_benchmark_v23_fixture
+    workshop = load_v23_fixture("pilot_workshop_candidate").selected_benchmark_v23_fixture
+    related = load_v23_fixture("revise_due_to_related_work").selected_benchmark_v23_fixture
+    baselines = load_v23_fixture("revise_due_to_baselines").selected_benchmark_v23_fixture
+    no_go = load_v23_fixture("no_go_due_to_novelty_duplicate").selected_benchmark_v23_fixture
+    alpha = load_v23_fixture("alpha_overclaim_blocked").selected_benchmark_v23_fixture
+    deployment = load_v23_fixture("synthetic_deployment_overclaim_blocked").selected_benchmark_v23_fixture
+
+    assert main_power_decision_quality(complete) == 1.0
+    assert related_work_completion_quality(complete) == 1.0
+    assert baseline_strength_quality(complete) == 1.0
+    assert main_result_analysis_quality(complete) == 1.0
+    assert go_no_go_decision_quality(complete) == 1.0
+    assert publication_review_quality(complete) == 1.0
+    assert manuscript_maturity_honesty(complete) == 1.0
+    assert v23_release_gate_correctness(complete) == 1.0
+    assert v23_release_gate_correctness(workshop) == 1.0
+    assert v23_release_gate_correctness(related) == 1.0
+    assert v23_release_gate_correctness(baselines) == 1.0
+    assert v23_release_gate_correctness(no_go) == 1.0
+    assert related_work_completion_quality(related) >= 0.85
+    assert baseline_strength_quality(baselines) >= 0.85
+    assert v23_release_gate_correctness(alpha) == 1.0
+    assert v23_release_gate_correctness(deployment) == 1.0
+    assert alpha["v23_release_gate"]["expected_pass"] is False
+    assert deployment["v23_release_gate"]["expected_pass"] is False
 
 
 def test_v2_duplicate_ideas_are_rejected_by_dossier_aware_novelty_gate() -> None:

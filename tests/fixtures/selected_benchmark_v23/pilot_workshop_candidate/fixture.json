@@ -1,0 +1,55 @@
+{
+  "topic": "v2.3 pilot-only workshop-candidate selected benchmark",
+  "main_power": {
+    "plan_exists": true,
+    "target_alpha_levels": ["0.01", "0.001"],
+    "primary_alpha": "0.01",
+    "required_negative_counts": {"0.01": 299, "0.001": 2995},
+    "required_positive_counts": {"pilot_minimum": 150},
+    "planned_negative_counts": {"0.001": 300},
+    "confidence_interval_targets": {"confidence": 0.95},
+    "stopping_rules": ["keep alpha=0.001 deferred until main scale"],
+    "sequential_multiple_testing_adjustment": "holm_bonferroni",
+    "release_notes_state_alpha_decision": true,
+    "alpha_001_decision": {
+      "decision": "defer",
+      "reason": "pilot-only package does not power alpha=0.001",
+      "required_count": 2995,
+      "planned_count": 300,
+      "blockers": ["main-scale negative traces not collected"]
+    }
+  },
+  "related_work_completion": {
+    "status_exists": true,
+    "required_categories": ["low-FPR detection/evaluation", "multi-agent collusion/covert coordination", "monitor evasion", "sequential testing/change-point detection", "benchmark/evaluation protocol papers", "anomaly detection specificity", "medical screening specificity analogies if used", "cartel/covert-channel analogies if used"],
+    "category_statuses": {"a": {"status": "complete", "real_paper_ids": ["p1"]}, "b": {"status": "complete", "real_paper_ids": ["p2"]}, "c": {"status": "complete", "real_paper_ids": ["p3"]}, "d": {"status": "complete", "real_paper_ids": ["p4"]}, "e": {"status": "complete", "real_paper_ids": ["p5"]}, "f": {"status": "complete", "real_paper_ids": ["p6"]}, "g": {"status": "complete", "real_paper_ids": ["p7"]}, "h": {"status": "complete", "real_paper_ids": ["p8"]}},
+    "missing_categories": [],
+    "real_paper_count": 8,
+    "fallback_paper_count": 0,
+    "fallback_only_counts_as_complete": false,
+    "next_searches_generated": false,
+    "novelty_status": "sufficiently_covered",
+    "blockers": [],
+    "missing_real_work_hidden": false
+  },
+  "baseline_strength": {
+    "assessment_exists": true,
+    "required_baselines": ["sequential_change_point_detector", "calibrated_anomaly_detector", "permutation_null_distribution_detector", "conformal_score_threshold_detector", "action_only_transition_detector", "transcript_visible_semantic_heuristic_detector", "robust_lexical_substitution_monitor"],
+    "implemented_baselines": ["sequential_change_point_detector", "calibrated_anomaly_detector", "permutation_null_distribution_detector", "conformal_score_threshold_detector", "action_only_transition_detector", "transcript_visible_semantic_heuristic_detector", "robust_lexical_substitution_monitor"],
+    "calibration_status": "calibrated",
+    "calibration_leakage": false,
+    "calibration_leakage_blocks": true,
+    "missing_required_baselines_block": true,
+    "optional_llm_judge_reported_separately": true,
+    "optional_llm_judge_missing_blocks_ci": false,
+    "strong_claim_allowed": true,
+    "missing_baselines_hidden": false
+  },
+  "main_dataset": {"dataset_exists": false, "feasibility_report_exists": true, "synthetic_label": true},
+  "main_results": {"run_type": "pilot", "manifest_exists": false, "executed": false, "pilot_only_decision": true, "metrics_json": false, "predictions_json": false, "baseline_comparison": false, "error_analysis": false, "low_fpr_report": true, "powered_alpha_status_recorded": true, "powered_alpha_levels": ["0.01"], "publication_claim_blocked_if_unpowered": true, "synthetic_limitations_visible": true, "deployment_validity_claim": false},
+  "go_no_go": {"exists": true, "decision": "run_more_experiments", "reason": "pilot evidence is honest but main scale remains uncollected", "evidence": ["pilot-analysis", "power-decision"], "blockers": ["main run missing"], "required_next_steps": ["collect main-scale dataset"], "confidence": "medium", "publication_candidate_with_fatal_blockers": false, "hides_blockers": false},
+  "publication_review": {"exists": true, "readiness": "workshop_candidate", "fatal_blockers": [], "major_blockers": [], "required_revisions": ["conference claims require main results"], "confidence": "medium", "synthetic_deployment_overclaim_fatal": true, "underpowered_alpha_claim_fatal": true, "missing_real_related_work_major_or_fatal": true, "missing_required_baseline_major_or_fatal": true, "pilot_only_caveats": true, "hides_blockers": false},
+  "manuscript": {"package_exists": true, "status": "workshop_candidate", "evidence_maturity": "pilot", "artifact_package_included": true, "go_no_go_included": true, "reviewer_blockers_visible": true, "unresolved_blockers": ["main run missing"], "deployment_validity_claim": false, "alpha_001_claim": false, "publication_ready_with_fatal_blockers": false},
+  "claims": {"alpha_001_overclaim": false, "alpha_001_overclaim_blocked": false, "deployment_validity_overclaim": false, "deployment_overclaim_blocked": false},
+  "v23_release_gate": {"v22_release_gate_passes": true, "expected_pass": true, "expected_decision_status": "workshop_candidate", "expected_blockers": []}
+}

@@ -153,6 +153,7 @@ from gapforge.release_gate.v08 import V08ReleaseGateEnforcer, V08ReleaseGateResu
 from gapforge.release_gate.v2 import V2ReleaseGateEnforcer, V2ReleaseGateResult
 from gapforge.release_gate.v21 import V21ReleaseGateEnforcer, V21ReleaseGateResult
 from gapforge.release_gate.v22 import V22ReleaseGateEnforcer, V22ReleaseGateResult
+from gapforge.release_gate.v23 import V23ReleaseGateEnforcer, V23ReleaseGateResult
 from gapforge.replication import ReplicationPackageExporter, ReplicationPackageVerifier, ReproductionRunner
 from gapforge.reporting import write_final_report
 from gapforge.results import ErrorAnalysisBuilder, ResultAggregator, ResultParser, ResultStatisticsAnalyzer
@@ -161,8 +162,18 @@ from gapforge.retrieval import build_project_index, build_run_index
 from gapforge.reviewers.empirical import EmpiricalReviewBuilder
 from gapforge.search_strategy import plan_search_strategy as plan_search_strategy_skill
 from gapforge.selected_benchmark import (
+    BaselineStrengthAssessment,
     CollusiveAlternativeManager,
+    GoNoGoManager,
     HonestNullManager,
+    MainAnalysisManager,
+    MainAnalysisResult,
+    MainDatasetBuilder,
+    MainPowerDecision,
+    MainPowerManager,
+    MainPowerPlan,
+    MainRunManager,
+    MainTraceDataset,
     MonitorBaseline,
     MonitorBaselineManager,
     MonitorCalibrationRecord,
@@ -173,19 +184,30 @@ from gapforge.selected_benchmark import (
     PilotPowerPlan,
     PilotRunManager,
     PilotTraceDataset,
+    PublicationReadinessReview,
+    RelatedWorkCompletionManager,
+    RelatedWorkCompletionStatus,
     SelectedBenchmarkExperimentRunner,
+    SelectedBenchmarkGoNoGo,
     SelectedBenchmarkManager,
     SelectedBenchmarkManuscript,
     SelectedBenchmarkManuscriptManager,
     SelectedBenchmarkPaperPackage,
+    SelectedBenchmarkRelatedWorkManager,
     SelectedBenchmarkReviewerPanelBuilder,
     SelectedBenchmarkReviewPanel,
     SelectedBenchmarkRunResult,
     SelectedBenchmarkWorkspaceManager,
+    SelectedMainExecution,
+    SelectedMainManuscript,
+    SelectedMainManuscriptManager,
+    SelectedMainPaperPackage,
+    SelectedMainRunManifest,
     SelectedPilotExecution,
     SelectedPilotManuscript,
     SelectedPilotManuscriptManager,
     SelectedPilotPaperPackage,
+    SelectedRelatedWorkMatrix,
     SequentialMetricManager,
     SequentialMetricResult,
     SequentialSpecificityBenchmarkSpec,
@@ -1777,6 +1799,123 @@ def create_monitor_baselines(
     return MonitorBaselineManager(_config(config)).create_baselines(benchmark_id)
 
 
+def assess_selected_baseline_strength(
+    benchmark_id: str,
+    *,
+    config: GapForgeConfig | None = None,
+) -> BaselineStrengthAssessment:
+    """Assess whether selected benchmark baselines support stronger contribution claims."""
+
+    return MonitorBaselineManager(_config(config)).assess_baseline_strength(benchmark_id)
+
+
+def assess_baseline_strength(
+    benchmark_id: str,
+    *,
+    config: GapForgeConfig | None = None,
+) -> BaselineStrengthAssessment:
+    """Alias for the v2.3 selected benchmark baseline-strength assessment."""
+
+    return assess_selected_baseline_strength(benchmark_id, config=config)
+
+
+def build_main_dataset(
+    benchmark_id: str,
+    *,
+    negative_count: int | None = None,
+    positive_count: int | None = None,
+    config: GapForgeConfig | None = None,
+) -> MainTraceDataset:
+    """Build or feasibility-gate the v2.3 selected benchmark main trace dataset."""
+
+    return MainDatasetBuilder(_config(config)).build(
+        benchmark_id,
+        negative_count=negative_count,
+        positive_count=positive_count,
+    )
+
+
+def create_selected_main_manifest(
+    benchmark_id: str,
+    *,
+    dataset_id: str,
+    config: GapForgeConfig | None = None,
+) -> SelectedMainRunManifest:
+    """Create the v2.3 selected benchmark main run manifest."""
+
+    return MainRunManager(_config(config)).create_manifest(benchmark_id, dataset_id)
+
+
+def run_selected_main_benchmark(
+    benchmark_id: str,
+    *,
+    manifest_id: str,
+    config: GapForgeConfig | None = None,
+) -> SelectedMainExecution:
+    """Run a v2.3 selected benchmark main manifest."""
+
+    return MainRunManager(_config(config)).run(benchmark_id, manifest_id)
+
+
+def run_selected_main(
+    benchmark_id: str,
+    *,
+    manifest_id: str | None = None,
+    dataset_id: str | None = None,
+    config: GapForgeConfig | None = None,
+) -> SelectedMainExecution:
+    """Run the v2.3 selected main benchmark, creating a manifest when given a dataset."""
+
+    cfg = _config(config)
+    manager = MainRunManager(cfg)
+    resolved_manifest_id = manifest_id
+    if not resolved_manifest_id:
+        if not dataset_id:
+            raise ValueError("run_selected_main requires either manifest_id or dataset_id.")
+        resolved_manifest_id = manager.create_manifest(benchmark_id, dataset_id).id
+    return manager.run(benchmark_id, resolved_manifest_id)
+
+
+def analyze_selected_main_benchmark(
+    execution_id: str,
+    *,
+    config: GapForgeConfig | None = None,
+) -> MainAnalysisResult:
+    """Analyze saved v2.3 selected benchmark main run artifacts."""
+
+    return MainAnalysisManager(_config(config)).analyze(execution_id)
+
+
+def analyze_selected_main(
+    execution_id: str,
+    *,
+    config: GapForgeConfig | None = None,
+) -> MainAnalysisResult:
+    """Alias for the v2.3 selected main analysis workflow."""
+
+    return analyze_selected_main_benchmark(execution_id, config=config)
+
+
+def selected_benchmark_go_no_go(
+    benchmark_id: str,
+    *,
+    config: GapForgeConfig | None = None,
+) -> SelectedBenchmarkGoNoGo:
+    """Compute the v2.3 selected benchmark go/no-go decision."""
+
+    return GoNoGoManager(_config(config)).decide(benchmark_id)
+
+
+def selected_go_no_go(
+    benchmark_id: str,
+    *,
+    config: GapForgeConfig | None = None,
+) -> SelectedBenchmarkGoNoGo:
+    """Alias for the v2.3 selected benchmark go/no-go decision."""
+
+    return selected_benchmark_go_no_go(benchmark_id, config=config)
+
+
 def run_selected_benchmark_smoke(
     benchmark_id: str,
     *,
@@ -1811,6 +1950,40 @@ def selected_benchmark_review(
     """Run the deterministic reviewer panel for selected-benchmark artifacts."""
 
     return SelectedBenchmarkReviewerPanelBuilder(_config(config)).review(benchmark_id)
+
+
+def selected_publication_review(
+    benchmark_id: str,
+    *,
+    config: GapForgeConfig | None = None,
+) -> PublicationReadinessReview:
+    """Run the v2.3 publication-readiness reviewer panel for the selected benchmark."""
+
+    return SelectedBenchmarkReviewerPanelBuilder(_config(config)).publication_review(benchmark_id)
+
+
+def selected_publication_readiness_review(
+    benchmark_id: str,
+    *,
+    config: GapForgeConfig | None = None,
+) -> PublicationReadinessReview:
+    """Alias for the v2.3 selected benchmark publication-readiness review."""
+
+    return selected_publication_review(benchmark_id, config=config)
+
+
+def selected_main_manuscript(
+    benchmark_id: str,
+    *,
+    include_paper_package: bool = True,
+    config: GapForgeConfig | None = None,
+) -> SelectedMainManuscript | SelectedMainPaperPackage:
+    """Generate the v2.3 main/pilot-ready selected benchmark manuscript package."""
+
+    manager = SelectedMainManuscriptManager(_config(config))
+    if include_paper_package:
+        return manager.paper_package(benchmark_id)
+    return manager.generate(benchmark_id)
 
 
 def selected_benchmark_manuscript(
@@ -1972,6 +2145,94 @@ def v22_release_gate(
     """Evaluate the v2.2 selected pilot benchmark release gate."""
 
     enforcer = V22ReleaseGateEnforcer(_config(config))
+    result = enforcer.evaluate()
+    if write_report:
+        enforcer.write_outputs(result)
+    return result
+
+
+def create_main_sample_size_plan(
+    benchmark_id: str,
+    *,
+    planned_negative_count: int | None = None,
+    planned_positive_count: int | None = None,
+    config: GapForgeConfig | None = None,
+) -> MainPowerPlan:
+    """Create the v2.3 main-scale power plan for the selected benchmark."""
+
+    return MainPowerManager(_config(config)).create_plan(
+        benchmark_id,
+        planned_negative_count=planned_negative_count,
+        planned_positive_count=planned_positive_count,
+    )
+
+
+def create_main_power_plan(
+    benchmark_id: str,
+    *,
+    planned_negative_count: int | None = None,
+    planned_positive_count: int | None = None,
+    config: GapForgeConfig | None = None,
+) -> MainPowerPlan:
+    """Alias for the v2.3 main-scale power plan workflow."""
+
+    return create_main_sample_size_plan(
+        benchmark_id,
+        planned_negative_count=planned_negative_count,
+        planned_positive_count=planned_positive_count,
+        config=config,
+    )
+
+
+def decide_alpha_target(
+    benchmark_id: str,
+    *,
+    alpha: float,
+    config: GapForgeConfig | None = None,
+) -> MainPowerDecision:
+    """Record the v2.3 formal decision for a main-scale alpha target."""
+
+    return MainPowerManager(_config(config)).decide_alpha(benchmark_id, alpha_level=alpha)
+
+
+def complete_selected_related_work(
+    benchmark_id: str,
+    *,
+    config: GapForgeConfig | None = None,
+) -> RelatedWorkCompletionStatus:
+    """Run the v2.3 selected benchmark related-work completion campaign."""
+
+    return RelatedWorkCompletionManager(_config(config)).complete(benchmark_id)
+
+
+def complete_related_work(
+    benchmark_id: str,
+    *,
+    config: GapForgeConfig | None = None,
+) -> RelatedWorkCompletionStatus:
+    """Alias for the v2.3 selected benchmark related-work completion campaign."""
+
+    return complete_selected_related_work(benchmark_id, config=config)
+
+
+def complete_selected_related_work_matrix(
+    benchmark_id: str,
+    *,
+    config: GapForgeConfig | None = None,
+) -> SelectedRelatedWorkMatrix:
+    """Build the selected benchmark related-work matrix from attached records."""
+
+    return SelectedBenchmarkRelatedWorkManager(_config(config)).build_related_work_matrix(benchmark_id)
+
+
+def v23_release_gate(
+    *,
+    write_report: bool = False,
+    config: GapForgeConfig | None = None,
+) -> V23ReleaseGateResult:
+    """Evaluate the v2.3 selected benchmark mature decision release gate."""
+
+    enforcer = V23ReleaseGateEnforcer(_config(config))
     result = enforcer.evaluate()
     if write_report:
         enforcer.write_outputs(result)

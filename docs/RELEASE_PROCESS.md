@@ -32,8 +32,9 @@ GAPFORGE_DISABLE_NETWORK=1 gapforge report --strict
 15. For v2 releases, complete the Idea Discovery Engine process in `docs/V2_ROADMAP.md`, `docs/V2_ACCEPTANCE_CRITERIA.md`, `docs/V2_IDEA_DISCOVERY.md`, `docs/V2_IDEA_YIELD_METRICS.md`, `docs/V2_RESEARCH_AGENDA_MODE.md`, and `docs/V2_HUMAN_FEEDBACK.md`.
 16. For v2.1 releases, complete the selected-idea execution process in `docs/V2_1_ROADMAP.md`, `docs/V2_1_SELECTED_IDEA.md`, `docs/V2_1_BENCHMARK_SPEC.md`, and `docs/V2_1_ACCEPTANCE_CRITERIA.md`.
 17. For v2.2 releases, complete the pilot-scale benchmark study process in `docs/V2_2_ROADMAP.md`, `docs/V2_2_PILOT_BENCHMARK.md`, `docs/V2_2_ACCEPTANCE_CRITERIA.md`, `docs/V2_2_POWER_AND_SAMPLE_SIZE.md`, and `docs/V2_2_REVIEWER_BLOCKERS.md`.
-18. Commit with a message that records constraints, rejected alternatives if useful, confidence, scope risk, tested commands, and known gaps.
-19. Tag the release only after the checks pass.
+18. For v2.3 releases, complete the main-scale benchmark and publication-readiness process in `docs/V2_3_ROADMAP.md`, `docs/V2_3_MAIN_BENCHMARK.md`, `docs/V2_3_RELATED_WORK_COMPLETION.md`, `docs/V2_3_PUBLICATION_READINESS.md`, and `docs/V2_3_ACCEPTANCE_CRITERIA.md`.
+19. Commit with a message that records constraints, rejected alternatives if useful, confidence, scope risk, tested commands, and known gaps.
+20. Tag the release only after the checks pass.
 
 ## v0.3 Validation Levels
 
@@ -633,6 +634,99 @@ If the pilot manifest or result artifacts are missing, release notes must say `v
 
 The v2.2 release notes should also include a v2.3 handoff section naming the remaining main-study work: unsupported alpha targets and required negative counts, hard-negative gaps, weak or missing baselines, prior-work categories still incomplete, reviewer blockers preserved as warnings, and any synthetic-data external-validity risks.
 
+## v2.3 Main-Scale Benchmark and Publication-Readiness Gate
+
+v2.3 must not claim main-scale benchmark completion or publication readiness from the v2.2 pilot, generated prose, incomplete prior-work records, or reviewer language that weakens fatal blockers. It must require either artifact-backed main-scale readiness or an explicit no-go.
+
+v2.3 continues the locked selected idea:
+
+- Idea ID: `idea-sequential-specificity-benchmark-for-low-fpr-collusion-audits`
+- Title: `Sequential specificity benchmark for low-FPR collusion audits`
+
+The v2.2 handoff includes 300 negative, 150 positive, and 214 hard-negative synthetic traces; `alpha=0.01` supported at pilot scale; `alpha=0.001` underpowered and blocked; structurally attached but substantively incomplete related-work categories; pilot-grade baselines; and a manuscript package that is not publication-ready.
+
+Before tagging v2.3, the release process should require:
+
+```bash
+make ci
+make eval
+gapforge v1-readiness --write-report --json
+gapforge v2-release-gate --write-report --json
+gapforge v21-release-gate --write-report --json
+gapforge v22-release-gate --write-report --json
+gapforge selected-main-power-plan --benchmark-id <benchmark-id>
+gapforge selected-main-alpha-decision --benchmark-id <benchmark-id> --alpha 0.001
+gapforge selected-main-power-report --benchmark-id <benchmark-id>
+gapforge selected-related-work-complete --benchmark-id <benchmark-id>
+gapforge selected-related-work-next-searches --benchmark-id <benchmark-id>
+gapforge selected-related-work-status --benchmark-id <benchmark-id>
+gapforge selected-benchmark-related-work --benchmark-id <benchmark-id>
+gapforge selected-monitor-baselines --benchmark-id <benchmark-id>
+gapforge selected-baseline-strength --benchmark-id <benchmark-id>
+gapforge selected-baseline-strength-report --benchmark-id <benchmark-id>
+gapforge build-main-trace-dataset --benchmark-id <benchmark-id>
+gapforge main-trace-dataset-report --dataset-id <main-dataset-id>
+gapforge selected-main-manifest --benchmark-id <benchmark-id> --dataset-id <main-dataset-id>
+gapforge selected-main-run --benchmark-id <benchmark-id> --manifest-id <main-manifest-id>
+gapforge selected-main-status --execution-id <main-execution-id>
+gapforge selected-main-analysis --execution-id <main-execution-id>
+gapforge selected-main-replication-package --execution-id <main-execution-id>
+gapforge selected-publication-review --benchmark-id <benchmark-id>
+gapforge selected-publication-fix-list --benchmark-id <benchmark-id>
+gapforge selected-main-manuscript --benchmark-id <benchmark-id>
+gapforge selected-main-paper-package --benchmark-id <benchmark-id>
+gapforge selected-benchmark-go-no-go --benchmark-id <benchmark-id>
+gapforge selected-go-no-go-report --benchmark-id <benchmark-id>
+gapforge dashboard --project-id <selected-project-id> --include-selected-main
+gapforge v23-release-gate --write-report --json
+```
+
+Equivalent scripts may use `gapforge.api` wrappers. If the v2.3 CLI surface is not implemented yet, release candidates must document the replacement path or mark the missing command as a blocker. Prose cannot replace missing sample-size, related-work, baseline, main-run, replication, reviewer, or no-go artifacts.
+
+The v2.3 release gate should require:
+
+- deterministic CI remains passing
+- v1 readiness, v2 accepted-candidate evidence, v2.1 smoke evidence, and v2.2 pilot evidence remain available
+- selected idea lock is preserved
+- v2.2 blockers are attached and not weakened
+- main-scale sample-size plan is locked before main outcome inspection
+- every alpha target is classified as supported, dropped, blocked, or not requested
+- `alpha=0.001` is powered or explicitly dropped before any claim language uses it
+- real prior-work records exist for every required related-work category, or optional categories are dropped from manuscript claims
+- related-work matrix maps real records to benchmark, low-FPR, sequential, baseline, threat-model, and novelty implications
+- stronger baseline suite is registered and run, or missing baselines have explicit blockers
+- selected baseline-strength assessment allows strong claims only when required baselines exist and calibration leakage is absent
+- main dataset is generated or expanded with lineage, counts, seeds, leakage checks, and synthetic-data labels, or no-go is recorded
+- main dataset alpha support is explicit, including underpowered or feasibility-only status for `alpha=0.001`
+- main manifest exists with `run_type: main`, or no-go is recorded
+- main result artifacts are persisted and parsed before analysis
+- main execution writes metrics, predictions, baseline comparison, error analysis, low-FPR report, preserved failures, and status artifacts
+- sequential low-FPR metrics include uncertainty and repeated-look correction
+- hard-negative false positives are reported as an honest-negative slice
+- replication package exists for completed main runs
+- publication-readiness reviewer panel classifies blockers as resolved, accepted with narrowed claims, or fatal
+- manuscript package links claims to related-work records, result artifacts, reviewer decisions, and limitations
+- go/no-go recommendation is explicit
+- go/no-go can be `no_go`; publication-candidate status is blocked by open fatal reviewer, novelty, traceability, power, or baseline failures
+- no deployment-validity, unsupported `alpha=0.001`, hidden-prior-work, monitor-superiority, or publication-readiness claim passes without gates
+
+Release notes must distinguish:
+
+- v2.2 pilot evidence versus v2.3 main evidence
+- main-scale sample-size status
+- `alpha=0.001` powered, dropped, blocked, or not requested
+- main dataset generation or no-go status
+- main manifest and execution status
+- baseline suite strength and missing-baseline blockers
+- related-work record and matrix completion status
+- low-FPR and hard-negative results with uncertainty
+- replication package status
+- publication-readiness reviewer findings
+- manuscript package readiness level
+- final go/no-go recommendation
+
+If v2.3 lacks enough evidence for main or publication claims, release notes must say `v2.3 main-scale benchmark upgrade ended in explicit no-go; release claims remain blocked` or `v2.3 blocked; main-scale benchmark and no-go evidence are incomplete`. Do not call the manuscript publication-ready while fatal reviewer blockers remain.
+
 ## Tagging
 
 Use semantic version tags:
@@ -676,4 +770,9 @@ Release notes should include:
 - For v2.2, do not claim pilot-scale benchmark success unless a locked pilot manifest and artifact-backed pilot results exist.
 - For v2.2, do not claim deployment validity, unsupported `alpha=0.001` operational specificity, main benchmark maturity, monitor superiority, or publication readiness from synthetic pilot data.
 - For v2.2, preserve unresolved reviewer blockers and publication blockers in release notes instead of weakening low-FPR, prior-work, or related-work gates.
+- For v2.3, do not claim main-scale benchmark readiness unless the sample-size plan, alpha decision, main dataset or no-go, baseline suite, main manifest, result artifacts, and replication evidence support it.
+- For v2.3, do not claim `alpha=0.001` unless it is powered after correction; otherwise explicitly drop or block it.
+- For v2.3, do not claim related-work completion unless real prior-work records and matrix entries exist for the required categories.
+- For v2.3, do not claim publication readiness unless the publication reviewer panel has no fatal blockers and the manuscript package links claims to artifacts, citations, and accepted limitations.
+- For v2.3, treat an explicit no-go as an acceptable release outcome only when the blocker analysis and claim restrictions are durable and visible.
 - Do not publish generated `runs/`, caches, or local environment artifacts as source.

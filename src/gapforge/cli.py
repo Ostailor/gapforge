@@ -239,12 +239,14 @@ from gapforge.release_gate import (
     V2ReleaseGateEnforcer,
     V21ReleaseGateEnforcer,
     V22ReleaseGateEnforcer,
+    V23ReleaseGateEnforcer,
     render_v04_release_gate_markdown,
     render_v09_release_gate_markdown,
     render_v1_readiness_markdown,
     render_v2_release_gate_markdown,
     render_v21_release_gate_markdown,
     render_v22_release_gate_markdown,
+    render_v23_release_gate_markdown,
 )
 from gapforge.release_gate.v05 import render_v05_release_gate_markdown
 from gapforge.release_gate.v06 import render_v06_release_gate_markdown
@@ -305,12 +307,18 @@ from gapforge.search_strategy import (
 )
 from gapforge.selected_benchmark import (
     CollusiveAlternativeManager,
+    GoNoGoManager,
     HonestNullManager,
+    MainAnalysisManager,
+    MainDatasetBuilder,
+    MainPowerManager,
+    MainRunManager,
     MonitorBaselineManager,
     PilotAnalysisManager,
     PilotDatasetBuilder,
     PilotPowerManager,
     PilotRunManager,
+    RelatedWorkCompletionManager,
     SelectedBenchmarkCodexTaskManager,
     SelectedBenchmarkExperimentRunner,
     SelectedBenchmarkManager,
@@ -318,15 +326,22 @@ from gapforge.selected_benchmark import (
     SelectedBenchmarkRelatedWorkManager,
     SelectedBenchmarkReviewerPanelBuilder,
     SelectedBenchmarkWorkspaceManager,
+    SelectedMainManuscriptManager,
     SelectedPilotManuscriptManager,
     SequentialMetricManager,
     SyntheticTraceGenerator,
     render_collusive_distribution_report,
     render_honest_null_report,
+    render_main_power_plan,
+    render_main_power_report,
     render_metric_plan,
     render_pilot_power_assessment,
     render_pilot_power_plan,
     render_pilot_trace_dataset_report,
+    render_publication_readiness_review,
+    render_related_work_completion_status,
+    render_selected_main_analysis,
+    render_selected_main_status,
     render_trace_list,
 )
 from gapforge.sources.canonical import canonicalize_project, canonicalize_run, load_merge_report_for_run
@@ -683,6 +698,7 @@ def build_parser() -> argparse.ArgumentParser:
     eval_parser.add_argument("--v9", action="store_true", help="Run v0.9 pilot and v1-readiness evaluation fixtures.")
     eval_parser.add_argument("--v21", action="store_true", help="Run v2.1 selected benchmark execution evaluation fixtures.")
     eval_parser.add_argument("--v22", action="store_true", help="Run v2.2 pilot benchmark evaluation fixtures.")
+    eval_parser.add_argument("--v23", action="store_true", help="Run v2.3 main benchmark decision evaluation fixtures.")
     eval_parser.add_argument("--v2-ideas", action="store_true", help="Run v2 Idea Discovery Engine evaluation fixtures.")
     eval_parser.add_argument("--write-report", action="store_true")
 
@@ -720,6 +736,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--include-selected-pilot",
         action="store_true",
         help="Include v2.2 selected pilot benchmark dashboard pages.",
+    )
+    dashboard_parser.add_argument(
+        "--include-selected-main",
+        action="store_true",
+        help="Include v2.3 selected main benchmark dashboard pages.",
     )
 
     selected_idea_full_report_parser = subparsers.add_parser(
@@ -1358,6 +1379,10 @@ def build_parser() -> argparse.ArgumentParser:
     v22_release_gate_parser.add_argument("--write-report", action="store_true")
     v22_release_gate_parser.add_argument("--json", action="store_true")
 
+    v23_release_gate_parser = subparsers.add_parser("v23-release-gate", help="Enforce the v2.3 mature decision release gate.")
+    v23_release_gate_parser.add_argument("--write-report", action="store_true")
+    v23_release_gate_parser.add_argument("--json", action="store_true")
+
     cli_audit_parser = subparsers.add_parser("cli-audit", help="Audit command grouping, help text, and v1 CLI discoverability.")
     cli_audit_parser.add_argument("--write-report", action="store_true")
 
@@ -1677,6 +1702,42 @@ def build_parser() -> argparse.ArgumentParser:
     )
     pilot_trace_dataset_report_parser.add_argument("--dataset-id", required=True)
 
+    build_main_trace_dataset_parser = subparsers.add_parser(
+        "build-main-trace-dataset", help="Build or feasibility-gate the selected benchmark main trace dataset."
+    )
+    build_main_trace_dataset_parser.add_argument("--benchmark-id", required=True)
+    build_main_trace_dataset_parser.add_argument("--negative-count", type=int, default=None)
+    build_main_trace_dataset_parser.add_argument("--positive-count", type=int, default=None)
+
+    main_trace_dataset_report_parser = subparsers.add_parser(
+        "main-trace-dataset-report", help="Render a selected benchmark main trace dataset report."
+    )
+    main_trace_dataset_report_parser.add_argument("--dataset-id", required=True)
+
+    selected_main_manifest_parser = subparsers.add_parser("selected-main-manifest", help="Create a selected benchmark main run manifest.")
+    selected_main_manifest_parser.add_argument("--benchmark-id", required=True)
+    selected_main_manifest_parser.add_argument("--dataset-id", required=True)
+
+    selected_main_run_parser = subparsers.add_parser("selected-main-run", help="Run a selected benchmark main manifest.")
+    selected_main_run_parser.add_argument("--benchmark-id", required=True)
+    selected_main_run_parser.add_argument("--manifest-id", required=True)
+
+    selected_main_status_parser = subparsers.add_parser("selected-main-status", help="Print selected benchmark main execution status.")
+    selected_main_status_parser.add_argument("--execution-id", required=True)
+
+    selected_main_analysis_parser = subparsers.add_parser("selected-main-analysis", help="Analyze selected benchmark main run artifacts.")
+    selected_main_analysis_parser.add_argument("--execution-id", required=True)
+
+    selected_benchmark_go_no_go_parser = subparsers.add_parser(
+        "selected-benchmark-go-no-go", help="Compute the selected benchmark v2.3 go/no-go decision."
+    )
+    selected_benchmark_go_no_go_parser.add_argument("--benchmark-id", required=True)
+
+    selected_go_no_go_report_parser = subparsers.add_parser(
+        "selected-go-no-go-report", help="Print the selected benchmark v2.3 go/no-go report."
+    )
+    selected_go_no_go_report_parser.add_argument("--benchmark-id", required=True)
+
     trace_dataset_report_parser = subparsers.add_parser(
         "trace-dataset-report", help="Print a selected-benchmark synthetic trace dataset report."
     )
@@ -1726,6 +1787,22 @@ def build_parser() -> argparse.ArgumentParser:
     )
     pilot_baseline_report_parser.add_argument("--benchmark-id", required=True)
 
+    selected_baseline_strength_parser = subparsers.add_parser(
+        "selected-baseline-strength", help="Assess selected benchmark main-scale baseline strength."
+    )
+    selected_baseline_strength_parser.add_argument("--benchmark-id", required=True)
+
+    implement_required_baseline_task_parser = subparsers.add_parser(
+        "implement-required-baseline-task", help="Restore/register one required selected benchmark main-scale baseline."
+    )
+    implement_required_baseline_task_parser.add_argument("--benchmark-id", required=True)
+    implement_required_baseline_task_parser.add_argument("--baseline", required=True)
+
+    selected_baseline_strength_report_parser = subparsers.add_parser(
+        "selected-baseline-strength-report", help="Print selected benchmark baseline strength report."
+    )
+    selected_baseline_strength_report_parser.add_argument("--benchmark-id", required=True)
+
     selected_benchmark_workspace_parser = subparsers.add_parser(
         "selected-benchmark-workspace", help="Create a runnable selected benchmark experiment workspace."
     )
@@ -1748,6 +1825,21 @@ def build_parser() -> argparse.ArgumentParser:
         "selected-benchmark-related-work", help="Attach selected benchmark related-work matrix."
     )
     selected_related_work_parser.add_argument("--benchmark-id", required=True)
+
+    selected_related_work_complete_parser = subparsers.add_parser(
+        "selected-related-work-complete", help="Run selected benchmark related-work completion campaign."
+    )
+    selected_related_work_complete_parser.add_argument("--benchmark-id", required=True)
+
+    selected_related_work_next_searches_parser = subparsers.add_parser(
+        "selected-related-work-next-searches", help="Print next searches for missing selected benchmark related-work categories."
+    )
+    selected_related_work_next_searches_parser.add_argument("--benchmark-id", required=True)
+
+    selected_related_work_status_parser = subparsers.add_parser(
+        "selected-related-work-status", help="Print selected benchmark related-work completion status."
+    )
+    selected_related_work_status_parser.add_argument("--benchmark-id", required=True)
 
     selected_novelty_report_parser = subparsers.add_parser(
         "selected-benchmark-novelty-report", help="Render selected benchmark conservative novelty positioning."
@@ -1787,6 +1879,22 @@ def build_parser() -> argparse.ArgumentParser:
     selected_pilot_power_scope.add_argument("--benchmark-id")
     selected_pilot_power_scope.add_argument("--dataset-id")
 
+    selected_main_power_plan_parser = subparsers.add_parser(
+        "selected-main-power-plan", help="Create and render the selected benchmark main-scale power plan."
+    )
+    selected_main_power_plan_parser.add_argument("--benchmark-id", required=True)
+
+    selected_main_alpha_decision_parser = subparsers.add_parser(
+        "selected-main-alpha-decision", help="Record a selected benchmark main-scale alpha decision."
+    )
+    selected_main_alpha_decision_parser.add_argument("--benchmark-id", required=True)
+    selected_main_alpha_decision_parser.add_argument("--alpha", type=float, required=True)
+
+    selected_main_power_report_parser = subparsers.add_parser(
+        "selected-main-power-report", help="Print the selected benchmark main-scale power report."
+    )
+    selected_main_power_report_parser.add_argument("--benchmark-id", required=True)
+
     selected_benchmark_codex_task_parser = subparsers.add_parser(
         "selected-benchmark-codex-task", help="Create a Codex/GPT-5.4 implementation task pack for the selected benchmark."
     )
@@ -1822,6 +1930,16 @@ def build_parser() -> argparse.ArgumentParser:
     )
     selected_benchmark_fix_list_parser.add_argument("--benchmark-id", required=True)
 
+    selected_publication_review_parser = subparsers.add_parser(
+        "selected-publication-review", help="Run the selected benchmark publication-readiness reviewer panel."
+    )
+    selected_publication_review_parser.add_argument("--benchmark-id", required=True)
+
+    selected_publication_fix_list_parser = subparsers.add_parser(
+        "selected-publication-fix-list", help="Print selected benchmark publication-readiness fixes."
+    )
+    selected_publication_fix_list_parser.add_argument("--benchmark-id", required=True)
+
     selected_pilot_review_parser = subparsers.add_parser("selected-pilot-review", help="Run the selected benchmark pilot reviewer panel.")
     selected_pilot_review_parser.add_argument("--benchmark-id", required=True)
 
@@ -1839,6 +1957,16 @@ def build_parser() -> argparse.ArgumentParser:
         "selected-pilot-paper-package", help="Export the selected benchmark pilot paper package."
     )
     selected_pilot_paper_package_parser.add_argument("--benchmark-id", required=True)
+
+    selected_main_manuscript_parser = subparsers.add_parser(
+        "selected-main-manuscript", help="Generate the selected benchmark main/pilot-ready manuscript package."
+    )
+    selected_main_manuscript_parser.add_argument("--benchmark-id", required=True)
+
+    selected_main_paper_package_parser = subparsers.add_parser(
+        "selected-main-paper-package", help="Export the selected benchmark main/pilot-ready paper package."
+    )
+    selected_main_paper_package_parser.add_argument("--benchmark-id", required=True)
 
     selected_benchmark_manuscript_parser = subparsers.add_parser(
         "selected-benchmark-manuscript", help="Generate a manuscript-shaped draft for the selected benchmark."
@@ -2970,6 +3098,7 @@ def _dispatch(
             v9=args.v9,
             v21=args.v21,
             v22=args.v22,
+            v23=args.v23,
             v2_ideas=args.v2_ideas,
         )
         target = report.report_path or (config.root / "eval_report.md")
@@ -2994,6 +3123,7 @@ def _dispatch(
                 include_ideas=args.include_ideas,
                 include_selected_idea=args.include_selected_idea,
                 include_selected_pilot=args.include_selected_pilot,
+                include_selected_main=args.include_selected_main,
             )
         else:
             result = dashboard.build_run(args.run_id)
@@ -4018,6 +4148,16 @@ def _dispatch(
         else:
             print(render_v22_release_gate_markdown(v22_result), end="")
         return 0 if v22_result.passed else 1
+    if args.command == "v23-release-gate":
+        v23_gate = V23ReleaseGateEnforcer(config)
+        v23_result = v23_gate.evaluate()
+        if args.write_report:
+            v23_gate.write_outputs(v23_result)
+        if args.json:
+            print(json.dumps(v23_result.to_dict(), indent=2))
+        else:
+            print(render_v23_release_gate_markdown(v23_result), end="")
+        return 0 if v23_result.passed else 1
     if args.command == "cli-audit":
         cli_audit = CLICommandAuditor(config).audit(build_parser(), write=args.write_report)
         print(render_cli_command_audit(cli_audit), end="")
@@ -4394,6 +4534,39 @@ def _dispatch(
         pilot_dataset_report = PilotDatasetBuilder(config).report(args.dataset_id)
         print(render_pilot_trace_dataset_report(pilot_dataset_report), end="")
         return 0
+    if args.command == "build-main-trace-dataset":
+        main_dataset = MainDatasetBuilder(config).build(
+            args.benchmark_id,
+            negative_count=args.negative_count,
+            positive_count=args.positive_count,
+        )
+        print(json.dumps(to_plain(main_dataset), indent=2))
+        return 0
+    if args.command == "main-trace-dataset-report":
+        print(MainDatasetBuilder(config).render_report(args.dataset_id), end="")
+        return 0
+    if args.command == "selected-main-manifest":
+        main_manifest = MainRunManager(config).create_manifest(args.benchmark_id, args.dataset_id)
+        print(json.dumps(to_plain(main_manifest), indent=2))
+        return 0
+    if args.command == "selected-main-run":
+        execution = MainRunManager(config).run(args.benchmark_id, args.manifest_id)
+        print(json.dumps(to_plain(execution), indent=2))
+        return 0 if execution.status == "complete" else 1
+    if args.command == "selected-main-status":
+        print(render_selected_main_status(MainRunManager(config).status(args.execution_id)), end="")
+        return 0
+    if args.command == "selected-main-analysis":
+        analysis = MainAnalysisManager(config).analyze(args.execution_id)
+        print(render_selected_main_analysis(analysis), end="")
+        return 0
+    if args.command == "selected-benchmark-go-no-go":
+        go_no_go = GoNoGoManager(config).decide(args.benchmark_id)
+        print(json.dumps(to_plain(go_no_go), indent=2))
+        return 0 if go_no_go.decision == "go_publication_candidate" else 1
+    if args.command == "selected-go-no-go-report":
+        print(GoNoGoManager(config).report(args.benchmark_id), end="")
+        return 0
     if args.command == "trace-dataset-report":
         print(SyntheticTraceGenerator(config).render_dataset_report(args.dataset_id), end="")
         return 0
@@ -4436,6 +4609,17 @@ def _dispatch(
     if args.command == "pilot-baseline-report":
         print(MonitorBaselineManager(config).render_pilot_report(args.benchmark_id), end="")
         return 0
+    if args.command == "selected-baseline-strength":
+        baseline_strength = MonitorBaselineManager(config).assess_baseline_strength(args.benchmark_id)
+        print(json.dumps(to_plain(baseline_strength), indent=2))
+        return 0 if baseline_strength.strong_claim_allowed else 1
+    if args.command == "implement-required-baseline-task":
+        baseline = MonitorBaselineManager(config).implement_required_baseline_task(args.benchmark_id, args.baseline)
+        print(json.dumps(to_plain(baseline), indent=2))
+        return 0
+    if args.command == "selected-baseline-strength-report":
+        print(MonitorBaselineManager(config).render_baseline_strength_report(args.benchmark_id), end="")
+        return 0
     if args.command == "selected-benchmark-workspace":
         workspace = SelectedBenchmarkWorkspaceManager(config).create_workspace(args.benchmark_id)
         print(json.dumps(to_plain(workspace), indent=2))
@@ -4457,6 +4641,20 @@ def _dispatch(
         related_work_manager = SelectedBenchmarkRelatedWorkManager(config)
         related_work_manager.build_related_work_matrix(args.benchmark_id)
         print(related_work_manager.render_related_work_matrix(args.benchmark_id), end="")
+        return 0
+    if args.command == "selected-related-work-complete":
+        completion_manager = RelatedWorkCompletionManager(config)
+        completion_status = completion_manager.complete(args.benchmark_id)
+        print(
+            render_related_work_completion_status(completion_status, completion_manager.next_searches_for_status(completion_status)),
+            end="",
+        )
+        return 0 if not completion_status.blockers else 1
+    if args.command == "selected-related-work-next-searches":
+        print("\n".join(RelatedWorkCompletionManager(config).next_searches(args.benchmark_id)), end="\n")
+        return 0
+    if args.command == "selected-related-work-status":
+        print(RelatedWorkCompletionManager(config).status_report(args.benchmark_id), end="")
         return 0
     if args.command == "selected-benchmark-novelty-report":
         from gapforge.selected_benchmark.related_work import render_novelty_positioning
@@ -4497,6 +4695,20 @@ def _dispatch(
             selected_pilot_power_assessment = power_manager.check_benchmark(args.benchmark_id)
         print(render_pilot_power_assessment(selected_pilot_power_assessment), end="")
         return 0 if not selected_pilot_power_assessment.blockers else 1
+    if args.command == "selected-main-power-plan":
+        selected_main_power_plan = MainPowerManager(config).create_plan(args.benchmark_id)
+        print(render_main_power_plan(selected_main_power_plan), end="")
+        return 0
+    if args.command == "selected-main-alpha-decision":
+        main_power_manager = MainPowerManager(config)
+        main_power_manager.decide_alpha(args.benchmark_id, alpha_level=args.alpha)
+        main_power_plan = main_power_manager.load_plan(args.benchmark_id)
+        main_power_decisions = main_power_manager.load_decisions(args.benchmark_id)
+        print(render_main_power_report(main_power_plan, main_power_decisions), end="")
+        return 0
+    if args.command == "selected-main-power-report":
+        print(MainPowerManager(config).report(args.benchmark_id), end="")
+        return 0
     if args.command == "selected-benchmark-codex-task":
         selected_benchmark_codex_task = SelectedBenchmarkCodexTaskManager(config).create_task(args.benchmark_id, args.type)
         print(json.dumps(to_plain(selected_benchmark_codex_task), indent=2))
@@ -4515,6 +4727,13 @@ def _dispatch(
     if args.command == "selected-benchmark-fix-list":
         print(SelectedBenchmarkReviewerPanelBuilder(config).fix_list(args.benchmark_id), end="")
         return 0
+    if args.command == "selected-publication-review":
+        publication_review = SelectedBenchmarkReviewerPanelBuilder(config).publication_review(args.benchmark_id)
+        print(render_publication_readiness_review(publication_review), end="")
+        return 0 if publication_review.readiness in {"workshop_candidate", "conference_candidate"} else 1
+    if args.command == "selected-publication-fix-list":
+        print(SelectedBenchmarkReviewerPanelBuilder(config).publication_fix_list(args.benchmark_id), end="")
+        return 0
     if args.command == "selected-pilot-review":
         from gapforge.selected_benchmark.reviewer import render_pilot_review_panel
 
@@ -4531,6 +4750,14 @@ def _dispatch(
     if args.command == "selected-pilot-paper-package":
         selected_pilot_paper_package = SelectedPilotManuscriptManager(config).paper_package(args.benchmark_id)
         print(json.dumps(to_plain(selected_pilot_paper_package), indent=2))
+        return 0
+    if args.command == "selected-main-manuscript":
+        selected_main_manuscript = SelectedMainManuscriptManager(config).generate(args.benchmark_id)
+        print(json.dumps(to_plain(selected_main_manuscript), indent=2))
+        return 0
+    if args.command == "selected-main-paper-package":
+        selected_main_paper_package = SelectedMainManuscriptManager(config).paper_package(args.benchmark_id)
+        print(json.dumps(to_plain(selected_main_paper_package), indent=2))
         return 0
     if args.command == "selected-benchmark-manuscript":
         selected_benchmark_manuscript = SelectedBenchmarkManuscriptManager(config).generate(args.benchmark_id)

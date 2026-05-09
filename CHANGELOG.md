@@ -2,6 +2,71 @@
 
 All notable project changes should be recorded here.
 
+## 2.3.0
+
+GapForge v2.3.0 is the Main Benchmark and Publication-Readiness Decision release for the locked selected idea `idea-sequential-specificity-benchmark-for-low-fpr-collusion-audits`. It upgrades v2.2 from pilot-only evidence to a main-style synthetic benchmark path with explicit power planning, related-work completion status, stronger baselines, main dataset/run artifacts, go/no-go review, publication-readiness review, manuscript package, dashboard pages, API helpers, skills, and a v2.3 release gate.
+
+### Main Benchmark Workflow
+
+- Added v2.3 main-scale power planning and formal `alpha=0.001` decisions through `MainPowerPlan`, `MainPowerDecision`, and CLI/API entry points.
+- Added related-work completion status that distinguishes real paper records from fallback records and keeps novelty unknown until required categories have real coverage.
+- Added baseline-strength assessment for required main-scale baselines, including leakage checks and optional LLM judge separation.
+- Added the main dataset builder, main manifest/run workflow, main result analysis, and low-FPR report path.
+- Added go/no-go and publication-readiness review workflows that can end honestly in `revise_benchmark` or `no_go`.
+- Added main/pilot manuscript package generation with unresolved blockers and synthetic-data limitations kept visible.
+- Added the v2.3 release gate, allowing honest outcomes such as `publication_candidate`, `workshop_candidate`, `revise_benchmark`, or `no_go`, while failing mislabeled evidence.
+
+### API, Dashboard, Evals, Docs, and Skills
+
+- Exposed v2.3 workflows through `gapforge.api`: `create_main_power_plan`, `complete_related_work`, `assess_baseline_strength`, `build_main_dataset`, `run_selected_main`, `analyze_selected_main`, `selected_go_no_go`, `selected_publication_review`, `selected_main_manuscript`, and `v23_release_gate`.
+- Added selected-main dashboard pages for main power, related-work completion, baseline strength, main dataset, main results, go/no-go, publication review, main manuscript, and v2.3 release-gate status.
+- Added v2.3 eval fixtures and metrics for power-decision quality, related-work coverage, baseline strength, main-result analysis, go/no-go quality, publication review quality, manuscript honesty, and release-gate correctness.
+- Added v2.3 docs for roadmap, main benchmark, related-work completion, publication readiness, go/no-go decisions, and acceptance criteria.
+- Added Codex-readable skills for main power planning, related-work completion, baseline strength, main benchmark runs, go/no-go review, and publication-readiness review.
+
+### Release Outcome
+
+- Selected idea: `idea-sequential-specificity-benchmark-for-low-fpr-collusion-audits`.
+- Benchmark ID: `benchmark-sequential-specificity-benchmark-for-low-fpr-collusion-audits`.
+- Main power plan: `alpha=0.001` is formally powered at 2995 planned negative traces / 2995 required negative traces.
+- Main dataset status: synthetic main dataset with 2995 negative traces, 500 positive traces, and 2139 hard-negative traces.
+- Main run status: complete synthetic main run with 15 monitor runs, 10 sequential metric results, metrics JSON, predictions JSON, baseline comparison, error analysis, low-FPR report, failure/status artifacts, and no preserved execution failures.
+- Baseline status: all required v2.3 baseline types are implemented and the baseline-strength assessment reports no calibration leakage.
+- Related-work status: not complete. Required categories still have 0 real attached paper records; fallback-only records do not count; novelty remains unknown.
+- Publication-readiness status: `not_ready`, with fatal blocker `Missing real related work: no required category has real attached paper records.`
+- Go/no-go decision: `revise_benchmark`, not publication candidate.
+- v2.3 release gate status: passes as an honest mature decision with decision status `revise_benchmark`, not as publication readiness.
+
+### Validation
+
+- `make ci`
+- `make eval`
+- `gapforge eval --v2 --v3 --v4 --v5 --v6 --v7 --v8 --v9 --write-report`
+- `gapforge eval --v2-ideas --write-report`
+- `gapforge eval --v21 --write-report`
+- `gapforge eval --v22 --write-report`
+- `gapforge eval --v23 --write-report`
+- `make v2-smoke`
+- `make v3-smoke`
+- `make v4-smoke`
+- `make v6-smoke`
+- `make v7-smoke`
+- `make v8-smoke`
+- `make v9-smoke`
+- `gapforge v1-readiness --write-report --json`
+- `gapforge v2-release-gate --write-report --json`
+- `gapforge v21-release-gate --write-report --json`
+- `gapforge v22-release-gate --write-report --json`
+- `gapforge v23-release-gate --write-report --json`
+
+### Non-Claims and Limitations
+
+- v2.3.0 does not claim deployment validity, real-world collusion benchmark validity, venue readiness, publication readiness, or resolved novelty.
+- Synthetic main traces are benchmark artifacts, not deployment data.
+- `alpha=0.001` is powered for the synthetic benchmark count plan, but publication claims remain blocked by related-work and publication-review gates.
+- The manuscript package is human-decision-ready but `not_ready` for publication.
+- Generated unsafe artifacts remain ignored and must not be committed as release source.
+
 ## 2.2.0
 
 GapForge v2.2.0 is the Selected Benchmark Pilot Study release. It keeps the v2.1 selected idea locked as `idea-sequential-specificity-benchmark-for-low-fpr-collusion-audits` and upgrades the benchmark from synthetic smoke maturity to an artifact-backed synthetic pilot run with power-gated low-FPR claims, expanded trace distributions, baseline calibration, reviewer blockers, and a pilot manuscript package.

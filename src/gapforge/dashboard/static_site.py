@@ -47,6 +47,7 @@ from gapforge.release_gate.v08 import V08ReleaseGateEnforcer
 from gapforge.release_gate.v2 import V2ReleaseGateEnforcer, render_v2_release_gate_markdown
 from gapforge.release_gate.v21 import V21ReleaseGateEnforcer, render_v21_release_gate_markdown
 from gapforge.release_gate.v22 import V22ReleaseGateEnforcer, render_v22_release_gate_markdown
+from gapforge.release_gate.v23 import V23ReleaseGateEnforcer, render_v23_release_gate_markdown
 from gapforge.state import ResearchStateManager
 
 PAGES = [
@@ -144,6 +145,18 @@ SELECTED_PILOT_PAGES = [
     ("v22_release_gate.html", "v2.2 Release Gate"),
 ]
 
+SELECTED_MAIN_PAGES = [
+    ("main_power.html", "Main Power"),
+    ("related_work_completion.html", "Related Work Completion"),
+    ("baseline_strength.html", "Baseline Strength"),
+    ("main_dataset.html", "Main Dataset"),
+    ("main_results.html", "Main Results"),
+    ("go_no_go.html", "Go/No-Go"),
+    ("publication_review.html", "Publication Review"),
+    ("main_manuscript.html", "Main Manuscript"),
+    ("v23_release_gate.html", "v2.3 Release Gate"),
+]
+
 
 @dataclass(slots=True)
 class DashboardResult:
@@ -175,6 +188,7 @@ class StaticDashboardBuilder:
         include_ideas: bool = False,
         include_selected_idea: bool = False,
         include_selected_pilot: bool = False,
+        include_selected_main: bool = False,
     ) -> DashboardResult:
         program = self.project_manager.load_project(project_id)
         states = [self.state_manager.load_run(run_id) for run_id in program.run_ids]
@@ -185,6 +199,7 @@ class StaticDashboardBuilder:
             include_ideas=include_ideas,
             include_selected_idea=include_selected_idea,
             include_selected_pilot=include_selected_pilot,
+            include_selected_main=include_selected_main,
             config=self.config,
         )
         return _write_dashboard(Path(program.project.root_dir) / "dashboard", context)
@@ -232,6 +247,7 @@ class _DashboardContext:
         ideas_enabled: bool = False,
         selected_idea_enabled: bool = False,
         selected_pilot_enabled: bool = False,
+        selected_main_enabled: bool = False,
     ) -> None:
         self.title = title
         self.subtitle = subtitle
@@ -258,6 +274,7 @@ class _DashboardContext:
         self.ideas_enabled = ideas_enabled
         self.selected_idea_enabled = selected_idea_enabled
         self.selected_pilot_enabled = selected_pilot_enabled
+        self.selected_main_enabled = selected_main_enabled
 
     @classmethod
     def from_run(cls, state: ResearchRunState) -> _DashboardContext:
@@ -294,6 +311,7 @@ class _DashboardContext:
         include_ideas: bool = False,
         include_selected_idea: bool = False,
         include_selected_pilot: bool = False,
+        include_selected_main: bool = False,
         config: GapForgeConfig | None = None,
     ) -> _DashboardContext:
         coverage_reports = [state.source_coverage for state in states if state.source_coverage is not None]
@@ -336,11 +354,12 @@ class _DashboardContext:
             else _empty_manuscript_context(),
             ideas=_load_idea_context(program.project.id, config) if include_ideas and config is not None else _empty_idea_context(),
             selected_idea=_load_selected_idea_context(program.project.id, config)
-            if (include_selected_idea or include_selected_pilot) and config is not None
+            if (include_selected_idea or include_selected_pilot or include_selected_main) and config is not None
             else _empty_selected_idea_context(),
             ideas_enabled=include_ideas,
             selected_idea_enabled=include_selected_idea,
             selected_pilot_enabled=include_selected_pilot,
+            selected_main_enabled=include_selected_main,
         )
 
     @classmethod
@@ -503,6 +522,20 @@ def _write_dashboard(root: Path, context: _DashboardContext) -> DashboardResult:
                 "v22_release_gate.html": _render_selected_v22_release_gate_page(context),
             }
         )
+    if context.selected_main_enabled:
+        pages.update(
+            {
+                "main_power.html": _render_main_power_page(context),
+                "related_work_completion.html": _render_related_work_completion_page(context),
+                "baseline_strength.html": _render_baseline_strength_page(context),
+                "main_dataset.html": _render_main_dataset_page(context),
+                "main_results.html": _render_main_results_page(context),
+                "go_no_go.html": _render_go_no_go_page(context),
+                "publication_review.html": _render_publication_review_page(context),
+                "main_manuscript.html": _render_main_manuscript_page(context),
+                "v23_release_gate.html": _render_selected_v23_release_gate_page(context),
+            }
+        )
     written = []
     for filename, body in pages.items():
         path = root / filename
@@ -573,6 +606,8 @@ def _pages_for_context(context: _DashboardContext) -> list[tuple[str, str]]:
         pages.extend(SELECTED_IDEA_PAGES)
     if context.selected_pilot_enabled:
         pages.extend(SELECTED_PILOT_PAGES)
+    if context.selected_main_enabled:
+        pages.extend(SELECTED_MAIN_PAGES)
     return pages
 
 
@@ -3211,6 +3246,285 @@ def _render_selected_v22_release_gate_page(context: _DashboardContext) -> str:
     return "<pre>" + _e(json.dumps(result, indent=2)) + "</pre>"
 
 
+def _render_main_power_page(context: _DashboardContext) -> str:
+    plan = _dict(context.selected_idea["main_power_plan"])
+    decisions = _dict_items(context.selected_idea["main_power_decisions"])
+    alpha_rows = [
+        [
+            _e(str(alpha)),
+            _e(str(required)),
+            _e(str(_dict(plan.get("required_positive_counts")).get(str(alpha), "not recorded"))),
+            _e("primary" if str(alpha) == str(plan.get("primary_alpha")) else "secondary"),
+        ]
+        for alpha, required in sorted(_dict(plan.get("required_negative_counts")).items(), key=lambda item: str(item[0]))
+    ]
+    decision_rows = [
+        [
+            _e(str(item.get("alpha_level", ""))),
+            _e(item.get("decision", "")),
+            _e(str(item.get("required_count", ""))),
+            _e(str(item.get("planned_count", ""))),
+            _e(item.get("reason", "")),
+            _e("; ".join(str(blocker) for blocker in _as_list(item.get("blockers")))),
+        ]
+        for item in decisions
+    ]
+    return "\n".join(
+        [
+            "<h2>Main-Scale Power Plan</h2>",
+            '<div class="grid">',
+            _metric("Primary alpha", plan.get("primary_alpha", "missing")),
+            _metric("Planned negatives", plan.get("planned_negative_count", "missing")),
+            _metric("Planned positives", plan.get("planned_positive_count", "missing")),
+            _metric("Feasibility", plan.get("feasibility_status", "missing")),
+            "</div>",
+            "<h2>Alpha Requirements</h2>",
+            _table(["Alpha", "Required Negative Count", "Required Positive Count", "Role"], alpha_rows),
+            "<h2>Alpha Decisions</h2>",
+            _table(["Alpha", "Decision", "Required Count", "Planned Count", "Reason", "Blockers"], decision_rows),
+            "<h2>Stopping Rules</h2>",
+            _list([str(item) for item in _as_list(plan.get("stopping_rules"))], css_class="warning"),
+            "<h2>Publication Boundary</h2>",
+            _list(
+                [
+                    "Publication claims must use the primary alpha that is actually powered.",
+                    "alpha=0.001 cannot be claimed unless the formal decision is `power` and the count requirement is met.",
+                ],
+                css_class="warning",
+            ),
+        ]
+    )
+
+
+def _render_related_work_completion_page(context: _DashboardContext) -> str:
+    status = _dict(context.selected_idea["related_work_completion"])
+    categories = _dict_items(status.get("category_statuses"))
+    rows = [
+        [
+            _e(item.get("category", "")),
+            _e(item.get("status", "")),
+            _e(", ".join(str(value) for value in _as_list(item.get("real_paper_ids")))),
+            _e(", ".join(str(value) for value in _as_list(item.get("fallback_paper_ids")))),
+            _e(", ".join(str(value) for value in _as_list(item.get("closest_prior_work_ids")))),
+            _e(item.get("notes", "")),
+        ]
+        for item in categories
+    ]
+    return "\n".join(
+        [
+            "<h2>Related-Work Completion</h2>",
+            '<div class="grid">',
+            _metric("Novelty status", status.get("novelty_status", "unknown")),
+            _metric("Real paper count", status.get("real_paper_count", 0)),
+            _metric("Fallback paper count", status.get("fallback_paper_count", 0)),
+            _metric("Missing categories", len(_as_list(status.get("missing_categories")))),
+            "</div>",
+            "<h2>Category Coverage</h2>",
+            _table(["Category", "Status", "Real Papers", "Fallback Papers", "Closest Prior Work", "Notes"], rows),
+            "<h2>Missing Categories</h2>",
+            _list([str(item) for item in _as_list(status.get("missing_categories"))], css_class="warning"),
+            "<h2>Blockers</h2>",
+            _list([str(item) for item in _as_list(status.get("blockers"))], css_class="warning"),
+            '<p class="warning">Fallback-only records do not complete a required category; '
+            "novelty remains unknown until real coverage is sufficient.</p>",
+        ]
+    )
+
+
+def _render_baseline_strength_page(context: _DashboardContext) -> str:
+    assessment = _dict(context.selected_idea["baseline_strength_assessment"])
+    required = [str(item) for item in _as_list(assessment.get("required_baselines"))]
+    implemented = [str(item) for item in _as_list(assessment.get("implemented_baselines"))]
+    missing = [str(item) for item in _as_list(assessment.get("missing_baselines"))]
+    optional = [item for item in implemented if "llm" in item.lower()]
+    return "\n".join(
+        [
+            "<h2>Baseline Strength Assessment</h2>",
+            '<div class="grid">',
+            _metric("Required baselines", len(required)),
+            _metric("Implemented required", len([item for item in implemented if item in required])),
+            _metric("Missing required", len(missing)),
+            _metric("Strong claim allowed", assessment.get("strong_claim_allowed", False)),
+            "</div>",
+            "<h2>Calibration and Risk</h2>",
+            _kv_table(
+                [
+                    ("Calibration status", assessment.get("calibration_status", "missing")),
+                    ("Reviewer risk", assessment.get("reviewer_risk", "missing")),
+                    ("Optional LLM baselines", ", ".join(optional) or "none recorded"),
+                ]
+            ),
+            "<h2>Missing Required Baselines</h2>",
+            _list(missing, css_class="warning"),
+            "<h2>Blockers</h2>",
+            _list([str(item) for item in _as_list(assessment.get("blockers"))], css_class="warning"),
+            '<p class="warning">Strong contribution claims remain blocked by any missing required baseline or calibration leakage. '
+            "Optional LLM judge baselines are reported separately and are not CI blockers.</p>",
+        ]
+    )
+
+
+def _render_main_dataset_page(context: _DashboardContext) -> str:
+    datasets = _dict_items(context.selected_idea["main_datasets"])
+    rows = [
+        [
+            _code(str(item.get("id", ""))),
+            str(item.get("negative_count", 0)),
+            str(item.get("positive_count", 0)),
+            str(item.get("hard_negative_count", 0)),
+            _e(", ".join(str(alpha) for alpha in _as_list(item.get("alpha_targets_supported")))),
+            _e("; ".join(str(limit) for limit in _as_list(item.get("limitations")))),
+        ]
+        for item in datasets
+    ]
+    latest = datasets[-1] if datasets else {}
+    return "\n".join(
+        [
+            "<h2>Main Trace Dataset</h2>",
+            _table(["Dataset", "Negative", "Positive", "Hard Negative", "Alpha Targets Supported", "Limitations"], rows),
+            "<h2>Observability Modes</h2>",
+            _kv_table(sorted(_dict(latest.get("observability_mode_counts")).items())),
+            "<h2>Scenario Coverage</h2>",
+            _kv_table(sorted(_dict(latest.get("scenario_coverage")).items())),
+            '<p class="warning">Synthetic-only labels and alpha support are dataset properties, not deployment-validity evidence.</p>',
+        ]
+    )
+
+
+def _render_main_results_page(context: _DashboardContext) -> str:
+    manifests = _dict_items(context.selected_idea["main_manifests"])
+    executions = _dict_items(context.selected_idea["main_executions"])
+    analyses = _dict_items(context.selected_idea["main_analyses"])
+    low_fpr_body = context.selected_idea.get("main_report_markdown") or json.dumps(
+        _dict(context.selected_idea.get("main_low_fpr_report")),
+        indent=2,
+    )
+    return "\n".join(
+        [
+            "<h2>Main Result Artifacts</h2>",
+            '<div class="grid">',
+            _metric("Manifests", len(manifests)),
+            _metric("Executions", len(executions)),
+            _metric("Analyses", len(analyses)),
+            _metric("Failed executions", sum(1 for item in executions if item.get("status") == "failed")),
+            "</div>",
+            "<h2>Executions</h2>",
+            _table(
+                ["Execution", "Run Type", "Status", "Dataset", "Powered Alpha", "Publication Blockers"],
+                [
+                    [
+                        _code(str(item.get("id", ""))),
+                        _e(item.get("run_type", "")),
+                        _e(item.get("status", "")),
+                        _code(str(item.get("dataset_id", ""))),
+                        _e(", ".join(str(alpha) for alpha in _as_list(item.get("powered_alpha_levels")))),
+                        _e("; ".join(str(blocker) for blocker in _as_list(item.get("publication_blockers")))),
+                    ]
+                    for item in executions
+                ],
+            ),
+            "<h2>Latest Main Metrics</h2>",
+            "<pre>" + _e(json.dumps(_dict(context.selected_idea.get("main_metrics")), indent=2)) + "</pre>",
+            "<h2>Latest Baseline Comparison</h2>",
+            "<pre>" + _e(json.dumps(_dict(context.selected_idea.get("main_baseline_comparison")), indent=2)) + "</pre>",
+            "<h2>Latest Error Analysis</h2>",
+            "<pre>" + _e(json.dumps(_dict(context.selected_idea.get("main_error_analysis")), indent=2)) + "</pre>",
+            "<h2>Low-FPR Report</h2>",
+            "<pre>" + _e(low_fpr_body) + "</pre>",
+        ]
+    )
+
+
+def _render_go_no_go_page(context: _DashboardContext) -> str:
+    decision = _dict(context.selected_idea["go_no_go"])
+    markdown = str(context.selected_idea.get("go_no_go_markdown") or "")
+    return "\n".join(
+        [
+            "<h2>Selected Benchmark Go/No-Go</h2>",
+            '<div class="grid">',
+            _metric("Decision", decision.get("decision", "missing")),
+            _metric("Confidence", decision.get("confidence", "missing")),
+            _metric("Blockers", len(_as_list(decision.get("blockers")))),
+            "</div>",
+            "<h2>Reason</h2>",
+            f"<p>{_e(decision.get('reason', 'No decision is available.'))}</p>",
+            "<h2>Evidence</h2>",
+            _list([str(item) for item in _as_list(decision.get("evidence"))]),
+            "<h2>Blockers</h2>",
+            _list([str(item) for item in _as_list(decision.get("blockers"))], css_class="warning"),
+            "<h2>Required Next Steps</h2>",
+            _list([str(item) for item in _as_list(decision.get("required_next_steps"))], css_class="warning"),
+            "<h2>Report</h2>",
+            "<pre>" + _e(markdown or json.dumps(decision, indent=2)) + "</pre>",
+        ]
+    )
+
+
+def _render_publication_review_page(context: _DashboardContext) -> str:
+    review = _dict(context.selected_idea["publication_review"])
+    fix_list = str(context.selected_idea.get("publication_fix_list_markdown") or "")
+    return "\n".join(
+        [
+            "<h2>Publication-Readiness Review</h2>",
+            '<div class="grid">',
+            _metric("Readiness", review.get("readiness", "missing")),
+            _metric("Confidence", review.get("confidence", "missing")),
+            _metric("Fatal blockers", len(_as_list(review.get("fatal_blockers")))),
+            _metric("Major blockers", len(_as_list(review.get("major_blockers")))),
+            "</div>",
+            "<h2>Fatal Blockers</h2>",
+            _list([str(item) for item in _as_list(review.get("fatal_blockers"))], css_class="warning"),
+            "<h2>Major Blockers</h2>",
+            _list([str(item) for item in _as_list(review.get("major_blockers"))], css_class="warning"),
+            "<h2>Required Revisions</h2>",
+            _list([str(item) for item in _as_list(review.get("required_revisions"))], css_class="warning"),
+            "<h2>Fix List</h2>",
+            "<pre>" + _e(fix_list or "No publication fix list is available.") + "</pre>",
+        ]
+    )
+
+
+def _render_main_manuscript_page(context: _DashboardContext) -> str:
+    manuscript = _dict(context.selected_idea["main_manuscript"])
+    package = _dict(context.selected_idea["main_paper_package"])
+    return "\n".join(
+        [
+            "<h2>Main/Pilot Manuscript Package</h2>",
+            _kv_table(
+                [
+                    ("Manuscript ID", manuscript.get("id", "missing")),
+                    ("Maturity statement", manuscript.get("maturity_statement", "missing")),
+                    ("Evidence maturity", manuscript.get("evidence_maturity", "missing")),
+                    ("Publication candidate", manuscript.get("publication_candidate", False)),
+                    ("Paper package", package.get("id", "missing")),
+                    ("Package readiness", package.get("readiness", "missing")),
+                ]
+            ),
+            "<h2>Unresolved Blockers</h2>",
+            _list([str(item) for item in _as_list(manuscript.get("unresolved_blockers"))], css_class="warning"),
+            "<h2>Limitations</h2>",
+            _list([str(item) for item in _as_list(manuscript.get("limitations"))], css_class="warning"),
+            "<h2>Sections</h2>",
+            _table(
+                ["Section", "Preview"],
+                [[_e(name), _e(str(text)[:260])] for name, text in _dict(manuscript.get("sections")).items()],
+            ),
+            '<p class="warning">Pilot-only packages must remain labeled as pilot/workshop candidates. '
+            "Main publication labels require all gates to pass.</p>",
+        ]
+    )
+
+
+def _render_selected_v23_release_gate_page(context: _DashboardContext) -> str:
+    result = _dict(context.selected_idea["v23_release_gate"])
+    markdown = str(context.selected_idea.get("v23_release_gate_markdown") or "")
+    if markdown:
+        return "<pre>" + _e(markdown) + "</pre>"
+    if not result:
+        return "<p>No v2.3 release gate report is available.</p>"
+    return "<pre>" + _e(json.dumps(result, indent=2)) + "</pre>"
+
+
 def _scenario_table(scenarios: list[dict[str, Any]], type_field: str) -> str:
     return _table(
         ["ID", "Name", "Type", "Observability/Difficulty", "False Positive Risk", "Description"],
@@ -3422,6 +3736,28 @@ def _empty_selected_idea_context() -> dict[str, Any]:
         "pilot_paper_package": {},
         "v22_release_gate": {},
         "v22_release_gate_markdown": "",
+        "main_power_plan": {},
+        "main_power_decisions": [],
+        "related_work_completion": {},
+        "baseline_strength_assessment": {},
+        "main_datasets": [],
+        "main_manifests": [],
+        "main_executions": [],
+        "main_analyses": [],
+        "main_metrics": {},
+        "main_baseline_comparison": {},
+        "main_error_analysis": {},
+        "main_low_fpr_report": {},
+        "main_prediction_summary": {},
+        "main_report_markdown": "",
+        "go_no_go": {},
+        "go_no_go_markdown": "",
+        "publication_review": {},
+        "publication_fix_list_markdown": "",
+        "main_manuscript": {},
+        "main_paper_package": {},
+        "v23_release_gate": {},
+        "v23_release_gate_markdown": "",
     }
 
 
@@ -3469,6 +3805,23 @@ def _load_selected_idea_context(project_id: str, config: GapForgeConfig) -> dict
     context["pilot_required_fixes_markdown"] = _read_text_safely(benchmark_dir / "reviews" / "required_fixes.md")
     context["pilot_manuscript"] = _read_json_safely(benchmark_dir / "pilot_manuscript" / "selected_pilot_manuscript.json")
     context["pilot_paper_package"] = _read_json_safely(benchmark_dir / "pilot_paper_package" / "pilot_paper_package.json")
+    context["main_power_plan"] = _read_json_safely(benchmark_dir / "main_power" / "main_power_plan.json")
+    context["main_power_decisions"] = _read_json_files_safely(benchmark_dir / "main_power" / "decisions", "*.json")
+    context["related_work_completion"] = _read_json_safely(
+        benchmark_dir / "related_work_completion" / "related_work_completion_status.json"
+    )
+    context["baseline_strength_assessment"] = _read_json_safely(benchmark_dir / "baseline_strength_assessment.json")
+    context["main_datasets"] = _read_json_files_safely(benchmark_dir / "main_dataset", "*.json")
+    context["main_manifests"] = _read_json_files_safely(benchmark_dir / "main_runs" / "manifests", "*.json")
+    context["main_executions"] = _read_json_files_safely(benchmark_dir / "main_runs" / "executions", "*/execution.json")
+    context["main_analyses"] = _read_json_files_safely(benchmark_dir / "main_analysis", "*/analysis_result.json")
+    _load_latest_main_analysis_outputs(context)
+    context["go_no_go"] = _read_json_safely(benchmark_dir / "go_no_go" / "go_no_go.json")
+    context["go_no_go_markdown"] = _read_text_safely(benchmark_dir / "go_no_go" / "go_no_go.md")
+    context["publication_review"] = _read_json_safely(benchmark_dir / "reviews" / "main_publication_review.json")
+    context["publication_fix_list_markdown"] = _read_text_safely(benchmark_dir / "reviews" / "main_publication_fix_list.md")
+    context["main_manuscript"] = _read_json_safely(benchmark_dir / "main_manuscript" / "selected_main_manuscript.json")
+    context["main_paper_package"] = _read_json_safely(benchmark_dir / "main_paper_package" / "main_paper_package.json")
     for dataset_dir in sorted((benchmark_dir / "trace_datasets").glob("*")):
         if not dataset_dir.is_dir():
             continue
@@ -3510,6 +3863,13 @@ def _load_selected_idea_context(project_id: str, config: GapForgeConfig) -> dict
             context["v22_release_gate_markdown"] = render_v22_release_gate_markdown(v22_result)
     except (FileNotFoundError, json.JSONDecodeError, TypeError, ValueError):
         context["v22_release_gate"] = _read_json_safely(config.data_dir / "release_gate" / "v22_release_gate_latest.json")
+    try:
+        v23_result = V23ReleaseGateEnforcer(config).evaluate()
+        if not v23_result.project_id or v23_result.project_id == project_id:
+            context["v23_release_gate"] = v23_result.to_dict()
+            context["v23_release_gate_markdown"] = render_v23_release_gate_markdown(v23_result)
+    except (FileNotFoundError, json.JSONDecodeError, TypeError, ValueError):
+        context["v23_release_gate"] = _read_json_safely(config.data_dir / "release_gate" / "v23_release_gate_latest.json")
     return context
 
 
@@ -3536,6 +3896,25 @@ def _load_latest_pilot_analysis_outputs(context: dict[str, Any]) -> None:
     limitations_md = output_paths.get("pilot_limitations_md")
     if isinstance(limitations_md, str) and limitations_md:
         context["pilot_limitations_markdown"] = _read_text_safely(Path(limitations_md))
+
+
+def _load_latest_main_analysis_outputs(context: dict[str, Any]) -> None:
+    analysis = _latest_record(context["main_analyses"])
+    output_paths = _dict(analysis.get("output_paths"))
+    json_keys = {
+        "main_metrics_json": "main_metrics",
+        "main_baseline_comparison_json": "main_baseline_comparison",
+        "main_error_analysis_json": "main_error_analysis",
+        "main_low_fpr_report_json": "main_low_fpr_report",
+        "main_prediction_summary_json": "main_prediction_summary",
+    }
+    for source_key, context_key in json_keys.items():
+        value = output_paths.get(source_key)
+        if isinstance(value, str) and value:
+            context[context_key] = _read_json_safely(Path(value))
+    report_md = output_paths.get("main_report_md")
+    if isinstance(report_md, str) and report_md:
+        context["main_report_markdown"] = _read_text_safely(Path(report_md))
 
 
 def _load_idea_context(project_id: str, config: GapForgeConfig) -> dict[str, Any]:

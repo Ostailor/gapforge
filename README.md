@@ -32,6 +32,11 @@ GapForge v2 planning docs:
 - [v2.2 acceptance criteria](docs/V2_2_ACCEPTANCE_CRITERIA.md)
 - [v2.2 power and sample-size plan](docs/V2_2_POWER_AND_SAMPLE_SIZE.md)
 - [v2.2 reviewer blockers](docs/V2_2_REVIEWER_BLOCKERS.md)
+- [v2.3 main-scale benchmark roadmap](docs/V2_3_ROADMAP.md)
+- [v2.3 main benchmark specification](docs/V2_3_MAIN_BENCHMARK.md)
+- [v2.3 related-work completion plan](docs/V2_3_RELATED_WORK_COMPLETION.md)
+- [v2.3 publication-readiness gate](docs/V2_3_PUBLICATION_READINESS.md)
+- [v2.3 acceptance criteria](docs/V2_3_ACCEPTANCE_CRITERIA.md)
 
 GapForge is intentionally skeptical. It can recommend a direction only when evidence gates support one, and it can refuse when literature coverage, novelty evidence, or empirical support is insufficient. It is not an exhaustive autonomous literature reviewer, and it must not fabricate citations, experimental results, venue acceptance, publication readiness, or novelty claims. Deterministic and offline-safe paths remain the default.
 
@@ -52,6 +57,7 @@ GapForge is intentionally skeptical. It can recommend a direction only when evid
 - **v2.0.1**: CI fixture tracking patch. v2.0.1 keeps historical migration fixture JSONs available in clean checkouts without changing product behavior, idea-discovery claims, or the v2.0 selected idea.
 - **v2.1.0**: Selected Idea Execution release. v2.1 freezes the accepted v2.0 idea `idea-sequential-specificity-benchmark-for-low-fpr-collusion-audits` and turns it into a benchmark specification, threat model, task/data generator, baseline suite, sequential specificity metrics, power plan, experiment workspace, smoke benchmark run, result analysis, reviewer critique, and manuscript package update. The smoke path is runnable and artifact-backed, but remains synthetic and underpowered.
 - **v2.2.0**: Pilot-Scale Benchmark Study release. v2.2 requires a pilot run manifest, expanded honest-agent null distribution, expanded collusive-agent alternatives, stronger hard negatives, full baseline monitor suite, pilot result artifacts, sequential low-FPR uncertainty analysis, prior-work and related-work attachment, reviewer-blocker classification, and a pilot manuscript package. It must not claim deployment validity, unsupported `alpha=0.001` operational specificity, main benchmark maturity, or publication readiness from synthetic pilot data.
+- **v2.3.0**: Main-Scale Benchmark and Publication-Readiness Upgrade. v2.3 directly addresses v2.2 blockers by requiring a main-scale sample-size plan, an explicit `alpha=0.001` power-or-drop decision, real prior-work records for required categories, related-work matrix completion, stronger baselines, main dataset generation or no-go, main benchmark execution or no-go, publication-readiness reviewer panel, manuscript package upgrade, and a clear go/no-go recommendation.
 
 ## Why Not Just Summarization?
 
@@ -761,6 +767,80 @@ Planning docs:
 - [docs/V2_2_ACCEPTANCE_CRITERIA.md](docs/V2_2_ACCEPTANCE_CRITERIA.md)
 - [docs/V2_2_POWER_AND_SAMPLE_SIZE.md](docs/V2_2_POWER_AND_SAMPLE_SIZE.md)
 - [docs/V2_2_REVIEWER_BLOCKERS.md](docs/V2_2_REVIEWER_BLOCKERS.md)
+
+## v2.3 Main-Scale Benchmark and Publication-Readiness Upgrade
+
+v2.3 is the main-scale upgrade for the same locked selected idea. It starts from the v2.2 pilot handoff: 300 negative, 150 positive, and 214 hard-negative synthetic traces; pilot-scale support for `alpha=0.01`; underpowered and blocked `alpha=0.001`; incomplete real prior-work records; weak scientific baseline coverage; and a manuscript package that is not publication-ready.
+
+v2.3 must directly address those blockers:
+
+- main-scale sample-size plan
+- `alpha=0.001` powered or explicitly dropped
+- real prior-work records for every required category
+- completed related-work matrix
+- stronger baseline suite
+- main dataset generation or pilot-to-main expansion
+- main benchmark run or explicit no-go
+- publication-readiness reviewer panel
+- manuscript package upgrade
+- clear go/no-go recommendation
+
+v2.3 must not claim deployment validity from synthetic evidence, must not claim `alpha=0.001` while underpowered, must not hide missing real prior work, and must not call the manuscript publication-ready while fatal reviewer blockers remain.
+
+Scriptable v2.3 path:
+
+```python
+from gapforge import api
+
+api.create_main_sample_size_plan("<benchmark-id>")
+api.decide_alpha_target("<benchmark-id>", alpha=0.001)
+api.complete_selected_related_work("<benchmark-id>")
+api.complete_selected_related_work_matrix("<benchmark-id>")
+api.register_main_baselines("<benchmark-id>")
+dataset = api.build_main_dataset("<benchmark-id>")
+manifest = api.create_selected_main_manifest("<benchmark-id>", dataset_id=dataset.id)
+execution = api.run_selected_main_benchmark("<benchmark-id>", manifest_id=manifest.id)
+api.analyze_selected_main_benchmark(execution.id)
+api.selected_publication_readiness_review("<benchmark-id>")
+api.selected_main_manuscript("<benchmark-id>")
+api.v23_release_gate(write_report=True)
+```
+
+The API names above describe the intended v2.3 workflow surface. Equivalent CLI commands or implementation-specific wrappers must preserve the same evidence requirements.
+
+Implemented main-power CLI:
+
+```bash
+gapforge selected-main-power-plan --benchmark-id <benchmark-id>
+gapforge selected-main-alpha-decision --benchmark-id <benchmark-id> --alpha 0.001
+gapforge selected-main-power-report --benchmark-id <benchmark-id>
+gapforge selected-related-work-complete --benchmark-id <benchmark-id>
+gapforge selected-related-work-next-searches --benchmark-id <benchmark-id>
+gapforge selected-related-work-status --benchmark-id <benchmark-id>
+gapforge selected-baseline-strength --benchmark-id <benchmark-id>
+gapforge implement-required-baseline-task --benchmark-id <benchmark-id> --baseline <baseline-name>
+gapforge selected-baseline-strength-report --benchmark-id <benchmark-id>
+gapforge build-main-trace-dataset --benchmark-id <benchmark-id>
+gapforge main-trace-dataset-report --dataset-id <main-dataset-id>
+gapforge selected-main-manifest --benchmark-id <benchmark-id> --dataset-id <main-dataset-id>
+gapforge selected-main-run --benchmark-id <benchmark-id> --manifest-id <main-manifest-id>
+gapforge selected-main-status --execution-id <main-execution-id>
+gapforge selected-main-analysis --execution-id <main-execution-id>
+gapforge selected-publication-review --benchmark-id <benchmark-id>
+gapforge selected-publication-fix-list --benchmark-id <benchmark-id>
+gapforge selected-main-manuscript --benchmark-id <benchmark-id>
+gapforge selected-main-paper-package --benchmark-id <benchmark-id>
+gapforge selected-benchmark-go-no-go --benchmark-id <benchmark-id>
+gapforge selected-go-no-go-report --benchmark-id <benchmark-id>
+```
+
+Planning docs:
+
+- [docs/V2_3_ROADMAP.md](docs/V2_3_ROADMAP.md)
+- [docs/V2_3_MAIN_BENCHMARK.md](docs/V2_3_MAIN_BENCHMARK.md)
+- [docs/V2_3_RELATED_WORK_COMPLETION.md](docs/V2_3_RELATED_WORK_COMPLETION.md)
+- [docs/V2_3_PUBLICATION_READINESS.md](docs/V2_3_PUBLICATION_READINESS.md)
+- [docs/V2_3_ACCEPTANCE_CRITERIA.md](docs/V2_3_ACCEPTANCE_CRITERIA.md)
 
 ## Active v0.3 Loop
 

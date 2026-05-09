@@ -338,6 +338,38 @@ The v2.2 release gate should require a locked pilot manifest, artifact-backed pi
 
 v2.2 dashboards and API wrappers make pilot status easier to inspect and script, but they do not change the evidence standard. A green dashboard page means the artifact is present or parsed; it is not a deployment, publication, or main-benchmark certificate. v2.3 remains necessary for main-scale negative counts, externally reviewed scenario realism, stronger baseline comparisons, and any publication-readiness claim.
 
+## v2.3 Main-Scale Benchmark and Publication-Readiness Limits
+
+v2.3 is the Main-Scale Benchmark and Publication-Readiness Upgrade for the locked selected idea `idea-sequential-specificity-benchmark-for-low-fpr-collusion-audits`. It directly addresses v2.2 blockers, but it still cannot turn inadequate evidence into deployment validity or publication readiness.
+
+v2.3 must still preserve these limits:
+
+- a main-scale sample-size plan is required before main outcomes are inspected
+- `alpha=0.001` must be powered or explicitly dropped from claims
+- an underpowered alpha target remains a blocker even if observed false positives are low
+- synthetic main-scale traces are still synthetic and do not prove deployment validity
+- hard-negative coverage can improve stress testing but cannot prove all benign coordination is covered
+- stronger baselines must be grounded in prior work or explicitly labeled as limited
+- missing or infeasible baselines must remain visible in reports
+- real prior-work records are required for required related-work categories
+- related-work matrix completion is required before publication-readiness claims
+- closest-prior-work search reduces novelty risk but does not prove exhaustive coverage
+- publication-readiness claims require a reviewer panel with no fatal blockers
+- manuscript package polish cannot substitute for main-run artifacts, citations, replication package, or human review
+
+v2.3 non-goals:
+
+- claiming deployment validity from synthetic evidence
+- claiming `alpha=0.001` while underpowered
+- hiding missing real prior work
+- treating category labels or search queries as citations
+- weakening v2.2 reviewer blockers to pass v2.3
+- claiming monitor superiority without powered comparisons and credible baselines
+- calling the manuscript publication-ready while fatal reviewer blockers remain
+- treating an explicit no-go as a failure to document; a no-go is the correct outcome when evidence remains inadequate
+
+The v2.3 release gate should require either main-scale readiness or an explicit no-go. If the main dataset, main run, related-work records, baseline suite, or publication panel are incomplete, the release must preserve those gaps and narrow or block claims.
+
 ## Operational Guidance
 
 Use strict mode and coverage assessment before interpreting outputs:
