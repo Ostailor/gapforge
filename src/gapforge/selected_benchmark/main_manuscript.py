@@ -607,7 +607,7 @@ def _latest_pilot_analysis(manager: SelectedMainManuscriptManager, benchmark_id:
 
 def _manuscript_status(context: _MainManuscriptContext) -> str:
     if (
-        context.readiness_review.readiness == "conference_candidate"
+        context.readiness_review.readiness in {"publication_candidate", "conference_candidate"}
         and context.go_no_go
         and context.go_no_go.decision == "go_publication_candidate"
     ):

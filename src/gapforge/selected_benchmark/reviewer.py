@@ -26,12 +26,21 @@ from gapforge.selected_benchmark.main_power import MainPowerDecision, MainPowerM
 from gapforge.selected_benchmark.metrics import SequentialMetricManager, SequentialMetricResult
 from gapforge.selected_benchmark.pilot_analysis import PilotAnalysisManager, PilotAnalysisResult
 from gapforge.selected_benchmark.pilot_power import PilotPowerAssessment, PilotPowerManager
+from gapforge.selected_benchmark.positioning import PositioningReport, SelectedBenchmarkPositioningManager
+from gapforge.selected_benchmark.prior_work_refresh import (
+    SelectedBenchmarkPriorWorkDossier,
+    SelectedBenchmarkPriorWorkRefreshManager,
+)
 from gapforge.selected_benchmark.related_work import (
     SelectedBenchmarkRelatedWorkManager,
     SelectedPriorWorkRecall,
     SelectedRelatedWorkMatrix,
 )
 from gapforge.selected_benchmark.related_work_completion import RelatedWorkCompletionManager, RelatedWorkCompletionStatus
+from gapforge.selected_benchmark.related_work_matrix_v2 import (
+    SelectedBenchmarkRelatedWorkMatrixV2,
+    SelectedBenchmarkRelatedWorkMatrixV2Manager,
+)
 from gapforge.selected_benchmark.spec import SelectedBenchmarkManager, SequentialSpecificityBenchmarkSpec
 from gapforge.selected_benchmark.threat_model import CollusionThreatModel
 from gapforge.selected_benchmark.trace_generator import SyntheticTraceGenerator, TraceDataset
@@ -200,21 +209,22 @@ class SelectedBenchmarkReviewerPanelBuilder:
         (reviews_dir / "required_fixes.json").write_text(json.dumps(to_plain(panel.required_fixes), indent=2) + "\n", encoding="utf-8")
         return report
 
-    def publication_review(self, benchmark_id: str) -> PublicationReadinessReview:
-        context = _PublicationReadinessContext.from_benchmark(self, benchmark_id)
+    def publication_review(self, benchmark_id: str, *, after_related_work: bool = False) -> PublicationReadinessReview:
+        context = _PublicationReadinessContext.from_benchmark(self, benchmark_id, after_related_work=after_related_work)
         fatal_blockers: list[str] = []
         major_blockers: list[str] = []
         required_revisions: list[str] = []
 
         _review_result_evidence(context, major_blockers, required_revisions)
         _review_related_work_completion(context, fatal_blockers, major_blockers, required_revisions)
+        _review_prior_work_dossier(context, fatal_blockers, major_blockers, required_revisions)
+        _review_contribution_positioning(context, major_blockers, required_revisions)
         _review_baseline_strength(context, fatal_blockers, major_blockers, required_revisions)
         _review_alpha_power_claims(context, fatal_blockers, major_blockers, required_revisions)
         _review_manuscript_traceability(context, fatal_blockers, major_blockers, required_revisions)
 
         readiness = _publication_readiness(
-            has_main_results=context.main_analysis is not None,
-            has_pilot_results=context.pilot_analysis is not None,
+            context=context,
             fatal_blockers=fatal_blockers,
             major_blockers=major_blockers,
         )
@@ -222,7 +232,7 @@ class SelectedBenchmarkReviewerPanelBuilder:
             required_revisions.append("Pilot-only results may support at most workshop positioning unless strong caveats are explicit.")
         confidence = _publication_confidence(readiness, context, fatal_blockers=fatal_blockers, major_blockers=major_blockers)
         review = PublicationReadinessReview(
-            id=f"publication-readiness-review-{benchmark_id}",
+            id=f"publication-readiness-review-{benchmark_id}{'-after-related-work' if after_related_work else ''}",
             benchmark_id=benchmark_id,
             readiness=readiness,
             fatal_blockers=_unique(fatal_blockers),
@@ -238,6 +248,9 @@ class SelectedBenchmarkReviewerPanelBuilder:
                         context.main_analysis.id if context.main_analysis else "",
                         context.pilot_analysis.id if context.pilot_analysis else "",
                         context.related_work_status.id if context.related_work_status else "",
+                        context.prior_work_dossier.id if context.prior_work_dossier else "",
+                        context.positioning_report.id if context.positioning_report else "",
+                        context.related_work_matrix_v2.id if context.related_work_matrix_v2 else "",
                         context.baseline_strength.id if context.baseline_strength else "",
                         context.main_power_decision.id if context.main_power_decision else "",
                         *context.manuscript_paths,
@@ -250,16 +263,21 @@ class SelectedBenchmarkReviewerPanelBuilder:
                 ),
             ),
         )
-        self._write_publication_review(review)
+        self._write_publication_review(review, after_related_work=after_related_work)
         return review
 
-    def publication_fix_list(self, benchmark_id: str) -> str:
-        review = self._ensure_publication_review(benchmark_id)
+    def publication_fix_list(self, benchmark_id: str, *, after_related_work: bool = False) -> str:
+        review = (
+            self._ensure_publication_review_after_related_work(benchmark_id)
+            if after_related_work
+            else self._ensure_publication_review(benchmark_id)
+        )
         report = render_publication_fix_list(review)
         spec = self.benchmark_manager.load_spec(benchmark_id)
         reviews_dir = self._benchmark_dir(spec.project_id) / "reviews"
         reviews_dir.mkdir(parents=True, exist_ok=True)
-        (reviews_dir / "main_publication_fix_list.md").write_text(report, encoding="utf-8")
+        filename = "main_publication_fix_list_after_related_work.md" if after_related_work else "main_publication_fix_list.md"
+        (reviews_dir / filename).write_text(report, encoding="utf-8")
         return report
 
     def _ensure_panel(self, benchmark_id: str) -> SelectedBenchmarkReviewPanel:
@@ -286,6 +304,16 @@ class SelectedBenchmarkReviewerPanelBuilder:
                 pass
         return self.publication_review(benchmark_id)
 
+    def _ensure_publication_review_after_related_work(self, benchmark_id: str) -> PublicationReadinessReview:
+        spec = self.benchmark_manager.load_spec(benchmark_id)
+        path = self._benchmark_dir(spec.project_id) / "reviews" / "main_publication_review_after_related_work.json"
+        if path.exists():
+            try:
+                return from_dict(PublicationReadinessReview, json.loads(path.read_text(encoding="utf-8")))
+            except (TypeError, ValueError):
+                pass
+        return self.publication_review(benchmark_id, after_related_work=True)
+
     def _write_panel(self, panel: SelectedBenchmarkReviewPanel) -> None:
         spec = self.benchmark_manager.load_spec(panel.benchmark_id)
         reviews_dir = self._benchmark_dir(spec.project_id) / "reviews"
@@ -305,13 +333,15 @@ class SelectedBenchmarkReviewerPanelBuilder:
         (reviews_dir / "required_fixes.md").write_text(render_pilot_required_fixes(panel), encoding="utf-8")
         (reviews_dir / "publishability_assessment.md").write_text(render_publishability_assessment(panel), encoding="utf-8")
 
-    def _write_publication_review(self, review: PublicationReadinessReview) -> None:
+    def _write_publication_review(self, review: PublicationReadinessReview, *, after_related_work: bool = False) -> None:
         spec = self.benchmark_manager.load_spec(review.benchmark_id)
         reviews_dir = self._benchmark_dir(spec.project_id) / "reviews"
         reviews_dir.mkdir(parents=True, exist_ok=True)
-        (reviews_dir / "main_publication_review.json").write_text(json.dumps(to_plain(review), indent=2) + "\n", encoding="utf-8")
-        (reviews_dir / "main_publication_review.md").write_text(render_publication_readiness_review(review), encoding="utf-8")
-        (reviews_dir / "main_publication_fix_list.md").write_text(render_publication_fix_list(review), encoding="utf-8")
+        stem = "main_publication_review_after_related_work" if after_related_work else "main_publication_review"
+        fix_list_name = "main_publication_fix_list_after_related_work.md" if after_related_work else "main_publication_fix_list.md"
+        (reviews_dir / f"{stem}.json").write_text(json.dumps(to_plain(review), indent=2) + "\n", encoding="utf-8")
+        (reviews_dir / f"{stem}.md").write_text(render_publication_readiness_review(review), encoding="utf-8")
+        (reviews_dir / fix_list_name).write_text(render_publication_fix_list(review), encoding="utf-8")
 
     def _benchmark_dir(self, project_id: str) -> Path:
         program = self.project_manager.load_project(project_id)
@@ -439,9 +469,13 @@ class _PilotReviewContext:
 @dataclass(slots=True)
 class _PublicationReadinessContext:
     spec: SequentialSpecificityBenchmarkSpec
+    after_related_work: bool
     main_analysis: MainAnalysisResult | None
     pilot_analysis: PilotAnalysisResult | None
     related_work_status: RelatedWorkCompletionStatus | None
+    prior_work_dossier: SelectedBenchmarkPriorWorkDossier | None
+    positioning_report: PositioningReport | None
+    related_work_matrix_v2: SelectedBenchmarkRelatedWorkMatrixV2 | None
     baseline_strength: BaselineStrengthAssessment | None
     main_power_decision: MainPowerDecision | None
     manuscript_payloads: list[dict[str, Any]]
@@ -455,20 +489,29 @@ class _PublicationReadinessContext:
         cls,
         builder: SelectedBenchmarkReviewerPanelBuilder,
         benchmark_id: str,
+        *,
+        after_related_work: bool = False,
     ) -> _PublicationReadinessContext:
         spec = builder.benchmark_manager.load_spec(benchmark_id)
         main_analysis = _latest_main_analysis(builder, benchmark_id)
         pilot_analysis = _latest_pilot_analysis(builder, benchmark_id)
-        related_work_status = _related_work_completion_status(builder, benchmark_id)
+        related_work_status = _related_work_completion_status(builder, benchmark_id, refresh=False)
+        prior_work_dossier = _selected_prior_work_dossier(builder, benchmark_id, refresh=after_related_work)
+        positioning_report = _selected_positioning_report(builder, benchmark_id, refresh=after_related_work)
+        related_work_matrix_v2 = _selected_related_work_matrix_v2(builder, benchmark_id, refresh=after_related_work)
         baseline_strength = builder.baseline_manager.assess_baseline_strength(benchmark_id)
         main_power_decision = MainPowerManager(builder.config).latest_alpha_decision(benchmark_id, alpha_level=0.001)
         manuscript_payloads, manuscript_text, manuscript_paths = _publication_manuscript_artifacts(builder, spec.project_id)
         traceability_payloads, traceability_paths = _publication_traceability_artifacts(builder, spec.project_id)
         return cls(
             spec=spec,
+            after_related_work=after_related_work,
             main_analysis=main_analysis,
             pilot_analysis=pilot_analysis,
             related_work_status=related_work_status,
+            prior_work_dossier=prior_work_dossier,
+            positioning_report=positioning_report,
+            related_work_matrix_v2=related_work_matrix_v2,
             baseline_strength=baseline_strength,
             main_power_decision=main_power_decision,
             manuscript_payloads=manuscript_payloads,
@@ -1129,11 +1172,14 @@ def _deployment_overclaim(text: str) -> bool:
         "do not claim deployment validity",
         "no deployment validity",
         "does not establish deployment validity",
+        "does not establish real-world deployment validity",
         "do not establish deployment validity",
+        "do not establish real-world deployment validity",
         "do not prove real-world deployment validity",
         "not deployment evidence",
         "not evidence that a deployed monitor",
         "cannot establish deployment validity",
+        "cannot establish real-world deployment validity",
         "cannot support deployment validity claims",
         "deployment validity is not established",
         "deployment validity is not claimed",
@@ -1142,6 +1188,10 @@ def _deployment_overclaim(text: str) -> bool:
         "synthetic evidence alone never establishes deployment validity",
         "no synthetic main result establishes deployment validity",
         "cannot support deployment-validity claims",
+        "no real-world deployment-validity claim",
+        "not real-world deployment-validity claims",
+        "do not imply real-world deployment validity",
+        "synthetic data does not establish real-world deployment validity",
         "not deployment-validity evidence",
         "must not be read as deployment validity",
     ]
@@ -1162,10 +1212,85 @@ def _latest_main_analysis(builder: SelectedBenchmarkReviewerPanelBuilder, benchm
 def _related_work_completion_status(
     builder: SelectedBenchmarkReviewerPanelBuilder,
     benchmark_id: str,
+    *,
+    refresh: bool = False,
 ) -> RelatedWorkCompletionStatus | None:
     try:
-        return RelatedWorkCompletionManager(builder.config).load_status(benchmark_id)
+        manager = RelatedWorkCompletionManager(builder.config)
+        return manager.complete(benchmark_id) if refresh else manager.load_status(benchmark_id)
     except (FileNotFoundError, ValueError):
+        return None
+
+
+def _selected_prior_work_dossier(
+    builder: SelectedBenchmarkReviewerPanelBuilder,
+    benchmark_id: str,
+    *,
+    refresh: bool = False,
+) -> SelectedBenchmarkPriorWorkDossier | None:
+    manager = SelectedBenchmarkPriorWorkRefreshManager(builder.config)
+    try:
+        path = manager.dossier_path(benchmark_id)
+    except FileNotFoundError:
+        return None
+    if refresh:
+        try:
+            return manager.refresh(benchmark_id)
+        except (FileNotFoundError, ValueError, TypeError):
+            return None
+    if not path.exists():
+        return None
+    try:
+        return manager.load_or_refresh(benchmark_id)
+    except (FileNotFoundError, ValueError, TypeError):
+        return None
+
+
+def _selected_positioning_report(
+    builder: SelectedBenchmarkReviewerPanelBuilder,
+    benchmark_id: str,
+    *,
+    refresh: bool = False,
+) -> PositioningReport | None:
+    manager = SelectedBenchmarkPositioningManager(builder.config)
+    try:
+        path = manager.report_path(benchmark_id)
+    except FileNotFoundError:
+        return None
+    if refresh:
+        try:
+            return manager.build(benchmark_id)
+        except (FileNotFoundError, ValueError, TypeError):
+            return None
+    if not path.exists():
+        return None
+    try:
+        return manager.load_or_build(benchmark_id)
+    except (FileNotFoundError, ValueError, TypeError):
+        return None
+
+
+def _selected_related_work_matrix_v2(
+    builder: SelectedBenchmarkReviewerPanelBuilder,
+    benchmark_id: str,
+    *,
+    refresh: bool = False,
+) -> SelectedBenchmarkRelatedWorkMatrixV2 | None:
+    manager = SelectedBenchmarkRelatedWorkMatrixV2Manager(builder.config)
+    try:
+        path = manager.matrix_path(benchmark_id)
+    except FileNotFoundError:
+        return None
+    if refresh:
+        try:
+            return manager.build(benchmark_id)
+        except (FileNotFoundError, ValueError, TypeError):
+            return None
+    if not path.exists():
+        return None
+    try:
+        return manager.load_or_build(benchmark_id)
+    except (FileNotFoundError, ValueError, TypeError):
         return None
 
 
@@ -1246,6 +1371,9 @@ def _review_related_work_completion(
     major_blockers: list[str],
     required_revisions: list[str],
 ) -> None:
+    _review_related_work_matrix_v2(context, fatal_blockers, major_blockers, required_revisions)
+    if context.after_related_work and context.related_work_matrix_v2 is not None and not context.related_work_matrix_v2.missing_categories:
+        return
     status = context.related_work_status
     if status is None:
         major_blockers.append("Related work completion status is missing.")
@@ -1258,6 +1386,72 @@ def _review_related_work_completion(
         required_revisions.append("Complete required related-work categories with real paper records; fallback-only records do not count.")
     if status.novelty_status in {"duplicate", "blocked", "fatal_duplicate"}:
         fatal_blockers.append(f"Novelty status is fatal: `{status.novelty_status}`.")
+
+
+def _review_related_work_matrix_v2(
+    context: _PublicationReadinessContext,
+    fatal_blockers: list[str],
+    major_blockers: list[str],
+    required_revisions: list[str],
+) -> None:
+    matrix = context.related_work_matrix_v2
+    if matrix is None:
+        return
+    if matrix.missing_categories:
+        major_blockers.append("Matrix-v2 missing related-work categories: " + ", ".join(matrix.missing_categories))
+        required_revisions.append("Complete matrix-v2 missing categories before publication readiness can pass.")
+    direct_ids = [entry.paper_id for entry in matrix.entries if entry.relationship == "directly solves"]
+    if direct_ids:
+        fatal_blockers.append("Matrix-v2 directly-solving prior work triggers no-go/revise: " + ", ".join(direct_ids))
+        required_revisions.append("Reframe the contribution or produce a revise/no-go decision before manuscript readiness.")
+    if matrix.must_cite_ids:
+        required_revisions.append(
+            "Ensure matrix-v2 must-cite papers appear in the manuscript bibliography: " + ", ".join(matrix.must_cite_ids)
+        )
+    if matrix.baseline_source_ids:
+        required_revisions.append("Feed matrix-v2 baseline-source papers into the baseline plan: " + ", ".join(matrix.baseline_source_ids))
+
+
+def _review_prior_work_dossier(
+    context: _PublicationReadinessContext,
+    fatal_blockers: list[str],
+    major_blockers: list[str],
+    required_revisions: list[str],
+) -> None:
+    dossier = context.prior_work_dossier
+    if dossier is None:
+        if not context.after_related_work:
+            return
+        major_blockers.append("Closest prior-work dossier is missing.")
+        required_revisions.append("Run `gapforge selected-prior-work-refresh` before publication-readiness rerun.")
+        return
+    if dossier.novelty_status == "duplicate":
+        fatal_blockers.append("Closest prior-work dossier marks the contribution as duplicate.")
+        required_revisions.append("Issue a no-go or reframe the contribution around a decisive difference.")
+    elif dossier.novelty_status == "unknown":
+        major_blockers.append("Closest prior-work dossier novelty status is unknown.")
+        required_revisions.append("Resolve missing related-work categories or closest-prior-work evidence before readiness can pass.")
+    elif dossier.novelty_status == "weak":
+        major_blockers.append("Closest prior-work dossier marks novelty as weak; publication claims must be downgraded.")
+        required_revisions.append("Use workshop/evaluation-protocol positioning unless a decisive difference is established.")
+
+
+def _review_contribution_positioning(
+    context: _PublicationReadinessContext,
+    major_blockers: list[str],
+    required_revisions: list[str],
+) -> None:
+    report = context.positioning_report
+    if report is None:
+        if not context.after_related_work:
+            return
+        required_revisions.append("Generate selected contribution positioning before final manuscript readiness.")
+        return
+    for risk in report.reviewer_risks:
+        if "novelty is unknown" in risk.lower():
+            major_blockers.append(risk)
+    if report.citation_requirements:
+        required_revisions.extend(report.citation_requirements)
 
 
 def _review_baseline_strength(
@@ -1339,20 +1533,23 @@ def _review_manuscript_traceability(
 
 def _publication_readiness(
     *,
-    has_main_results: bool,
-    has_pilot_results: bool,
+    context: _PublicationReadinessContext,
     fatal_blockers: list[str],
     major_blockers: list[str],
 ) -> str:
     if any(_no_go_blocker(item) for item in fatal_blockers):
         return "no_go"
+    if any(_related_work_blocker(item) for item in [*fatal_blockers, *major_blockers]):
+        return "revise_related_work"
     if fatal_blockers:
-        return "not_ready"
-    if has_main_results and not major_blockers:
-        return "conference_candidate"
-    if has_pilot_results and not major_blockers:
+        return "revise_benchmark"
+    if _weak_novelty(context) and (context.main_analysis is not None or context.pilot_analysis is not None):
         return "workshop_candidate"
-    return "not_ready"
+    if context.main_analysis is not None and not major_blockers:
+        return "publication_candidate"
+    if context.pilot_analysis is not None and not major_blockers:
+        return "workshop_candidate"
+    return "revise_benchmark"
 
 
 def _publication_confidence(
@@ -1362,13 +1559,22 @@ def _publication_confidence(
     fatal_blockers: list[str],
     major_blockers: list[str],
 ) -> str:
-    if readiness == "conference_candidate":
+    if readiness == "publication_candidate":
         return "medium"
     if readiness == "workshop_candidate":
         return "medium" if context.related_work_status and context.baseline_strength else "low"
     if fatal_blockers or major_blockers:
         return "high"
     return "low"
+
+
+def _related_work_blocker(item: str) -> bool:
+    lowered = item.lower()
+    return any(marker in lowered for marker in ["related work", "related-work", "prior-work", "matrix-v2", "novelty status is unknown"])
+
+
+def _weak_novelty(context: _PublicationReadinessContext) -> bool:
+    return context.prior_work_dossier is not None and context.prior_work_dossier.novelty_status == "weak"
 
 
 def _claims_alpha_0001(text: str) -> bool:
@@ -1418,7 +1624,14 @@ def _deployment_validity_only(blocker: str) -> bool:
 
 def _no_go_blocker(blocker: str) -> bool:
     lowered = blocker.lower()
-    return "duplicate" in lowered or "novelty status is fatal" in lowered or "validity failure" in lowered
+    return (
+        "duplicate" in lowered
+        or "directly-solving" in lowered
+        or "directly solving" in lowered
+        or "no-go" in lowered
+        or "novelty status is fatal" in lowered
+        or "validity failure" in lowered
+    )
 
 
 def _weak_baseline_suite(context: _PilotReviewContext) -> bool:

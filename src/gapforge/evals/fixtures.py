@@ -119,6 +119,15 @@ V23_FIXTURE_NAMES = [
     "alpha_overclaim_blocked",
     "synthetic_deployment_overclaim_blocked",
 ]
+V24_FIXTURE_NAMES = [
+    "completed_related_work_workshop_candidate",
+    "completed_related_work_publication_candidate",
+    "missing_category_blocked",
+    "fake_citation_blocked",
+    "duplicate_prior_work_no_go",
+    "synthetic_deployment_overclaim_blocked",
+    "manuscript_related_work_revised",
+]
 V2_IDEA_FIXTURE_NAMES = [
     "accepted_benchmark_idea",
     "accepted_measurement_idea",
@@ -162,6 +171,7 @@ class EvalFixture:
     is_v21: bool = False
     is_v22: bool = False
     is_v23: bool = False
+    is_v24: bool = False
     is_v2_ideas: bool = False
     campaign_fixture: dict[str, Any] = field(default_factory=dict)
     real_literature_fixture: dict[str, Any] = field(default_factory=dict)
@@ -172,6 +182,7 @@ class EvalFixture:
     selected_benchmark_fixture: dict[str, Any] = field(default_factory=dict)
     selected_benchmark_v22_fixture: dict[str, Any] = field(default_factory=dict)
     selected_benchmark_v23_fixture: dict[str, Any] = field(default_factory=dict)
+    selected_benchmark_v24_fixture: dict[str, Any] = field(default_factory=dict)
     idea_fixture: dict[str, Any] = field(default_factory=dict)
 
     @property
@@ -229,6 +240,10 @@ def default_v23_fixture_root() -> Path:
     return Path.cwd() / "tests" / "fixtures" / "selected_benchmark_v23"
 
 
+def default_v24_fixture_root() -> Path:
+    return Path.cwd() / "tests" / "fixtures" / "selected_benchmark_v24"
+
+
 def default_v2_idea_fixture_root() -> Path:
     return Path.cwd() / "tests" / "fixtures" / "ideas_v2"
 
@@ -271,6 +286,9 @@ def load_fixture(name: str, root: Path | None = None) -> EvalFixture:
         v23_path = default_v23_fixture_root() / name
         if v23_path.exists():
             return load_v23_fixture(name, default_v23_fixture_root())
+        v24_path = default_v24_fixture_root() / name
+        if v24_path.exists():
+            return load_v24_fixture(name, default_v24_fixture_root())
         v2_idea_path = default_v2_idea_fixture_root() / name
         if v2_idea_path.exists():
             return load_v2_idea_fixture(name, default_v2_idea_fixture_root())
@@ -769,6 +787,53 @@ def load_v23_fixture(name: str, root: Path | None = None) -> EvalFixture:
     )
 
 
+def load_v24_fixture(name: str, root: Path | None = None) -> EvalFixture:
+    fixture_root = root or default_v24_fixture_root()
+    path = fixture_root / name
+    if not path.exists():
+        raise FileNotFoundError(f"Unknown v2.4 selected benchmark eval fixture: {name}")
+    raw = _read_json(path / "fixture.json")
+    topic = str(raw.get("topic", name.replace("_", " ")))
+    papers = [
+        Paper(
+            id=f"paper-{name}",
+            title=f"Selected related-work remediation fixture paper for {topic}",
+            authors=["GapForge fixture"],
+            abstract="Synthetic offline fixture metadata for v2.4 selected benchmark related-work remediation evaluation.",
+            year=2026,
+            source="fixture",
+        )
+    ]
+    return EvalFixture(
+        name=name,
+        topic=topic,
+        path=path,
+        papers=papers,
+        paper_notes=[],
+        known_good_gaps=[
+            Gap(
+                id=f"gap-{name}",
+                title=topic,
+                description="Offline v2.4 selected benchmark related-work remediation fixture.",
+                supporting_paper_ids=[papers[0].id],
+                why_existing_work_does_not_solve_it=(
+                    "Fixture encodes related-work search, curation, dossier refresh, positioning, matrix, publication review, "
+                    "manuscript revision, and release-gate honesty."
+                ),
+                minimum_experiment_needed="Use fixture v2.4 related-work remediation records and release-gate expectations.",
+                risk_that_gap_is_fake="This is synthetic fixture data and is not a real benchmark result.",
+                confidence="medium",
+            )
+        ],
+        known_bad_gaps=[],
+        duplicate_ideas=[],
+        expected_reviewer_objections=[],
+        is_v24=True,
+        selected_benchmark_fixture=raw,
+        selected_benchmark_v24_fixture=raw,
+    )
+
+
 def load_v2_idea_fixture(name: str, root: Path | None = None) -> EvalFixture:
     fixture_root = root or default_v2_idea_fixture_root()
     path = fixture_root / name
@@ -866,6 +931,11 @@ def load_v22_fixtures(names: list[str] | None = None, root: Path | None = None) 
 def load_v23_fixtures(names: list[str] | None = None, root: Path | None = None) -> list[EvalFixture]:
     selected = names or V23_FIXTURE_NAMES
     return [load_v23_fixture(name, root) for name in selected]
+
+
+def load_v24_fixtures(names: list[str] | None = None, root: Path | None = None) -> list[EvalFixture]:
+    selected = names or V24_FIXTURE_NAMES
+    return [load_v24_fixture(name, root) for name in selected]
 
 
 def load_v2_idea_fixtures(names: list[str] | None = None, root: Path | None = None) -> list[EvalFixture]:

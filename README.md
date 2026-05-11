@@ -37,6 +37,10 @@ GapForge v2 planning docs:
 - [v2.3 related-work completion plan](docs/V2_3_RELATED_WORK_COMPLETION.md)
 - [v2.3 publication-readiness gate](docs/V2_3_PUBLICATION_READINESS.md)
 - [v2.3 acceptance criteria](docs/V2_3_ACCEPTANCE_CRITERIA.md)
+- [v2.4 related-work remediation roadmap](docs/V2_4_ROADMAP.md)
+- [v2.4 related-work completion](docs/V2_4_RELATED_WORK_COMPLETION.md)
+- [v2.4 publication remediation](docs/V2_4_PUBLICATION_REMEDIATION.md)
+- [v2.4 acceptance criteria](docs/V2_4_ACCEPTANCE_CRITERIA.md)
 
 GapForge is intentionally skeptical. It can recommend a direction only when evidence gates support one, and it can refuse when literature coverage, novelty evidence, or empirical support is insufficient. It is not an exhaustive autonomous literature reviewer, and it must not fabricate citations, experimental results, venue acceptance, publication readiness, or novelty claims. Deterministic and offline-safe paths remain the default.
 
@@ -58,6 +62,7 @@ GapForge is intentionally skeptical. It can recommend a direction only when evid
 - **v2.1.0**: Selected Idea Execution release. v2.1 freezes the accepted v2.0 idea `idea-sequential-specificity-benchmark-for-low-fpr-collusion-audits` and turns it into a benchmark specification, threat model, task/data generator, baseline suite, sequential specificity metrics, power plan, experiment workspace, smoke benchmark run, result analysis, reviewer critique, and manuscript package update. The smoke path is runnable and artifact-backed, but remains synthetic and underpowered.
 - **v2.2.0**: Pilot-Scale Benchmark Study release. v2.2 requires a pilot run manifest, expanded honest-agent null distribution, expanded collusive-agent alternatives, stronger hard negatives, full baseline monitor suite, pilot result artifacts, sequential low-FPR uncertainty analysis, prior-work and related-work attachment, reviewer-blocker classification, and a pilot manuscript package. It must not claim deployment validity, unsupported `alpha=0.001` operational specificity, main benchmark maturity, or publication readiness from synthetic pilot data.
 - **v2.3.0**: Main-Scale Benchmark and Publication-Readiness Upgrade. v2.3 directly addresses v2.2 blockers by requiring a main-scale sample-size plan, an explicit `alpha=0.001` power-or-drop decision, real prior-work records for required categories, related-work matrix completion, stronger baselines, main dataset generation or no-go, main benchmark execution or no-go, publication-readiness reviewer panel, manuscript package upgrade, and a clear go/no-go recommendation.
+- **v2.4.0**: Related Work Completion and Publication-Readiness Remediation. v2.4 starts from the v2.3 `revise_benchmark` outcome: the synthetic main benchmark completed and powered `alpha=0.001`, but publication readiness remained blocked because required related-work categories had no real attached paper records. v2.4 requires real category-specific search campaigns, real paper attachment, closest-prior-work dossier refresh, novelty and benchmark positioning updates, contribution claim softening when needed, reviewer rerun, manuscript revision, and an updated go/no-go decision. It must not claim publication readiness from fallback-only related work, hide prior work, weaken synthetic/deployment limits, or invent citations.
 
 ## Why Not Just Summarization?
 
@@ -840,6 +845,38 @@ Planning docs:
 - [docs/V2_3_MAIN_BENCHMARK.md](docs/V2_3_MAIN_BENCHMARK.md)
 - [docs/V2_3_RELATED_WORK_COMPLETION.md](docs/V2_3_RELATED_WORK_COMPLETION.md)
 - [docs/V2_3_PUBLICATION_READINESS.md](docs/V2_3_PUBLICATION_READINESS.md)
+
+## v2.4 Related Work Completion and Publication-Readiness Remediation
+
+v2.4 is the remediation lane after the v2.3 main benchmark decision. The v2.3 synthetic main run completed with 2995 negative traces, 500 positive traces, 2139 hard-negative traces, 15 monitor runs, and 10 sequential metric results, but the final decision was `revise_benchmark`: publication readiness and manuscript status were `not_ready` because all required related-work categories lacked real attached paper records.
+
+v2.4 is therefore centered on real related work, not on making the existing synthetic result sound stronger. It requires targeted search campaigns, traceable paper records for required categories, closest-prior-work and novelty-risk updates, benchmark positioning against prior protocols, manuscript revision, a publication-readiness reviewer rerun, and a new go/no-go decision.
+
+The v2.3 synthetic main benchmark completed, but publication readiness remained blocked by real related-work absence. v2.4 makes that remediation visible and scriptable:
+
+```bash
+gapforge selected-related-work-search-plan --benchmark-id <benchmark-id>
+gapforge selected-related-work-search-run --benchmark-id <benchmark-id>
+gapforge attach-related-paper --benchmark-id <benchmark-id> --category "low-FPR detection/evaluation" --paper-id <paper-id>
+gapforge read-selected-related-work --benchmark-id <benchmark-id>
+gapforge selected-prior-work-refresh --benchmark-id <benchmark-id>
+gapforge selected-positioning --benchmark-id <benchmark-id>
+gapforge selected-related-work-matrix-v2 --benchmark-id <benchmark-id>
+gapforge selected-publication-review --benchmark-id <benchmark-id> --after-related-work
+gapforge selected-manuscript-related-work-revise --benchmark-id <benchmark-id>
+gapforge selected-paper-package-v24 --benchmark-id <benchmark-id>
+gapforge v24-release-gate --write-report --json
+gapforge dashboard --project-id <selected-project-id> --include-selected-v24
+```
+
+The same path is available from `gapforge.api`: `plan_selected_related_work_search`, `run_selected_related_work_search`, `attach_related_paper`, `read_selected_related_work`, `refresh_selected_prior_work`, `position_selected_contribution`, `build_selected_related_work_matrix_v2`, `rerun_selected_publication_review`, `revise_selected_manuscript_related_work`, and `v24_release_gate`. Fallback-only records do not count, no fake citation is allowed, no publication-ready claim passes while blockers remain, and synthetic evidence is not deployment validity.
+
+Planning docs:
+
+- [docs/V2_4_ROADMAP.md](docs/V2_4_ROADMAP.md)
+- [docs/V2_4_RELATED_WORK_COMPLETION.md](docs/V2_4_RELATED_WORK_COMPLETION.md)
+- [docs/V2_4_PUBLICATION_REMEDIATION.md](docs/V2_4_PUBLICATION_REMEDIATION.md)
+- [docs/V2_4_ACCEPTANCE_CRITERIA.md](docs/V2_4_ACCEPTANCE_CRITERIA.md)
 - [docs/V2_3_ACCEPTANCE_CRITERIA.md](docs/V2_3_ACCEPTANCE_CRITERIA.md)
 
 ## Active v0.3 Loop

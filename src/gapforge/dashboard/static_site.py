@@ -48,6 +48,7 @@ from gapforge.release_gate.v2 import V2ReleaseGateEnforcer, render_v2_release_ga
 from gapforge.release_gate.v21 import V21ReleaseGateEnforcer, render_v21_release_gate_markdown
 from gapforge.release_gate.v22 import V22ReleaseGateEnforcer, render_v22_release_gate_markdown
 from gapforge.release_gate.v23 import V23ReleaseGateEnforcer, render_v23_release_gate_markdown
+from gapforge.release_gate.v24 import V24ReleaseGateEnforcer, render_v24_release_gate_markdown
 from gapforge.state import ResearchStateManager
 
 PAGES = [
@@ -157,6 +158,18 @@ SELECTED_MAIN_PAGES = [
     ("v23_release_gate.html", "v2.3 Release Gate"),
 ]
 
+SELECTED_V24_PAGES = [
+    ("related_work_search.html", "Related-Work Search"),
+    ("category_curation.html", "Category Curation"),
+    ("related_work_reading.html", "Related-Work Reading"),
+    ("prior_work_dossier.html", "Prior-Work Dossier"),
+    ("contribution_positioning.html", "Contribution Positioning"),
+    ("related_work_matrix_v2.html", "Related-Work Matrix v2"),
+    ("publication_review_after_related_work.html", "Publication Review Rerun"),
+    ("manuscript_related_work_revision.html", "Manuscript Related Work"),
+    ("v24_release_gate.html", "v2.4 Release Gate"),
+]
+
 
 @dataclass(slots=True)
 class DashboardResult:
@@ -189,6 +202,7 @@ class StaticDashboardBuilder:
         include_selected_idea: bool = False,
         include_selected_pilot: bool = False,
         include_selected_main: bool = False,
+        include_selected_v24: bool = False,
     ) -> DashboardResult:
         program = self.project_manager.load_project(project_id)
         states = [self.state_manager.load_run(run_id) for run_id in program.run_ids]
@@ -200,6 +214,7 @@ class StaticDashboardBuilder:
             include_selected_idea=include_selected_idea,
             include_selected_pilot=include_selected_pilot,
             include_selected_main=include_selected_main,
+            include_selected_v24=include_selected_v24,
             config=self.config,
         )
         return _write_dashboard(Path(program.project.root_dir) / "dashboard", context)
@@ -248,6 +263,7 @@ class _DashboardContext:
         selected_idea_enabled: bool = False,
         selected_pilot_enabled: bool = False,
         selected_main_enabled: bool = False,
+        selected_v24_enabled: bool = False,
     ) -> None:
         self.title = title
         self.subtitle = subtitle
@@ -275,6 +291,7 @@ class _DashboardContext:
         self.selected_idea_enabled = selected_idea_enabled
         self.selected_pilot_enabled = selected_pilot_enabled
         self.selected_main_enabled = selected_main_enabled
+        self.selected_v24_enabled = selected_v24_enabled
 
     @classmethod
     def from_run(cls, state: ResearchRunState) -> _DashboardContext:
@@ -312,6 +329,7 @@ class _DashboardContext:
         include_selected_idea: bool = False,
         include_selected_pilot: bool = False,
         include_selected_main: bool = False,
+        include_selected_v24: bool = False,
         config: GapForgeConfig | None = None,
     ) -> _DashboardContext:
         coverage_reports = [state.source_coverage for state in states if state.source_coverage is not None]
@@ -354,12 +372,13 @@ class _DashboardContext:
             else _empty_manuscript_context(),
             ideas=_load_idea_context(program.project.id, config) if include_ideas and config is not None else _empty_idea_context(),
             selected_idea=_load_selected_idea_context(program.project.id, config)
-            if (include_selected_idea or include_selected_pilot or include_selected_main) and config is not None
+            if (include_selected_idea or include_selected_pilot or include_selected_main or include_selected_v24) and config is not None
             else _empty_selected_idea_context(),
             ideas_enabled=include_ideas,
             selected_idea_enabled=include_selected_idea,
             selected_pilot_enabled=include_selected_pilot,
             selected_main_enabled=include_selected_main,
+            selected_v24_enabled=include_selected_v24,
         )
 
     @classmethod
@@ -536,6 +555,20 @@ def _write_dashboard(root: Path, context: _DashboardContext) -> DashboardResult:
                 "v23_release_gate.html": _render_selected_v23_release_gate_page(context),
             }
         )
+    if context.selected_v24_enabled:
+        pages.update(
+            {
+                "related_work_search.html": _render_v24_related_work_search_page(context),
+                "category_curation.html": _render_v24_category_curation_page(context),
+                "related_work_reading.html": _render_v24_related_work_reading_page(context),
+                "prior_work_dossier.html": _render_v24_prior_work_dossier_page(context),
+                "contribution_positioning.html": _render_v24_contribution_positioning_page(context),
+                "related_work_matrix_v2.html": _render_v24_related_work_matrix_v2_page(context),
+                "publication_review_after_related_work.html": _render_v24_publication_review_page(context),
+                "manuscript_related_work_revision.html": _render_v24_manuscript_revision_page(context),
+                "v24_release_gate.html": _render_selected_v24_release_gate_page(context),
+            }
+        )
     written = []
     for filename, body in pages.items():
         path = root / filename
@@ -608,6 +641,8 @@ def _pages_for_context(context: _DashboardContext) -> list[tuple[str, str]]:
         pages.extend(SELECTED_PILOT_PAGES)
     if context.selected_main_enabled:
         pages.extend(SELECTED_MAIN_PAGES)
+    if context.selected_v24_enabled:
+        pages.extend(SELECTED_V24_PAGES)
     return pages
 
 
@@ -3525,6 +3560,284 @@ def _render_selected_v23_release_gate_page(context: _DashboardContext) -> str:
     return "<pre>" + _e(json.dumps(result, indent=2)) + "</pre>"
 
 
+def _render_v24_related_work_search_page(context: _DashboardContext) -> str:
+    campaign = _dict(context.selected_idea["related_work_search_campaign"])
+    rounds = _as_list(context.selected_idea.get("related_work_search_rounds"))
+    category_searches = _dict(campaign.get("category_searches"))
+    if not rounds and category_searches:
+        rounds = [item for item in category_searches.values() if isinstance(item, dict)]
+    return "\n".join(
+        [
+            "<h2>v2.4 Related-Work Search Campaign</h2>",
+            '<div class="grid">',
+            _metric("Status", campaign.get("status", "missing")),
+            _metric("Required categories", len(_as_list(campaign.get("required_categories")))),
+            _metric("Search rounds", len(rounds)),
+            _metric("Next commands", len(_as_list(campaign.get("next_commands")))),
+            "</div>",
+            "<h2>Category Search Evidence</h2>",
+            _table(
+                ["Category", "Status", "Sources", "Accepted Real Papers", "Fallback Papers", "Failure/Blocker"],
+                [
+                    [
+                        _e(str(_dict(item).get("category", ""))),
+                        _e(str(_dict(item).get("status", ""))),
+                        _e(", ".join(str(value) for value in _as_list(_dict(item).get("sources")))),
+                        _e(", ".join(str(value) for value in _as_list(_dict(item).get("accepted_paper_ids")))),
+                        _e(", ".join(str(value) for value in _as_list(_dict(item).get("fallback_paper_ids")))),
+                        _e(str(_dict(item).get("failure_reason", ""))),
+                    ]
+                    for item in rounds
+                ],
+            ),
+            "<h2>Next Commands</h2>",
+            _list([str(item) for item in _as_list(campaign.get("next_commands"))], css_class="warning"),
+            '<p class="warning">Fallback-only categories do not complete v2.4; unavailable sources must remain visible '
+            "with a next command.</p>",
+        ]
+    )
+
+
+def _render_v24_category_curation_page(context: _DashboardContext) -> str:
+    report = _dict(context.selected_idea["related_work_curation_report"])
+    attachments = _as_list(context.selected_idea.get("related_work_attachments"))
+    statuses = _dict(report.get("category_statuses"))
+    status_rows = [
+        [
+            _e(str(category)),
+            _e(str(_dict(status).get("status", ""))),
+            _e(", ".join(str(value) for value in _as_list(_dict(status).get("accepted_real_paper_ids")))),
+            _e(str(_dict(status).get("waiver_reason", ""))),
+        ]
+        for category, status in statuses.items()
+    ]
+    return "\n".join(
+        [
+            "<h2>v2.4 Category Curation</h2>",
+            '<div class="grid">',
+            _metric("Accepted papers", report.get("accepted_paper_count", 0)),
+            _metric("Rejected papers", report.get("rejected_paper_count", 0)),
+            _metric("Missing categories", len(_as_list(report.get("missing_categories")))),
+            _metric("Closest prior work", len(_as_list(report.get("closest_prior_work_ids")))),
+            "</div>",
+            "<h2>Category Statuses</h2>",
+            _table(["Category", "Status", "Accepted Real Papers", "Human Waiver"], status_rows),
+            "<h2>Attachments</h2>",
+            _table(
+                ["Category", "Paper", "Relationship", "Status", "Notes"],
+                [
+                    [
+                        _e(str(_dict(item).get("category", ""))),
+                        _code(str(_dict(item).get("paper_id", ""))),
+                        _e(str(_dict(item).get("relationship", ""))),
+                        _e(str(_dict(item).get("status", ""))),
+                        _e(str(_dict(item).get("notes", ""))),
+                    ]
+                    for item in attachments
+                ],
+            ),
+            "<h2>Missing Categories</h2>",
+            _list([str(item) for item in _as_list(report.get("missing_categories"))], css_class="warning"),
+            "<h2>Warnings</h2>",
+            _list([str(item) for item in _as_list(report.get("warnings"))], css_class="warning"),
+            '<p class="warning">Missing categories cannot be hidden. Fallback-only or fake citations never satisfy '
+            "category completion.</p>",
+        ]
+    )
+
+
+def _render_v24_related_work_reading_page(context: _DashboardContext) -> str:
+    statuses = _as_list(context.selected_idea.get("related_work_reading_statuses"))
+    report = str(context.selected_idea.get("related_work_reading_report") or "")
+    return "\n".join(
+        [
+            "<h2>v2.4 Related-Work Reading Pass</h2>",
+            _table(
+                ["Paper", "Category", "Source Basis", "Confidence", "Evidence Spans", "Blockers"],
+                [
+                    [
+                        _code(str(_dict(item).get("paper_id", ""))),
+                        _e(str(_dict(item).get("category", ""))),
+                        _e(str(_dict(item).get("source_basis", ""))),
+                        _e(str(_dict(item).get("confidence", ""))),
+                        _e(", ".join(str(value) for value in _as_list(_dict(item).get("evidence_span_ids")))),
+                        _e("; ".join(str(value) for value in _as_list(_dict(item).get("blockers")))),
+                    ]
+                    for item in statuses
+                ],
+            ),
+            '<p class="warning">Abstract-only readings are evidence limits and cannot support overstrong novelty claims.</p>',
+            "<h2>Report</h2>",
+            "<pre>" + _e(report or "No related-work reading report is available.") + "</pre>",
+        ]
+    )
+
+
+def _render_v24_prior_work_dossier_page(context: _DashboardContext) -> str:
+    dossier = _dict(context.selected_idea["prior_work_dossier"])
+    return "\n".join(
+        [
+            "<h2>v2.4 Closest-Prior-Work Dossier</h2>",
+            _kv_table(
+                [
+                    ("Novelty status", dossier.get("novelty_status", "missing")),
+                    ("Confidence", dossier.get("confidence", "missing")),
+                    ("Closest prior work", ", ".join(str(item) for item in _as_list(dossier.get("closest_prior_work_ids")))),
+                ]
+            ),
+            "<h2>Comparison Table</h2>",
+            _json_table(_as_list(dossier.get("comparison_table"))),
+            "<h2>What Is New</h2>",
+            _list([str(item) for item in _as_list(dossier.get("what_is_new"))]),
+            "<h2>What Is Not New</h2>",
+            _list([str(item) for item in _as_list(dossier.get("what_is_not_new"))], css_class="warning"),
+            "<h2>Decisive Difference Needed</h2>",
+            _list([str(item) for item in _as_list(dossier.get("decisive_difference_needed"))], css_class="warning"),
+        ]
+    )
+
+
+def _render_v24_contribution_positioning_page(context: _DashboardContext) -> str:
+    report = _dict(context.selected_idea["positioning_report"])
+    claims = _as_list(report.get("recommended_claims"))
+    return "\n".join(
+        [
+            "<h2>v2.4 Contribution Positioning</h2>",
+            _table(
+                ["Original Claim", "Revised Claim", "Novelty Strength", "Softening Required", "Reasons"],
+                [
+                    [
+                        _e(str(_dict(item).get("original_claim", ""))),
+                        _e(str(_dict(item).get("revised_claim", ""))),
+                        _e(str(_dict(item).get("novelty_strength", ""))),
+                        _e(str(_dict(item).get("claim_softening_required", ""))),
+                        _e("; ".join(str(value) for value in _as_list(_dict(item).get("reasons")))),
+                    ]
+                    for item in claims
+                ],
+            ),
+            "<h2>Claims To Avoid</h2>",
+            _list([str(item) for item in _as_list(report.get("claims_to_avoid"))], css_class="warning"),
+            "<h2>Reviewer Risks</h2>",
+            _list([str(item) for item in _as_list(report.get("reviewer_risks"))], css_class="warning"),
+            "<h2>Citation Requirements</h2>",
+            _list([str(item) for item in _as_list(report.get("citation_requirements"))]),
+            '<p class="warning">Do not use first, SOTA, deployment-valid, or publication-ready language unless the gates support it.</p>',
+        ]
+    )
+
+
+def _render_v24_related_work_matrix_v2_page(context: _DashboardContext) -> str:
+    matrix = _dict(context.selected_idea["related_work_matrix_v2"])
+    entries = _as_list(matrix.get("entries"))
+    return "\n".join(
+        [
+            "<h2>v2.4 Related-Work Matrix v2</h2>",
+            '<div class="grid">',
+            _metric("Entries", len(entries)),
+            _metric("Must-cite papers", len(_as_list(matrix.get("must_cite_ids")))),
+            _metric("Baseline sources", len(_as_list(matrix.get("baseline_source_ids")))),
+            _metric("Missing categories", len(_as_list(matrix.get("missing_categories")))),
+            "</div>",
+            _table(
+                ["Paper", "Category", "Relationship", "Must Cite", "Baseline Source", "Reviewer Risk"],
+                [
+                    [
+                        _code(str(_dict(item).get("paper_id", ""))),
+                        _e(str(_dict(item).get("category", ""))),
+                        _e(str(_dict(item).get("relationship", ""))),
+                        _e(str(_dict(item).get("must_cite", ""))),
+                        _e(str(_dict(item).get("baseline_source", ""))),
+                        _e(str(_dict(item).get("reviewer_omission_risk", ""))),
+                    ]
+                    for item in entries
+                ],
+            ),
+            "<h2>Reviewer Omission Risks</h2>",
+            _list([str(item) for item in _as_list(matrix.get("reviewer_omission_risks"))], css_class="warning"),
+            '<p class="warning">Directly solving papers trigger revise/no-go; missing categories block publication readiness.</p>',
+        ]
+    )
+
+
+def _render_v24_publication_review_page(context: _DashboardContext) -> str:
+    review = _dict(context.selected_idea["publication_review_after_related_work"])
+    fix_list = str(context.selected_idea.get("publication_fix_list_after_related_work_markdown") or "")
+    return "\n".join(
+        [
+            "<h2>v2.4 Publication Review After Related Work</h2>",
+            '<div class="grid">',
+            _metric("Readiness", review.get("readiness", "missing")),
+            _metric("Fatal blockers", len(_as_list(review.get("fatal_blockers")))),
+            _metric("Major blockers", len(_as_list(review.get("major_blockers")))),
+            _metric("Required revisions", len(_as_list(review.get("required_revisions")))),
+            "</div>",
+            "<h2>Fatal Blockers</h2>",
+            _list([str(item) for item in _as_list(review.get("fatal_blockers"))], css_class="warning"),
+            "<h2>Major Blockers</h2>",
+            _list([str(item) for item in _as_list(review.get("major_blockers"))], css_class="warning"),
+            "<h2>Fix List</h2>",
+            "<pre>" + _e(fix_list or "No after-related-work fix list is available.") + "</pre>",
+            '<p class="warning">Synthetic-only evidence blocks deployment claims but not necessarily bounded '
+            "benchmark/protocol claims.</p>",
+        ]
+    )
+
+
+def _render_v24_manuscript_revision_page(context: _DashboardContext) -> str:
+    revision = _dict(context.selected_idea["related_work_manuscript_revision"])
+    package = _dict(context.selected_idea["paper_package_v24"])
+    return "\n".join(
+        [
+            "<h2>v2.4 Manuscript Related-Work Revision</h2>",
+            _kv_table(
+                [
+                    ("Revision ID", revision.get("id", "missing")),
+                    ("Publication readiness", revision.get("publication_readiness", package.get("publication_readiness", "missing"))),
+                    ("Claims softened", revision.get("claims_softened", False)),
+                    ("Publication ready", package.get("publication_ready", False)),
+                ]
+            ),
+            "<h2>Must-Cite Coverage</h2>",
+            _list([str(item) for item in _as_list(revision.get("must_cite_ids") or package.get("must_cite_ids"))]),
+            "<h2>Missing Categories</h2>",
+            _list(
+                [str(item) for item in _as_list(revision.get("missing_categories") or package.get("missing_categories"))],
+                css_class="warning",
+            ),
+            "<h2>Blockers</h2>",
+            _list([str(item) for item in _as_list(revision.get("blockers") or package.get("blockers"))], css_class="warning"),
+            '<p class="warning">Related-work sections must cite known paper records and keep synthetic limitations visible.</p>',
+        ]
+    )
+
+
+def _render_selected_v24_release_gate_page(context: _DashboardContext) -> str:
+    result = _dict(context.selected_idea["v24_release_gate"])
+    markdown = str(context.selected_idea.get("v24_release_gate_markdown") or "")
+    if markdown:
+        body = "<pre>" + _e(markdown) + "</pre>"
+    elif result:
+        body = "<pre>" + _e(json.dumps(result, indent=2)) + "</pre>"
+    else:
+        body = "<p>No v2.4 release gate report is available.</p>"
+    return (
+        "<h2>v2.4 Release Gate</h2>"
+        '<p class="warning">No publication-ready claim passes without the after-related-work review, real category coverage, '
+        "known citations, visible missing categories, and no synthetic deployment-validity claim.</p>" + body
+    )
+
+
+def _json_table(items: list[Any]) -> str:
+    rows: list[list[str]] = []
+    for item in items:
+        if isinstance(item, dict):
+            rows.extend([_e(str(key)), _e(json.dumps(value, sort_keys=True))] for key, value in sorted(item.items()))
+        else:
+            rows.append([_e("value"), _e(str(item))])
+    return _table(["Field", "Value"], rows)
+
+
 def _scenario_table(scenarios: list[dict[str, Any]], type_field: str) -> str:
     return _table(
         ["ID", "Name", "Type", "Observability/Difficulty", "False Positive Risk", "Description"],
@@ -3758,6 +4071,21 @@ def _empty_selected_idea_context() -> dict[str, Any]:
         "main_paper_package": {},
         "v23_release_gate": {},
         "v23_release_gate_markdown": "",
+        "related_work_search_campaign": {},
+        "related_work_search_rounds": [],
+        "related_work_curation_report": {},
+        "related_work_attachments": [],
+        "related_work_reading_statuses": [],
+        "related_work_reading_report": "",
+        "prior_work_dossier": {},
+        "positioning_report": {},
+        "related_work_matrix_v2": {},
+        "publication_review_after_related_work": {},
+        "publication_fix_list_after_related_work_markdown": "",
+        "related_work_manuscript_revision": {},
+        "paper_package_v24": {},
+        "v24_release_gate": {},
+        "v24_release_gate_markdown": "",
     }
 
 
@@ -3822,6 +4150,31 @@ def _load_selected_idea_context(project_id: str, config: GapForgeConfig) -> dict
     context["publication_fix_list_markdown"] = _read_text_safely(benchmark_dir / "reviews" / "main_publication_fix_list.md")
     context["main_manuscript"] = _read_json_safely(benchmark_dir / "main_manuscript" / "selected_main_manuscript.json")
     context["main_paper_package"] = _read_json_safely(benchmark_dir / "main_paper_package" / "main_paper_package.json")
+    context["related_work_search_campaign"] = _read_json_safely(
+        benchmark_dir / "related_work_search" / "required_related_work_search_campaign.json"
+    )
+    context["related_work_search_rounds"] = _read_json_files_safely(benchmark_dir / "related_work_search" / "rounds", "*.json")
+    context["related_work_curation_report"] = _read_json_safely(
+        benchmark_dir / "related_work_curation" / "related_work_curation_report.json"
+    )
+    context["related_work_attachments"] = _read_json_list_safely(benchmark_dir / "related_work_curation" / "related_work_attachments.json")
+    context["related_work_reading_statuses"] = _read_json_list_safely(
+        benchmark_dir / "related_work_reading" / "related_work_reading_statuses.json"
+    )
+    context["related_work_reading_report"] = _read_text_safely(benchmark_dir / "related_work_reading" / "related_work_reading_report.md")
+    context["prior_work_dossier"] = _read_json_safely(benchmark_dir / "prior_work_dossier" / "selected_prior_work_dossier.json")
+    context["positioning_report"] = _read_json_safely(benchmark_dir / "positioning" / "positioning_report.json")
+    context["related_work_matrix_v2"] = _read_json_safely(benchmark_dir / "related_work_matrix_v2" / "related_work_matrix_v2.json")
+    context["publication_review_after_related_work"] = _read_json_safely(
+        benchmark_dir / "reviews" / "main_publication_review_after_related_work.json"
+    )
+    context["publication_fix_list_after_related_work_markdown"] = _read_text_safely(
+        benchmark_dir / "reviews" / "main_publication_fix_list_after_related_work.md"
+    )
+    context["related_work_manuscript_revision"] = _read_json_safely(
+        benchmark_dir / "main_manuscript" / "related_work_manuscript_revision_v24.json"
+    )
+    context["paper_package_v24"] = _read_json_safely(benchmark_dir / "paper_package_v24" / "selected_paper_package_v24.json")
     for dataset_dir in sorted((benchmark_dir / "trace_datasets").glob("*")):
         if not dataset_dir.is_dir():
             continue
@@ -3870,6 +4223,13 @@ def _load_selected_idea_context(project_id: str, config: GapForgeConfig) -> dict
             context["v23_release_gate_markdown"] = render_v23_release_gate_markdown(v23_result)
     except (FileNotFoundError, json.JSONDecodeError, TypeError, ValueError):
         context["v23_release_gate"] = _read_json_safely(config.data_dir / "release_gate" / "v23_release_gate_latest.json")
+    try:
+        v24_result = V24ReleaseGateEnforcer(config).evaluate()
+        if not v24_result.project_id or v24_result.project_id == project_id:
+            context["v24_release_gate"] = v24_result.to_dict()
+            context["v24_release_gate_markdown"] = render_v24_release_gate_markdown(v24_result)
+    except (FileNotFoundError, json.JSONDecodeError, TypeError, ValueError):
+        context["v24_release_gate"] = _read_json_safely(config.data_dir / "release_gate" / "v24_release_gate_latest.json")
     return context
 
 

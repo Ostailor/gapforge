@@ -370,6 +370,32 @@ v2.3 non-goals:
 
 The v2.3 release gate should require either main-scale readiness or an explicit no-go. If the main dataset, main run, related-work records, baseline suite, or publication panel are incomplete, the release must preserve those gaps and narrow or block claims.
 
+## v2.4 Related Work Completion and Publication-Readiness Remediation Limits
+
+v2.4 is the remediation release after the v2.3 `revise_benchmark` outcome for `idea-sequential-specificity-benchmark-for-low-fpr-collusion-audits`. v2.3 completed the synthetic main benchmark workflow, but publication readiness remained blocked because required related-work categories had no real attached paper records.
+
+v2.4 must still preserve these limits:
+
+- related-work search campaigns can reduce coverage risk but cannot prove exhaustive search
+- every required related-work category needs real traceable paper records or an explicit incomplete/impossible status
+- fallback-only records, generated citations, and category labels do not count as related-work coverage
+- closest-prior-work review can weaken or defeat novelty claims and must not be hidden
+- contribution claims must be softened when prior work overlaps the benchmark, protocol, metric, baseline, or threat model
+- benchmark positioning against prior work does not turn synthetic evidence into deployment validity
+- the v2.3 synthetic/deployment limitation remains active
+- publication-readiness claims require completed related-work, novelty, citation, manuscript, and reviewer gates
+
+v2.4 non-goals:
+
+- claiming publication readiness while related work remains fallback-only
+- inventing citations, identifiers, venues, authors, or BibTeX metadata
+- hiding closest prior work that weakens novelty
+- claiming real-world deployment validity
+- weakening the v2.3 synthetic benchmark limitation
+- treating an explicit revise or no-go as a failure to document
+
+If required categories remain incomplete, v2.4 must produce a visible `revise_benchmark`, `no_go_related_work`, `no_go_novelty`, or `no_go_publication` decision instead of publication-ready language.
+
 ## Operational Guidance
 
 Use strict mode and coverage assessment before interpreting outputs:

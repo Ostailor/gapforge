@@ -422,7 +422,7 @@ def _decision_status(artifacts: _V23Artifacts) -> str:
 def _publication_candidate_label_present(artifacts: _V23Artifacts) -> bool:
     return bool(
         (artifacts.go_no_go and artifacts.go_no_go.decision == "go_publication_candidate")
-        or (artifacts.publication_review and artifacts.publication_review.readiness == "conference_candidate")
+        or (artifacts.publication_review and artifacts.publication_review.readiness in {"publication_candidate", "conference_candidate"})
         or (artifacts.main_manuscript and artifacts.main_manuscript.status == "publication_candidate")
     )
 
@@ -476,7 +476,7 @@ def _publication_candidate_supported(artifacts: _V23Artifacts, *, alpha_powered:
         artifacts.go_no_go
         and artifacts.go_no_go.decision == "go_publication_candidate"
         and artifacts.publication_review
-        and artifacts.publication_review.readiness == "conference_candidate"
+        and artifacts.publication_review.readiness in {"publication_candidate", "conference_candidate"}
         and artifacts.main_manuscript
         and artifacts.main_manuscript.status == "publication_candidate"
     ):
@@ -552,7 +552,9 @@ def _has_synthetic_deployment_overclaim(text: str) -> bool:
         "do not claim deployment validity",
         "no deployment validity",
         "does not establish deployment validity",
+        "does not establish real-world deployment validity",
         "do not establish deployment validity",
+        "do not establish real-world deployment validity",
         "do not prove real-world deployment validity",
         "not deployment evidence",
         "not evidence that a deployed monitor",
@@ -561,10 +563,15 @@ def _has_synthetic_deployment_overclaim(text: str) -> bool:
         "deployment validity is not established",
         "deployment validity is not claimed",
         "cannot establish deployment validity",
+        "cannot establish real-world deployment validity",
         "cannot support deployment validity claims",
         "synthetic evidence alone never establishes deployment validity",
         "no synthetic main result establishes deployment validity",
         "cannot support deployment-validity claims",
+        "no real-world deployment-validity claim",
+        "not real-world deployment-validity claims",
+        "do not imply real-world deployment validity",
+        "synthetic data does not establish real-world deployment validity",
         "not deployment-validity evidence",
         "must not be interpreted as deployment-validity evidence",
         "must not be read as deployment validity",

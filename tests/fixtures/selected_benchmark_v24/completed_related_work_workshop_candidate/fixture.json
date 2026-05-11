@@ -1,0 +1,156 @@
+{
+  "topic": "Sequential specificity benchmark related-work remediation workshop candidate",
+  "related_work_search": {
+    "campaign_exists": true,
+    "required_categories": [
+      "low-FPR detection/evaluation",
+      "multi-agent collusion/covert coordination",
+      "monitor evasion",
+      "sequential testing/change-point detection",
+      "benchmark/evaluation protocol papers",
+      "anomaly detection specificity",
+      "medical screening specificity analogies if used",
+      "cartel/covert-channel analogies if used"
+    ],
+    "queries_by_category": {
+      "low-FPR detection/evaluation": ["low false positive rate detection specificity evaluation"],
+      "multi-agent collusion/covert coordination": ["multi agent collusion covert coordination detection"],
+      "monitor evasion": ["monitor evasion detection audit benchmarks"],
+      "sequential testing/change-point detection": ["sequential testing change point detection false alarm control"],
+      "benchmark/evaluation protocol papers": ["benchmark evaluation protocol detection systems"],
+      "anomaly detection specificity": ["anomaly detection specificity false positive evaluation"],
+      "medical screening specificity analogies if used": ["medical screening specificity false positive analogy"],
+      "cartel/covert-channel analogies if used": ["cartel detection covert channel analogy coordination"]
+    },
+    "sources_used": ["arxiv", "semantic_scholar", "crossref"],
+    "search_rounds": [
+      {"category": "low-FPR detection/evaluation", "status": "complete", "accepted_paper_ids": ["rw-low-fpr"]},
+      {"category": "multi-agent collusion/covert coordination", "status": "complete", "accepted_paper_ids": ["rw-collusion"]},
+      {"category": "monitor evasion", "status": "complete", "accepted_paper_ids": ["rw-monitor"]},
+      {"category": "sequential testing/change-point detection", "status": "complete", "accepted_paper_ids": ["rw-sequential"]},
+      {"category": "benchmark/evaluation protocol papers", "status": "complete", "accepted_paper_ids": ["rw-benchmark"]},
+      {"category": "anomaly detection specificity", "status": "complete", "accepted_paper_ids": ["rw-anomaly"]},
+      {"category": "medical screening specificity analogies if used", "status": "complete", "accepted_paper_ids": ["rw-screening"]},
+      {"category": "cartel/covert-channel analogies if used", "status": "complete", "accepted_paper_ids": ["rw-cartel"]}
+    ],
+    "blocked_categories": [],
+    "next_commands": [],
+    "fallback_preserved_separately": true,
+    "network_required_for_fixture": false
+  },
+  "category_curation": {
+    "report_exists": true,
+    "category_statuses": {
+      "low-FPR detection/evaluation": {"status": "complete", "accepted_real_paper_ids": ["rw-low-fpr"]},
+      "multi-agent collusion/covert coordination": {"status": "complete", "accepted_real_paper_ids": ["rw-collusion"]},
+      "monitor evasion": {"status": "complete", "accepted_real_paper_ids": ["rw-monitor"]},
+      "sequential testing/change-point detection": {"status": "complete", "accepted_real_paper_ids": ["rw-sequential"]},
+      "benchmark/evaluation protocol papers": {"status": "complete", "accepted_real_paper_ids": ["rw-benchmark"]},
+      "anomaly detection specificity": {"status": "complete", "accepted_real_paper_ids": ["rw-anomaly"]},
+      "medical screening specificity analogies if used": {"status": "complete", "accepted_real_paper_ids": ["rw-screening"]},
+      "cartel/covert-channel analogies if used": {"status": "complete", "accepted_real_paper_ids": ["rw-cartel"]}
+    },
+    "accepted_real_paper_count": 8,
+    "rejected_paper_count": 2,
+    "missing_categories": [],
+    "blockers": [],
+    "fallback_papers_preserved_separately": true,
+    "fallback_only_counts_as_complete": false,
+    "fake_citations_rejected": true,
+    "missing_categories_hidden": false
+  },
+  "reading_pass": {
+    "report_exists": true,
+    "statuses": [
+      {"paper_id": "rw-low-fpr", "source_basis": "full_text", "evidence_span_ids": ["span-low-fpr"], "confidence": "high"},
+      {"paper_id": "rw-benchmark", "source_basis": "abstract_only", "evidence_span_ids": [], "confidence": "medium"}
+    ],
+    "abstract_only_limitations_marked": true
+  },
+  "prior_work_dossier": {
+    "exists": true,
+    "closest_prior_work_ids": ["rw-benchmark"],
+    "comparison_dimensions": [
+      "problem setting",
+      "low-FPR/specificity focus",
+      "sequential evaluation",
+      "multi-agent collusion/covert coordination",
+      "benchmark/protocol contribution",
+      "observability modes",
+      "honest null distribution",
+      "collusive alternatives",
+      "baselines",
+      "metrics/statistics"
+    ],
+    "comparison_table": [{"paper_id": "rw-benchmark", "dimension": "benchmark/protocol contribution", "coverage": "adjacent"}],
+    "what_is_new": ["combines sequential low-FPR measurement with collusion audit traces"],
+    "what_is_not_new": ["specificity evaluation and sequential testing are established"],
+    "decisive_difference_needed": ["show the combined protocol is not already covered by prior benchmarks"],
+    "counterevidence_preserved": true,
+    "novelty_status": "plausible",
+    "confidence": "medium"
+  },
+  "positioning": {
+    "report_exists": true,
+    "revised_claims": ["We present an evidence-backed synthetic evaluation protocol for sequential low-FPR collusion audits."],
+    "claim_softening_applied": true,
+    "synthetic_limitations_included": true,
+    "deployment_claim_blocked": true,
+    "closest_prior_work_citations": ["rw-benchmark"],
+    "claims_to_avoid": ["first", "SOTA", "deployment-valid"]
+  },
+  "related_work_matrix_v2": {
+    "exists": true,
+    "entries": [
+      {"paper_id": "rw-benchmark", "relationship": "adjacent benchmark", "must_cite": true},
+      {"paper_id": "rw-low-fpr", "relationship": "low-FPR/statistical source", "must_cite": true},
+      {"paper_id": "rw-anomaly", "relationship": "baseline source", "baseline_candidate": true}
+    ],
+    "category_coverage": {
+      "low-FPR detection/evaluation": ["rw-low-fpr"],
+      "multi-agent collusion/covert coordination": ["rw-collusion"],
+      "monitor evasion": ["rw-monitor"],
+      "sequential testing/change-point detection": ["rw-sequential"],
+      "benchmark/evaluation protocol papers": ["rw-benchmark"],
+      "anomaly detection specificity": ["rw-anomaly"],
+      "medical screening specificity analogies if used": ["rw-screening"],
+      "cartel/covert-channel analogies if used": ["rw-cartel"]
+    },
+    "closest_prior_work_ids": ["rw-benchmark"],
+    "must_cite_ids": ["rw-benchmark", "rw-low-fpr"],
+    "baseline_source_ids": ["rw-anomaly"],
+    "missing_categories": [],
+    "reviewer_omission_risks_visible": true,
+    "directly_solving_triggers_no_go": true,
+    "baseline_sources_feed_plan": true
+  },
+  "publication_review": {
+    "exists": true,
+    "after_related_work": true,
+    "readiness": "workshop_candidate",
+    "fatal_blockers": [],
+    "major_blockers": [],
+    "required_revisions": ["tighten closest-prior-work comparison before conference submission"],
+    "synthetic_limitations_checked": true,
+    "missing_related_work_blocks_publication": true
+  },
+  "manuscript_revision": {
+    "exists": true,
+    "related_work_section_generated": true,
+    "citations_resolve_to_known_papers": true,
+    "fake_citation_ids": [],
+    "missing_categories": [],
+    "softened_claims_included": true,
+    "synthetic_limitations_preserved": true,
+    "deployment_validity_claim": false,
+    "publication_ready": false,
+    "must_cite_coverage_visible": true
+  },
+  "claims": {"deployment_validity_overclaim": false},
+  "v24_release_gate": {
+    "v23_release_gate_passes": true,
+    "expected_pass": true,
+    "expected_decision_status": "workshop_candidate",
+    "expected_blockers": []
+  }
+}

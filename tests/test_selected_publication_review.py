@@ -8,7 +8,7 @@ from pathlib import Path
 from test_selected_benchmark import _env, _selected_project
 from test_selected_related_work_completion import _attach_papers, _complete_real_papers
 
-from gapforge.models import to_plain
+from gapforge.models import Paper, to_plain
 from gapforge.project_memory import ProjectMemoryManager
 from gapforge.selected_benchmark import (
     MainAnalysisManager,
@@ -23,48 +23,50 @@ from gapforge.selected_benchmark import (
     SelectedBenchmarkReviewerPanelBuilder,
     render_publication_readiness_review,
 )
+from gapforge.selected_benchmark.related_work import REQUIRED_RELATED_WORK_CATEGORIES
+from gapforge.selected_benchmark.related_work_curation import RelatedWorkCurationManager
 
 
-def test_complete_main_fixture_is_conference_candidate(tmp_path: Path) -> None:
+def test_completed_related_work_enables_publication_candidate_with_main_evidence(tmp_path: Path) -> None:
     config, project_id, benchmark_id = _benchmark(tmp_path)
     _complete_main_analysis(config, benchmark_id, negative_count=3000, positive_count=20)
-    _complete_related_work(config, project_id, benchmark_id)
+    _complete_related_work(config, project_id, benchmark_id, curate=True)
     _write_manuscript_inputs(config, project_id)
 
-    review = SelectedBenchmarkReviewerPanelBuilder(config).publication_review(benchmark_id)
+    review = SelectedBenchmarkReviewerPanelBuilder(config).publication_review(benchmark_id, after_related_work=True)
 
-    assert review.readiness == "conference_candidate"
+    assert review.readiness == "publication_candidate"
     assert review.fatal_blockers == []
     assert review.major_blockers == []
     assert "main-analysis" in " ".join(review.provenance.source_ids)
 
 
-def test_pilot_only_fixture_stays_workshop_or_not_ready(tmp_path: Path) -> None:
+def test_completed_related_work_enables_workshop_candidate_with_pilot_evidence(tmp_path: Path) -> None:
     config, project_id, benchmark_id = _benchmark(tmp_path)
     _complete_pilot_analysis(config, benchmark_id, negative_count=40, positive_count=20)
-    _complete_related_work(config, project_id, benchmark_id)
+    _complete_related_work(config, project_id, benchmark_id, curate=True)
     _write_manuscript_inputs(config, project_id)
 
-    review = SelectedBenchmarkReviewerPanelBuilder(config).publication_review(benchmark_id)
+    review = SelectedBenchmarkReviewerPanelBuilder(config).publication_review(benchmark_id, after_related_work=True)
 
-    assert review.readiness in {"workshop_candidate", "not_ready"}
-    assert review.readiness != "conference_candidate"
+    assert review.readiness == "workshop_candidate"
+    assert review.readiness != "publication_candidate"
     assert any("pilot-only" in item.lower() or "pilot" in item.lower() for item in review.required_revisions)
 
 
 def test_synthetic_deployment_overclaim_is_fatal(tmp_path: Path) -> None:
     config, project_id, benchmark_id = _benchmark(tmp_path)
     _complete_main_analysis(config, benchmark_id, negative_count=3000, positive_count=20)
-    _complete_related_work(config, project_id, benchmark_id)
+    _complete_related_work(config, project_id, benchmark_id, curate=True)
     _write_manuscript_inputs(
         config,
         project_id,
         claims=["The synthetic benchmark establishes deployment validity for deployed monitors."],
     )
 
-    review = SelectedBenchmarkReviewerPanelBuilder(config).publication_review(benchmark_id)
+    review = SelectedBenchmarkReviewerPanelBuilder(config).publication_review(benchmark_id, after_related_work=True)
 
-    assert review.readiness != "conference_candidate"
+    assert review.readiness == "revise_benchmark"
     assert any("deployment" in blocker.lower() for blocker in review.fatal_blockers)
 
 
@@ -73,11 +75,23 @@ def test_missing_related_work_is_major_or_fatal(tmp_path: Path) -> None:
     _complete_main_analysis(config, benchmark_id, negative_count=3000, positive_count=20)
     _write_manuscript_inputs(config, project_id)
 
-    review = SelectedBenchmarkReviewerPanelBuilder(config).publication_review(benchmark_id)
+    review = SelectedBenchmarkReviewerPanelBuilder(config).publication_review(benchmark_id, after_related_work=True)
 
-    assert review.readiness != "conference_candidate"
+    assert review.readiness == "revise_related_work"
     blockers = [*review.fatal_blockers, *review.major_blockers]
     assert any("related work" in blocker.lower() for blocker in blockers)
+
+
+def test_duplicate_prior_work_is_no_go_after_related_work(tmp_path: Path) -> None:
+    config, project_id, benchmark_id = _benchmark(tmp_path)
+    _complete_main_analysis(config, benchmark_id, negative_count=3000, positive_count=20)
+    _complete_related_work(config, project_id, benchmark_id, curate=True, duplicate=True)
+    _write_manuscript_inputs(config, project_id)
+
+    review = SelectedBenchmarkReviewerPanelBuilder(config).publication_review(benchmark_id, after_related_work=True)
+
+    assert review.readiness == "no_go"
+    assert any("directly-solving" in blocker.lower() or "duplicate" in blocker.lower() for blocker in review.fatal_blockers)
 
 
 def test_publication_review_report_renders_and_cli(tmp_path: Path) -> None:
@@ -92,7 +106,15 @@ def test_publication_review_report_renders_and_cli(tmp_path: Path) -> None:
     assert "Readiness:" in rendered
 
     review_cli = subprocess.run(
-        [sys.executable, "-m", "gapforge.cli", "selected-publication-review", "--benchmark-id", benchmark_id],
+        [
+            sys.executable,
+            "-m",
+            "gapforge.cli",
+            "selected-publication-review",
+            "--benchmark-id",
+            benchmark_id,
+            "--after-related-work",
+        ],
         cwd=tmp_path,
         env=_env(),
         text=True,
@@ -139,9 +161,43 @@ def _complete_pilot_analysis(config: object, benchmark_id: str, *, negative_coun
     PilotAnalysisManager(config).analyze(execution.id)  # type: ignore[arg-type]
 
 
-def _complete_related_work(config: object, project_id: str, benchmark_id: str) -> None:
-    _attach_papers(config, project_id, _complete_real_papers())  # type: ignore[arg-type]
+def _complete_related_work(config: object, project_id: str, benchmark_id: str, *, curate: bool = False, duplicate: bool = False) -> None:
+    papers = _duplicate_real_papers() if duplicate else _complete_real_papers()
+    _attach_papers(config, project_id, papers)  # type: ignore[arg-type]
     RelatedWorkCompletionManager(config).complete(benchmark_id)  # type: ignore[arg-type]
+    if not curate:
+        return
+    manager = RelatedWorkCurationManager(config)  # type: ignore[arg-type]
+    for category, paper in zip(REQUIRED_RELATED_WORK_CATEGORIES, papers, strict=True):
+        relationship = "closest_prior_work" if category == "benchmark/evaluation protocol papers" else "background"
+        notes = "directly solves selected benchmark" if duplicate and category == "benchmark/evaluation protocol papers" else ""
+        manager.attach_paper(
+            benchmark_id,
+            category=category,
+            paper_id=paper.id,
+            relationship=relationship,
+            notes=notes,
+        )
+
+
+def _duplicate_real_papers() -> list[Paper]:
+    papers = list(_complete_real_papers())
+    for index, paper in enumerate(papers):
+        if paper.id == "real-benchmark":
+            papers[index] = Paper(
+                id=paper.id,
+                title="Sequential low-FPR benchmark for multi-agent collusion audits",
+                authors=paper.authors,
+                abstract=(
+                    "Directly solves the selected benchmark core contribution. This benchmark covers sequential low-FPR "
+                    "specificity evaluation for multi-agent collusion and covert coordination with observability modes, "
+                    "honest null distribution, collusive alternatives, baselines, metrics, statistics, and evaluation protocol."
+                ),
+                year=paper.year,
+                source=paper.source,
+                url=paper.url,
+            )
+    return papers
 
 
 def _write_manuscript_inputs(

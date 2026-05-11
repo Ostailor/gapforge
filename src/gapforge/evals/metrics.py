@@ -152,6 +152,14 @@ class EvalScores:
     publication_review_quality: float | None = None
     manuscript_maturity_honesty: float | None = None
     v23_release_gate_correctness: float | None = None
+    related_work_search_quality: float | None = None
+    category_curation_quality: float | None = None
+    prior_work_dossier_quality: float | None = None
+    positioning_safety: float | None = None
+    selected_related_work_matrix_quality: float | None = None
+    publication_review_correctness: float | None = None
+    manuscript_revision_honesty: float | None = None
+    v24_release_gate_correctness: float | None = None
 
     def overall(self) -> float:
         positive = [
@@ -361,6 +369,22 @@ class EvalScores:
             self.publication_review_quality,
             self.manuscript_maturity_honesty,
             self.v23_release_gate_correctness,
+        ]
+        present = [value for value in values if value is not None]
+        if not present:
+            return None
+        return round(sum(present) / len(present), 3)
+
+    def v24_overall(self) -> float | None:
+        values = [
+            self.related_work_search_quality,
+            self.category_curation_quality,
+            self.prior_work_dossier_quality,
+            self.positioning_safety,
+            self.selected_related_work_matrix_quality,
+            self.publication_review_correctness,
+            self.manuscript_revision_honesty,
+            self.v24_release_gate_correctness,
         ]
         present = [value for value in values if value is not None]
         if not present:
@@ -2384,6 +2408,179 @@ def v23_release_gate_correctness(fixture: dict[str, object]) -> float:
     return round((0.7 * int(computed_pass is False)) + (0.3 * int(bool(expected_blockers))), 3)
 
 
+def related_work_search_quality(fixture: dict[str, object]) -> float:
+    search = _dict(fixture.get("related_work_search"))
+    categories = _list(search.get("required_categories"))
+    queries = _dict(search.get("queries_by_category"))
+    rounds = _dicts(search.get("search_rounds"))
+    completed = [item for item in rounds if str(item.get("status")) == "complete"]
+    checks = [
+        bool(search.get("campaign_exists")),
+        len(categories) >= 8,
+        all(_list(queries.get(str(category))) for category in categories),
+        bool(_list(search.get("sources_used"))),
+        len(rounds) >= len(categories),
+        len(completed) >= len(categories) - len(_list(search.get("blocked_categories"))),
+        not bool(search.get("network_required_for_fixture")),
+        bool(search.get("fallback_preserved_separately", True)),
+    ]
+    if _list(search.get("blocked_categories")):
+        checks.append(bool(_list(search.get("next_commands"))))
+    else:
+        checks.append(not _list(search.get("next_commands")))
+    return round(sum(1 for item in checks if item) / len(checks), 3)
+
+
+def category_curation_quality(fixture: dict[str, object]) -> float:
+    curation = _dict(fixture.get("category_curation"))
+    categories = _list(_dict(fixture.get("related_work_search")).get("required_categories"))
+    statuses = _dict(curation.get("category_statuses"))
+    missing = _list(curation.get("missing_categories"))
+    complete = [
+        item
+        for item in statuses.values()
+        if isinstance(item, dict) and str(item.get("status")) == "complete" and bool(_list(item.get("accepted_real_paper_ids")))
+    ]
+    checks = [
+        bool(curation.get("report_exists")),
+        len(statuses) >= len(categories) if categories else bool(statuses),
+        len(complete) >= len(categories) - len(missing) if categories else bool(complete) or bool(missing),
+        _int(curation.get("accepted_real_paper_count")) >= len(complete),
+        bool(curation.get("fallback_papers_preserved_separately", True)),
+        not bool(curation.get("fallback_only_counts_as_complete")),
+        bool(curation.get("fake_citations_rejected", True)),
+        not bool(curation.get("missing_categories_hidden")),
+    ]
+    if missing:
+        checks.append(bool(_list(curation.get("blockers"))))
+    else:
+        checks.append(not bool(_list(curation.get("blockers"))))
+    return round(sum(1 for item in checks if item) / len(checks), 3)
+
+
+def prior_work_dossier_quality(fixture: dict[str, object]) -> float:
+    dossier = _dict(fixture.get("prior_work_dossier"))
+    missing = _list(_dict(fixture.get("category_curation")).get("missing_categories"))
+    dimensions = {str(item) for item in _list(dossier.get("comparison_dimensions"))}
+    required_dimensions = {
+        "problem setting",
+        "low-FPR/specificity focus",
+        "sequential evaluation",
+        "multi-agent collusion/covert coordination",
+        "benchmark/protocol contribution",
+        "observability modes",
+        "honest null distribution",
+        "collusive alternatives",
+        "baselines",
+        "metrics/statistics",
+    }
+    novelty = str(dossier.get("novelty_status", ""))
+    checks = [
+        bool(dossier.get("exists")),
+        bool(_list(dossier.get("closest_prior_work_ids"))) or bool(dossier.get("missing_closest_prior_work_allowed")),
+        required_dimensions <= dimensions,
+        bool(_list(dossier.get("comparison_table"))),
+        bool(_list(dossier.get("what_is_new"))) or novelty in {"duplicate", "unknown"},
+        bool(_list(dossier.get("what_is_not_new"))) or novelty in {"strong", "unknown"},
+        bool(_list(dossier.get("decisive_difference_needed"))),
+        novelty in {"duplicate", "weak", "plausible", "strong", "unknown"},
+        not missing or novelty == "unknown",
+        bool(dossier.get("counterevidence_preserved", True)),
+    ]
+    return round(sum(1 for item in checks if item) / len(checks), 3)
+
+
+def positioning_safety(fixture: dict[str, object]) -> float:
+    positioning = _dict(fixture.get("positioning"))
+    revised_claims = [str(item) for item in _list(positioning.get("revised_claims"))]
+    text = " ".join(revised_claims).lower()
+    overstrong = [" first ", "novel", "sota", "state-of-the-art", "deployment-valid"]
+    checks = [
+        bool(positioning.get("report_exists")),
+        bool(revised_claims),
+        bool(positioning.get("claim_softening_applied")),
+        not any(term in f" {text} " for term in overstrong),
+        bool(positioning.get("synthetic_limitations_included")),
+        bool(positioning.get("deployment_claim_blocked")),
+        bool(_list(positioning.get("closest_prior_work_citations"))),
+        bool(_list(positioning.get("claims_to_avoid"))),
+    ]
+    return round(sum(1 for item in checks if item) / len(checks), 3)
+
+
+def selected_related_work_matrix_quality(fixture: dict[str, object]) -> float:
+    matrix = _dict(fixture.get("related_work_matrix_v2"))
+    curation = _dict(fixture.get("category_curation"))
+    missing = set(str(item) for item in _list(curation.get("missing_categories")))
+    matrix_missing = set(str(item) for item in _list(matrix.get("missing_categories")))
+    entries = _dicts(matrix.get("entries"))
+    checks = [
+        bool(matrix.get("exists")),
+        bool(entries) or bool(missing),
+        bool(_dict(matrix.get("category_coverage"))),
+        missing <= matrix_missing,
+        bool(_list(matrix.get("must_cite_ids"))) or bool(missing),
+        bool(matrix.get("reviewer_omission_risks_visible", True)),
+        bool(matrix.get("directly_solving_triggers_no_go", True)),
+        bool(matrix.get("baseline_sources_feed_plan", True)),
+    ]
+    return round(sum(1 for item in checks if item) / len(checks), 3)
+
+
+def publication_review_correctness(fixture: dict[str, object]) -> float:
+    review = _dict(fixture.get("publication_review"))
+    gate = _dict(fixture.get("v24_release_gate"))
+    expected_decision = str(gate.get("expected_decision_status", ""))
+    readiness = str(review.get("readiness", ""))
+    missing = _list(_dict(fixture.get("category_curation")).get("missing_categories"))
+    duplicate = str(_dict(fixture.get("prior_work_dossier")).get("novelty_status")) == "duplicate"
+    deployment_overclaim = _claims_deployment_overclaim(fixture)
+    checks = [
+        bool(review.get("exists")),
+        bool(review.get("after_related_work")),
+        readiness in {"publication_candidate", "workshop_candidate", "revise_related_work", "revise_benchmark", "no_go"},
+        readiness == expected_decision or (expected_decision == "revise_benchmark" and readiness == "revise_related_work"),
+        not missing or readiness == "revise_related_work",
+        not duplicate or readiness == "no_go",
+        not deployment_overclaim or readiness == "revise_benchmark",
+        bool(review.get("synthetic_limitations_checked", True)),
+        bool(review.get("missing_related_work_blocks_publication", True)),
+    ]
+    return round(sum(1 for item in checks if item) / len(checks), 3)
+
+
+def manuscript_revision_honesty(fixture: dict[str, object]) -> float:
+    revision = _dict(fixture.get("manuscript_revision"))
+    missing = set(str(item) for item in _list(_dict(fixture.get("category_curation")).get("missing_categories")))
+    revision_missing = set(str(item) for item in _list(revision.get("missing_categories")))
+    review_passed = str(_dict(fixture.get("publication_review")).get("readiness")) == "publication_candidate"
+    checks = [
+        bool(revision.get("exists")),
+        bool(revision.get("related_work_section_generated")),
+        bool(revision.get("citations_resolve_to_known_papers")),
+        missing <= revision_missing,
+        bool(revision.get("softened_claims_included")),
+        bool(revision.get("synthetic_limitations_preserved")),
+        not bool(revision.get("deployment_validity_claim")),
+        bool(revision.get("publication_ready")) is review_passed,
+        bool(revision.get("must_cite_coverage_visible", True)),
+    ]
+    return round(sum(1 for item in checks if item) / len(checks), 3)
+
+
+def v24_release_gate_correctness(fixture: dict[str, object]) -> float:
+    expected = _dict(fixture.get("v24_release_gate"))
+    expected_pass = bool(expected.get("expected_pass"))
+    expected_decision = str(expected.get("expected_decision_status", ""))
+    computed_pass = _computed_v24_release_gate(fixture)
+    computed_decision = _v24_decision_status(fixture)
+    decision_ok = computed_decision == expected_decision
+    if expected_pass:
+        return 1.0 if computed_pass and decision_ok else 0.0
+    expected_blockers = _list(expected.get("expected_blockers"))
+    return round((0.55 * int(computed_pass is False)) + (0.25 * int(decision_ok)) + (0.2 * int(bool(expected_blockers))), 3)
+
+
 def _tokens(text: str) -> list[str]:
     return re.findall(r"[a-z0-9-]+", text.lower())
 
@@ -2625,6 +2822,60 @@ def _v23_decision_status(decision: str, readiness: str, manuscript_status: str) 
     if readiness == "workshop_candidate" or manuscript_status == "workshop_candidate":
         return "workshop_candidate"
     if decision == "revise_benchmark":
+        return "revise_benchmark"
+    return "unknown"
+
+
+def _computed_v24_release_gate(fixture: dict[str, object]) -> bool:
+    decision = _v24_decision_status(fixture)
+    curation = _dict(fixture.get("category_curation"))
+    matrix = _dict(fixture.get("related_work_matrix_v2"))
+    manuscript = _dict(fixture.get("manuscript_revision"))
+    review = _dict(fixture.get("publication_review"))
+    gate = _dict(fixture.get("v24_release_gate"))
+    missing = set(str(item) for item in _list(curation.get("missing_categories")))
+    matrix_missing = set(str(item) for item in _list(matrix.get("missing_categories")))
+    manuscript_missing = set(str(item) for item in _list(manuscript.get("missing_categories")))
+    fake_citations = _list(manuscript.get("fake_citation_ids"))
+    publication_ready_claim = bool(manuscript.get("publication_ready"))
+    publication_review_passed = str(review.get("readiness")) == "publication_candidate"
+    novelty = str(_dict(fixture.get("prior_work_dossier")).get("novelty_status", ""))
+    publication_candidate = decision == "publication_candidate"
+    return all(
+        [
+            bool(gate.get("v23_release_gate_passes", True)),
+            related_work_search_quality(fixture) >= 0.85,
+            category_curation_quality(fixture) >= 0.85,
+            bool(_dict(fixture.get("reading_pass")).get("report_exists")),
+            prior_work_dossier_quality(fixture) >= 0.85,
+            positioning_safety(fixture) >= 0.85,
+            selected_related_work_matrix_quality(fixture) >= 0.85,
+            publication_review_correctness(fixture) >= 0.85,
+            manuscript_revision_honesty(fixture) >= 0.85,
+            decision in {"publication_candidate", "workshop_candidate", "revise_related_work", "revise_benchmark", "no_go"},
+            not missing,
+            not fake_citations,
+            bool(manuscript.get("citations_resolve_to_known_papers", True)),
+            not bool(curation.get("missing_categories_hidden")),
+            missing <= matrix_missing,
+            missing <= manuscript_missing,
+            not publication_ready_claim or publication_review_passed,
+            not _claims_deployment_overclaim(fixture),
+            not bool(manuscript.get("deployment_validity_claim")),
+            not publication_candidate or (not missing and novelty not in {"duplicate", "unknown"}),
+        ]
+    )
+
+
+def _v24_decision_status(fixture: dict[str, object]) -> str:
+    readiness = str(_dict(fixture.get("publication_review")).get("readiness", ""))
+    if readiness in {"publication_candidate", "workshop_candidate", "revise_related_work", "revise_benchmark", "no_go"}:
+        return readiness
+    if str(_dict(fixture.get("prior_work_dossier")).get("novelty_status")) == "duplicate":
+        return "no_go"
+    if _list(_dict(fixture.get("category_curation")).get("missing_categories")):
+        return "revise_related_work"
+    if _claims_deployment_overclaim(fixture):
         return "revise_benchmark"
     return "unknown"
 

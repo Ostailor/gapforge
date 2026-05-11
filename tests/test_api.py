@@ -360,10 +360,68 @@ def test_api_v23_aliases_and_selected_main_dashboard(tmp_path: Path) -> None:
     assert isinstance(baseline.strong_claim_allowed, bool)
     assert dataset.negative_count == 300
     assert decision.decision in {"revise_benchmark", "run_more_experiments", "no_go", "go_publication_candidate"}
-    assert review.readiness in {"not_ready", "workshop_candidate", "conference_candidate", "no_go"}
+    assert review.readiness in {"publication_candidate", "workshop_candidate", "revise_related_work", "revise_benchmark", "no_go"}
     assert manuscript.benchmark_id == spec.id
     assert "Fallback-only records do not complete" in (result.root / "related_work_completion.html").read_text(encoding="utf-8")
     assert "Synthetic-only labels" in (result.root / "main_dataset.html").read_text(encoding="utf-8")
+
+
+def test_api_v24_related_work_workflow_and_dashboard(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("GAPFORGE_DISABLE_NETWORK", "1")
+    config, selected_project_id = _api_selected_idea_project(tmp_path)
+    spec = api.create_selected_benchmark_spec(selected_project_id, config=config)
+    paper_id = _attach_v24_related_work_fixture_paper(config, selected_project_id)
+
+    plan = api.plan_selected_related_work_search(spec.id, config=config)
+    search = api.run_selected_related_work_search(spec.id, config=config)
+    attachment = api.attach_related_paper(
+        spec.id,
+        category="low-FPR detection/evaluation",
+        paper_id=paper_id,
+        relationship="closest_prior_work",
+        curator="api-test",
+        config=config,
+    )
+    readings = api.read_selected_related_work(spec.id, config=config)
+    dossier = api.refresh_selected_prior_work(spec.id, config=config)
+    positioning = api.position_selected_contribution(spec.id, config=config)
+    matrix = api.build_selected_related_work_matrix_v2(spec.id, config=config)
+    review = api.rerun_selected_publication_review(spec.id, config=config)
+    revision = api.revise_selected_manuscript_related_work(spec.id, config=config)
+    gate = api.v24_release_gate(write_report=True, config=config)
+
+    dashboard = StaticDashboardBuilder(config).build_project(selected_project_id, include_selected_v24=True)
+
+    for page in [
+        "related_work_search.html",
+        "category_curation.html",
+        "related_work_reading.html",
+        "prior_work_dossier.html",
+        "contribution_positioning.html",
+        "related_work_matrix_v2.html",
+        "publication_review_after_related_work.html",
+        "manuscript_related_work_revision.html",
+        "v24_release_gate.html",
+    ]:
+        assert (dashboard.root / page).exists()
+
+    assert plan.required_categories
+    assert search.status in {"incomplete", "failed", "complete"}
+    assert attachment.paper_id == paper_id
+    assert readings and readings[0].source_basis in {"abstract_only", "full_text", "metadata_only"}
+    assert dossier.novelty_status in {"duplicate", "weak", "plausible", "strong", "unknown"}
+    assert positioning.recommended_claims
+    assert matrix.entries
+    assert review.readiness in {"publication_candidate", "workshop_candidate", "revise_related_work", "revise_benchmark", "no_go"}
+    assert revision.benchmark_id == spec.id
+    assert gate.decision_status in {"publication_candidate", "workshop_candidate", "revise_related_work", "revise_benchmark", "no_go"}
+
+    search_html = (dashboard.root / "related_work_search.html").read_text(encoding="utf-8")
+    curation_html = (dashboard.root / "category_curation.html").read_text(encoding="utf-8")
+    gate_html = (dashboard.root / "v24_release_gate.html").read_text(encoding="utf-8")
+    assert "Fallback-only categories do not complete v2.4" in search_html
+    assert "Missing categories cannot be hidden" in curation_html
+    assert "No publication-ready claim passes without the after-related-work review" in gate_html
 
 
 def test_api_create_draft_and_traceability_manuscript(tmp_path: Path) -> None:
@@ -799,6 +857,32 @@ def _api_selected_idea_project(tmp_path: Path) -> tuple[GapForgeConfig, str]:
     gate = api.v2_release_gate(write_report=True, config=config)
     selected_project = api.create_selected_idea_project(gate.selected_idea_id, locked_by="api-fixture", config=config)
     return config, selected_project.project_id
+
+
+def _attach_v24_related_work_fixture_paper(config: GapForgeConfig, project_id: str) -> str:
+    manager = ResearchStateManager(config)
+    state = manager.create_run("v2.4 related work fixture")
+    paper = Paper(
+        id="paper-v24-real-prior",
+        title=(
+            "Sequential low false positive specificity benchmark for multi-agent collusion, "
+            "monitor evasion, anomaly detection, medical screening, and covert-channel cartel analogies"
+        ),
+        authors=["Ada Researcher"],
+        abstract=(
+            "This real-paper fixture discusses low-FPR specificity evaluation, sequential change-point testing, "
+            "benchmark evaluation protocols, multi-agent collusion, monitor evasion, anomaly detection, medical "
+            "screening specificity, and covert-channel cartel analogies. It is used only as offline metadata."
+        ),
+        year=2024,
+        source="arxiv",
+        url="https://arxiv.org/abs/2401.00001",
+        arxiv_id="2401.00001",
+    )
+    state.papers = [paper]
+    manager.save_run(state)
+    ProjectMemoryManager(config).attach_run(project_id, state.run_id)
+    return paper.id
 
 
 def _api_experiment_workspace(tmp_path: Path) -> tuple[GapForgeConfig, str, str, str, str]:

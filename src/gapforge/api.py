@@ -154,6 +154,7 @@ from gapforge.release_gate.v2 import V2ReleaseGateEnforcer, V2ReleaseGateResult
 from gapforge.release_gate.v21 import V21ReleaseGateEnforcer, V21ReleaseGateResult
 from gapforge.release_gate.v22 import V22ReleaseGateEnforcer, V22ReleaseGateResult
 from gapforge.release_gate.v23 import V23ReleaseGateEnforcer, V23ReleaseGateResult
+from gapforge.release_gate.v24 import V24ReleaseGateEnforcer, V24ReleaseGateResult
 from gapforge.replication import ReplicationPackageExporter, ReplicationPackageVerifier, ReproductionRunner
 from gapforge.reporting import write_final_report
 from gapforge.results import ErrorAnalysisBuilder, ResultAggregator, ResultParser, ResultStatisticsAnalyzer
@@ -184,16 +185,29 @@ from gapforge.selected_benchmark import (
     PilotPowerPlan,
     PilotRunManager,
     PilotTraceDataset,
+    PositioningReport,
     PublicationReadinessReview,
+    RelatedWorkCategoryAttachment,
     RelatedWorkCompletionManager,
     RelatedWorkCompletionStatus,
+    RelatedWorkCurationManager,
+    RelatedWorkReadingManager,
+    RelatedWorkReadingStatus,
+    RequiredRelatedWorkSearchCampaign,
+    RequiredRelatedWorkSearchManager,
     SelectedBenchmarkExperimentRunner,
     SelectedBenchmarkGoNoGo,
     SelectedBenchmarkManager,
     SelectedBenchmarkManuscript,
     SelectedBenchmarkManuscriptManager,
     SelectedBenchmarkPaperPackage,
+    SelectedBenchmarkPositioningManager,
+    SelectedBenchmarkPriorWorkDossier,
+    SelectedBenchmarkPriorWorkRefreshManager,
     SelectedBenchmarkRelatedWorkManager,
+    SelectedBenchmarkRelatedWorkManuscriptManager,
+    SelectedBenchmarkRelatedWorkMatrixV2,
+    SelectedBenchmarkRelatedWorkMatrixV2Manager,
     SelectedBenchmarkReviewerPanelBuilder,
     SelectedBenchmarkReviewPanel,
     SelectedBenchmarkRunResult,
@@ -207,6 +221,7 @@ from gapforge.selected_benchmark import (
     SelectedPilotManuscript,
     SelectedPilotManuscriptManager,
     SelectedPilotPaperPackage,
+    SelectedRelatedWorkManuscriptRevision,
     SelectedRelatedWorkMatrix,
     SequentialMetricManager,
     SequentialMetricResult,
@@ -2225,6 +2240,114 @@ def complete_selected_related_work_matrix(
     return SelectedBenchmarkRelatedWorkManager(_config(config)).build_related_work_matrix(benchmark_id)
 
 
+def plan_selected_related_work_search(
+    benchmark_id: str,
+    *,
+    config: GapForgeConfig | None = None,
+) -> RequiredRelatedWorkSearchCampaign:
+    """Create the v2.4 required related-work search campaign plan."""
+
+    return RequiredRelatedWorkSearchManager(_config(config)).plan(benchmark_id)
+
+
+def run_selected_related_work_search(
+    benchmark_id: str,
+    *,
+    max_results_per_query: int = 5,
+    config: GapForgeConfig | None = None,
+) -> RequiredRelatedWorkSearchCampaign:
+    """Execute the v2.4 required related-work search campaign when sources are available."""
+
+    return RequiredRelatedWorkSearchManager(_config(config)).run(benchmark_id, max_results_per_query=max_results_per_query)
+
+
+def attach_related_paper(
+    benchmark_id: str,
+    *,
+    category: str,
+    paper_id: str,
+    relationship: str = "background",
+    relevance_score: float = 1.0,
+    curator: str = "api",
+    evidence_span_ids: list[str] | None = None,
+    notes: str = "",
+    config: GapForgeConfig | None = None,
+) -> RelatedWorkCategoryAttachment:
+    """Attach a known real paper record to a v2.4 selected-benchmark related-work category."""
+
+    return RelatedWorkCurationManager(_config(config)).attach_paper(
+        benchmark_id,
+        category=category,
+        paper_id=paper_id,
+        relationship=relationship,
+        relevance_score=relevance_score,
+        curator=curator,
+        evidence_span_ids=evidence_span_ids,
+        notes=notes,
+    )
+
+
+def read_selected_related_work(
+    benchmark_id: str,
+    *,
+    paper_id: str | None = None,
+    config: GapForgeConfig | None = None,
+) -> list[RelatedWorkReadingStatus]:
+    """Run the v2.4 full-text or abstract reading pass for attached related-work papers."""
+
+    return RelatedWorkReadingManager(_config(config)).read(benchmark_id, paper_id=paper_id)
+
+
+def refresh_selected_prior_work(
+    benchmark_id: str,
+    *,
+    config: GapForgeConfig | None = None,
+) -> SelectedBenchmarkPriorWorkDossier:
+    """Refresh the selected benchmark closest-prior-work dossier from curated v2.4 related work."""
+
+    return SelectedBenchmarkPriorWorkRefreshManager(_config(config)).refresh(benchmark_id)
+
+
+def position_selected_contribution(
+    benchmark_id: str,
+    *,
+    config: GapForgeConfig | None = None,
+) -> PositioningReport:
+    """Build publication-safe contribution positioning from the refreshed v2.4 dossier."""
+
+    return SelectedBenchmarkPositioningManager(_config(config)).build(benchmark_id)
+
+
+def build_selected_related_work_matrix_v2(
+    benchmark_id: str,
+    *,
+    config: GapForgeConfig | None = None,
+) -> SelectedBenchmarkRelatedWorkMatrixV2:
+    """Build the v2.4 manuscript-grade related-work matrix."""
+
+    return SelectedBenchmarkRelatedWorkMatrixV2Manager(_config(config)).build(benchmark_id)
+
+
+def rerun_selected_publication_review(
+    benchmark_id: str,
+    *,
+    config: GapForgeConfig | None = None,
+) -> PublicationReadinessReview:
+    """Rerun selected-benchmark publication review after v2.4 related-work remediation."""
+
+    return SelectedBenchmarkReviewerPanelBuilder(_config(config)).publication_review(benchmark_id, after_related_work=True)
+
+
+def revise_selected_manuscript_related_work(
+    benchmark_id: str,
+    *,
+    config: GapForgeConfig | None = None,
+) -> SelectedRelatedWorkManuscriptRevision:
+    """Revise the selected benchmark manuscript related-work and positioning sections for v2.4."""
+
+    return SelectedBenchmarkRelatedWorkManuscriptManager(_config(config)).revise_related_work(benchmark_id)
+
+
 def v23_release_gate(
     *,
     write_report: bool = False,
@@ -2233,6 +2356,20 @@ def v23_release_gate(
     """Evaluate the v2.3 selected benchmark mature decision release gate."""
 
     enforcer = V23ReleaseGateEnforcer(_config(config))
+    result = enforcer.evaluate()
+    if write_report:
+        enforcer.write_outputs(result)
+    return result
+
+
+def v24_release_gate(
+    *,
+    write_report: bool = False,
+    config: GapForgeConfig | None = None,
+) -> V24ReleaseGateResult:
+    """Evaluate the v2.4 related-work remediation release gate."""
+
+    enforcer = V24ReleaseGateEnforcer(_config(config))
     result = enforcer.evaluate()
     if write_report:
         enforcer.write_outputs(result)

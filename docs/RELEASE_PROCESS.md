@@ -33,8 +33,9 @@ GAPFORGE_DISABLE_NETWORK=1 gapforge report --strict
 16. For v2.1 releases, complete the selected-idea execution process in `docs/V2_1_ROADMAP.md`, `docs/V2_1_SELECTED_IDEA.md`, `docs/V2_1_BENCHMARK_SPEC.md`, and `docs/V2_1_ACCEPTANCE_CRITERIA.md`.
 17. For v2.2 releases, complete the pilot-scale benchmark study process in `docs/V2_2_ROADMAP.md`, `docs/V2_2_PILOT_BENCHMARK.md`, `docs/V2_2_ACCEPTANCE_CRITERIA.md`, `docs/V2_2_POWER_AND_SAMPLE_SIZE.md`, and `docs/V2_2_REVIEWER_BLOCKERS.md`.
 18. For v2.3 releases, complete the main-scale benchmark and publication-readiness process in `docs/V2_3_ROADMAP.md`, `docs/V2_3_MAIN_BENCHMARK.md`, `docs/V2_3_RELATED_WORK_COMPLETION.md`, `docs/V2_3_PUBLICATION_READINESS.md`, and `docs/V2_3_ACCEPTANCE_CRITERIA.md`.
-19. Commit with a message that records constraints, rejected alternatives if useful, confidence, scope risk, tested commands, and known gaps.
-20. Tag the release only after the checks pass.
+19. For v2.4 releases, complete the related-work remediation process in `docs/V2_4_ROADMAP.md`, `docs/V2_4_RELATED_WORK_COMPLETION.md`, `docs/V2_4_PUBLICATION_REMEDIATION.md`, and `docs/V2_4_ACCEPTANCE_CRITERIA.md`.
+20. Commit with a message that records constraints, rejected alternatives if useful, confidence, scope risk, tested commands, and known gaps.
+21. Tag the release only after the checks pass.
 
 ## v0.3 Validation Levels
 
@@ -727,6 +728,75 @@ Release notes must distinguish:
 
 If v2.3 lacks enough evidence for main or publication claims, release notes must say `v2.3 main-scale benchmark upgrade ended in explicit no-go; release claims remain blocked` or `v2.3 blocked; main-scale benchmark and no-go evidence are incomplete`. Do not call the manuscript publication-ready while fatal reviewer blockers remain.
 
+## v2.4 Related Work Completion and Publication-Readiness Remediation Gate
+
+v2.4 starts from the v2.3 `revise_benchmark` outcome. The synthetic main benchmark completed, `alpha=0.001` was powered for the synthetic count plan, and main artifacts exist, but publication readiness remained blocked because no required related-work category had real attached paper records.
+
+v2.4 continues the locked selected idea:
+
+- Idea ID: `idea-sequential-specificity-benchmark-for-low-fpr-collusion-audits`
+- Title: `Sequential specificity benchmark for low-FPR collusion audits`
+
+Before tagging v2.4, the release process should require:
+
+```bash
+make ci
+make eval
+gapforge v23-release-gate --write-report --json
+gapforge selected-related-work-search-plan --benchmark-id <benchmark-id>
+gapforge selected-related-work-search-run --benchmark-id <benchmark-id>
+gapforge selected-related-work-search-status --benchmark-id <benchmark-id>
+gapforge attach-related-paper --benchmark-id <benchmark-id> --category "low-FPR detection/evaluation" --paper-id <paper-id>
+gapforge related-work-auto-curate --benchmark-id <benchmark-id>
+gapforge read-selected-related-work --benchmark-id <benchmark-id>
+gapforge selected-prior-work-refresh --benchmark-id <benchmark-id>
+gapforge selected-positioning --benchmark-id <benchmark-id>
+gapforge selected-related-work-matrix-v2 --benchmark-id <benchmark-id>
+gapforge selected-publication-review --benchmark-id <benchmark-id> --after-related-work
+gapforge selected-manuscript-related-work-revise --benchmark-id <benchmark-id>
+gapforge selected-paper-package-v24 --benchmark-id <benchmark-id>
+gapforge v24-release-gate --write-report --json
+gapforge dashboard --project-id <selected-project-id> --include-selected-v24
+```
+
+Equivalent scripts may use `gapforge.api` wrappers: `plan_selected_related_work_search`, `run_selected_related_work_search`, `attach_related_paper`, `read_selected_related_work`, `refresh_selected_prior_work`, `position_selected_contribution`, `build_selected_related_work_matrix_v2`, `rerun_selected_publication_review`, `revise_selected_manuscript_related_work`, and `v24_release_gate`. Prose cannot replace missing search, paper-record, related-work matrix, closest-prior-work, citation-audit, reviewer-rerun, manuscript, or go/no-go artifacts.
+
+The v2.4 release gate should require:
+
+- deterministic CI remains passing
+- v2.3 main benchmark and `revise_benchmark` handoff remain available
+- v2.3 synthetic/deployment limitation is preserved
+- every required related-work category has a targeted search campaign
+- every required category is complete, complete with warning, incomplete, impossible after recorded search, or optional and dropped
+- completed categories have real traceable paper records
+- fallback-only records do not count as coverage
+- fake-citation, fake-identifier, and BibTeX checks pass
+- closest-prior-work dossier is refreshed from real records
+- direct and near prior work that weakens novelty is not hidden
+- novelty positioning and contribution claims are updated
+- benchmark positioning versus prior benchmarks and protocols is updated
+- related-work-derived baseline or protocol implications are handled
+- manuscript revision links claims to records, artifacts, and limitations
+- publication-readiness reviewer panel reruns after the manuscript revision
+- publication readiness can pass only when no fatal related-work, novelty, citation, manuscript, or reviewer blocker remains
+- updated go/no-go decision is explicit
+- no fake citation, fake novelty, deployment-validity, hidden-prior-work, or fallback-only publication-readiness claim passes
+
+Release notes must distinguish:
+
+- v2.3 synthetic main evidence
+- v2.4 related-work search campaign status
+- required category completion status
+- attached real paper counts and unresolved gaps
+- closest-prior-work and novelty-risk status
+- benchmark positioning changes
+- contribution claim softening or rejection
+- manuscript revision status
+- publication-readiness reviewer rerun findings
+- final go/no-go recommendation
+
+If required categories remain incomplete, release notes must say `v2.4 related-work remediation ended in revise/no-go; publication claims remain blocked`. Do not call the manuscript publication-ready while related work remains fallback-only or any fatal reviewer blocker remains.
+
 ## Tagging
 
 Use semantic version tags:
@@ -775,4 +845,7 @@ Release notes should include:
 - For v2.3, do not claim related-work completion unless real prior-work records and matrix entries exist for the required categories.
 - For v2.3, do not claim publication readiness unless the publication reviewer panel has no fatal blockers and the manuscript package links claims to artifacts, citations, and accepted limitations.
 - For v2.3, treat an explicit no-go as an acceptable release outcome only when the blocker analysis and claim restrictions are durable and visible.
+- For v2.4, do not claim publication readiness unless required related-work categories have real attached paper records or dependent claims are dropped.
+- For v2.4, do not hide closest prior work that weakens novelty, and do not infer novelty from missing or failed searches.
+- For v2.4, preserve the v2.3 synthetic/deployment limitation and issue revise/no-go if related-work, novelty, citation, manuscript, or reviewer blockers remain.
 - Do not publish generated `runs/`, caches, or local environment artifacts as source.

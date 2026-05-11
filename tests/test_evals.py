@@ -20,6 +20,7 @@ from gapforge.evals.fixtures import (
     V21_FIXTURE_NAMES,
     V22_FIXTURE_NAMES,
     V23_FIXTURE_NAMES,
+    V24_FIXTURE_NAMES,
     list_fixtures,
     load_fixture,
     load_v2_idea_fixture,
@@ -33,6 +34,7 @@ from gapforge.evals.fixtures import (
     load_v21_fixture,
     load_v22_fixture,
     load_v23_fixture,
+    load_v24_fixture,
 )
 from gapforge.evals.metrics import (
     actual_run_gate_correctness,
@@ -106,6 +108,7 @@ from gapforge.evals.metrics import (
     v8_release_gate_correctness,
     v22_release_gate_correctness,
     v23_release_gate_correctness,
+    v24_release_gate_correctness,
     venue_checklist_score,
 )
 from gapforge.models import Claim, ResearchRunState, ResearchTopic, SourceCoverageReport
@@ -911,6 +914,77 @@ def test_v23_selected_benchmark_fixture_metrics() -> None:
     assert v23_release_gate_correctness(deployment) == 1.0
     assert alpha["v23_release_gate"]["expected_pass"] is False
     assert deployment["v23_release_gate"]["expected_pass"] is False
+
+
+def test_v24_eval_fixtures_are_complete_and_offline() -> None:
+    for name in V24_FIXTURE_NAMES:
+        fixture = load_v24_fixture(name)
+        assert fixture.is_v24
+        assert fixture.topic
+        assert fixture.papers
+        payload = fixture.selected_benchmark_v24_fixture
+        assert payload["related_work_search"]
+        assert payload["category_curation"]
+        assert payload["reading_pass"]
+        assert payload["prior_work_dossier"]
+        assert payload["positioning"]
+        assert payload["related_work_matrix_v2"]
+        assert payload["publication_review"]
+        assert payload["manuscript_revision"]
+        assert payload["v24_release_gate"]
+
+
+def test_eval_cli_v24_fixture_and_report(tmp_path: Path) -> None:
+    env = {**os.environ, "GAPFORGE_DISABLE_NETWORK": "1"}
+    env["PYTHONPATH"] = str(Path.cwd() / "src")
+    env["GAPFORGE_ROOT"] = str(tmp_path)
+
+    single = subprocess.run(
+        [sys.executable, "-m", "gapforge.cli", "eval", "--fixture", "completed_related_work_workshop_candidate", "--v24"],
+        cwd=Path.cwd(),
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    report = subprocess.run(
+        [sys.executable, "-m", "gapforge.cli", "eval", "--v24", "--write-report"],
+        cwd=Path.cwd(),
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert single.returncode == 0, single.stderr
+    assert report.returncode == 0, report.stderr
+    text = (tmp_path / "eval_report.md").read_text(encoding="utf-8")
+    assert "Overall score" in report.stdout
+    assert "v2.4 Related Work Remediation" in text
+    assert "completed_related_work_workshop_candidate" in text
+
+
+def test_v24_selected_benchmark_fixture_metrics() -> None:
+    workshop = load_v24_fixture("completed_related_work_workshop_candidate").selected_benchmark_v24_fixture
+    publication = load_v24_fixture("completed_related_work_publication_candidate").selected_benchmark_v24_fixture
+    missing = load_v24_fixture("missing_category_blocked").selected_benchmark_v24_fixture
+    fake = load_v24_fixture("fake_citation_blocked").selected_benchmark_v24_fixture
+    duplicate = load_v24_fixture("duplicate_prior_work_no_go").selected_benchmark_v24_fixture
+    deployment = load_v24_fixture("synthetic_deployment_overclaim_blocked").selected_benchmark_v24_fixture
+    revised = load_v24_fixture("manuscript_related_work_revised").selected_benchmark_v24_fixture
+
+    assert v24_release_gate_correctness(workshop) == 1.0
+    assert v24_release_gate_correctness(publication) == 1.0
+    assert v24_release_gate_correctness(missing) == 1.0
+    assert v24_release_gate_correctness(fake) == 1.0
+    assert v24_release_gate_correctness(duplicate) == 1.0
+    assert v24_release_gate_correctness(deployment) == 1.0
+    assert v24_release_gate_correctness(revised) == 1.0
+    assert missing["v24_release_gate"]["expected_pass"] is False
+    assert fake["v24_release_gate"]["expected_pass"] is False
+    assert duplicate["v24_release_gate"]["expected_decision_status"] == "no_go"
+    assert deployment["v24_release_gate"]["expected_pass"] is False
+    assert revised["manuscript_revision"]["related_work_section_generated"] is True
 
 
 def test_v2_duplicate_ideas_are_rejected_by_dossier_aware_novelty_gate() -> None:

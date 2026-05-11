@@ -2,6 +2,64 @@
 
 All notable project changes should be recorded here.
 
+## 2.4.0
+
+GapForge v2.4.0 is the Related Work Completion and Publication-Readiness Remediation release for the locked selected benchmark `benchmark-sequential-specificity-benchmark-for-low-fpr-collusion-audits`. It addresses the v2.3 fatal publication blocker: v2.3 completed the synthetic main benchmark but was not publication-ready because required related-work categories had no real attached paper records.
+
+### Related-Work Remediation
+
+- Added executable required-category related-work search campaigns with source blockers and next commands.
+- Added category curation, real paper attachment, rejection, and reporting; fallback-only records still do not complete categories.
+- Added reading passes for attached papers, evidence spans, closest-prior-work dossiers, contribution positioning, and related-work matrix v2.
+- Added manuscript related-work revision and v2.4 paper package generation with must-cite coverage and softened claims.
+- Added v2.4 publication-review rerun and release gate that block fake citations, hidden missing categories, synthetic deployment-validity overclaims, and publication-ready claims without review pass.
+
+### API, Dashboard, Evals, Docs, and Skills
+
+- Exposed v2.4 through `gapforge.api`: `plan_selected_related_work_search`, `run_selected_related_work_search`, `attach_related_paper`, `read_selected_related_work`, `refresh_selected_prior_work`, `position_selected_contribution`, `build_selected_related_work_matrix_v2`, `rerun_selected_publication_review`, `revise_selected_manuscript_related_work`, and `v24_release_gate`.
+- Added v2.4 dashboard pages for search, curation, reading, prior-work dossier, contribution positioning, matrix v2, after-related-work review, manuscript revision, and release gate.
+- Added v2.4 eval fixtures and metrics for search quality, curation quality, dossier quality, positioning safety, matrix quality, publication-review correctness, manuscript honesty, and release-gate correctness.
+- Added v2.4 docs and Codex-readable skills for selected related-work search, curation, prior-work dossier refresh, contribution positioning, and publication-review rerun.
+
+### Release Outcome
+
+- v2.3 release gate remains passing as an honest `revise_benchmark` decision with publication readiness `revise_related_work`.
+- v2.4 related-work curation has accepted real paper records for all required categories and preserves the source-blocked search campaign evidence.
+- v2.4 closest-prior-work dossier marks novelty as `plausible`, not strong.
+- v2.4 publication-readiness rerun returns `publication_candidate` after related-work remediation.
+- v2.4 release gate passes with decision status `publication_candidate`.
+
+### Validation
+
+- `make ci`
+- `make eval`
+- `gapforge eval --v2` through `gapforge eval --v9` with `--write-report`
+- `gapforge eval --v2-ideas --write-report`
+- `gapforge eval --v21 --write-report`
+- `gapforge eval --v22 --write-report`
+- `gapforge eval --v23 --write-report`
+- `gapforge eval --v24 --write-report`
+- `make v2-smoke`
+- `make v3-smoke`
+- `make v4-smoke`
+- `make v6-smoke`
+- `make v7-smoke`
+- `make v8-smoke`
+- `make v9-smoke`
+- `gapforge v1-readiness --write-report --json`
+- `gapforge v2-release-gate --write-report --json`
+- `gapforge v21-release-gate --write-report --json`
+- `gapforge v22-release-gate --write-report --json`
+- `gapforge v23-release-gate --write-report --json`
+- `gapforge v24-release-gate --write-report --json`
+
+### Non-Claims and Limitations
+
+- v2.4.0 does not claim real-world deployment validity.
+- v2.4.0 does not claim strong novelty; novelty is `plausible` and closest-prior-work risks remain visible.
+- Synthetic main evidence remains synthetic benchmark evidence, not deployment evidence.
+- Publication-candidate status is conditional on the after-related-work review and must-cite coverage, not on fallback records.
+
 ## 2.3.0
 
 GapForge v2.3.0 is the Main Benchmark and Publication-Readiness Decision release for the locked selected idea `idea-sequential-specificity-benchmark-for-low-fpr-collusion-audits`. It upgrades v2.2 from pilot-only evidence to a main-style synthetic benchmark path with explicit power planning, related-work completion status, stronger baselines, main dataset/run artifacts, go/no-go review, publication-readiness review, manuscript package, dashboard pages, API helpers, skills, and a v2.3 release gate.

@@ -240,6 +240,7 @@ from gapforge.release_gate import (
     V21ReleaseGateEnforcer,
     V22ReleaseGateEnforcer,
     V23ReleaseGateEnforcer,
+    V24ReleaseGateEnforcer,
     render_v04_release_gate_markdown,
     render_v09_release_gate_markdown,
     render_v1_readiness_markdown,
@@ -247,6 +248,7 @@ from gapforge.release_gate import (
     render_v21_release_gate_markdown,
     render_v22_release_gate_markdown,
     render_v23_release_gate_markdown,
+    render_v24_release_gate_markdown,
 )
 from gapforge.release_gate.v05 import render_v05_release_gate_markdown
 from gapforge.release_gate.v06 import render_v06_release_gate_markdown
@@ -319,11 +321,18 @@ from gapforge.selected_benchmark import (
     PilotPowerManager,
     PilotRunManager,
     RelatedWorkCompletionManager,
+    RelatedWorkCurationManager,
+    RelatedWorkReadingManager,
+    RequiredRelatedWorkSearchManager,
     SelectedBenchmarkCodexTaskManager,
     SelectedBenchmarkExperimentRunner,
     SelectedBenchmarkManager,
     SelectedBenchmarkManuscriptManager,
+    SelectedBenchmarkPositioningManager,
+    SelectedBenchmarkPriorWorkRefreshManager,
     SelectedBenchmarkRelatedWorkManager,
+    SelectedBenchmarkRelatedWorkManuscriptManager,
+    SelectedBenchmarkRelatedWorkMatrixV2Manager,
     SelectedBenchmarkReviewerPanelBuilder,
     SelectedBenchmarkWorkspaceManager,
     SelectedMainManuscriptManager,
@@ -338,10 +347,18 @@ from gapforge.selected_benchmark import (
     render_pilot_power_assessment,
     render_pilot_power_plan,
     render_pilot_trace_dataset_report,
+    render_positioning_report,
     render_publication_readiness_review,
     render_related_work_completion_status,
+    render_related_work_curation_report,
+    render_related_work_matrix_v2,
+    render_related_work_reading_report,
+    render_required_related_work_search_report,
     render_selected_main_analysis,
     render_selected_main_status,
+    render_selected_paper_package_v24,
+    render_selected_prior_work_dossier,
+    render_selected_related_work_manuscript_revision,
     render_trace_list,
 )
 from gapforge.sources.canonical import canonicalize_project, canonicalize_run, load_merge_report_for_run
@@ -699,6 +716,7 @@ def build_parser() -> argparse.ArgumentParser:
     eval_parser.add_argument("--v21", action="store_true", help="Run v2.1 selected benchmark execution evaluation fixtures.")
     eval_parser.add_argument("--v22", action="store_true", help="Run v2.2 pilot benchmark evaluation fixtures.")
     eval_parser.add_argument("--v23", action="store_true", help="Run v2.3 main benchmark decision evaluation fixtures.")
+    eval_parser.add_argument("--v24", action="store_true", help="Run v2.4 related-work remediation evaluation fixtures.")
     eval_parser.add_argument("--v2-ideas", action="store_true", help="Run v2 Idea Discovery Engine evaluation fixtures.")
     eval_parser.add_argument("--write-report", action="store_true")
 
@@ -741,6 +759,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--include-selected-main",
         action="store_true",
         help="Include v2.3 selected main benchmark dashboard pages.",
+    )
+    dashboard_parser.add_argument(
+        "--include-selected-v24",
+        action="store_true",
+        help="Include v2.4 selected benchmark related-work remediation dashboard pages.",
     )
 
     selected_idea_full_report_parser = subparsers.add_parser(
@@ -1383,6 +1406,10 @@ def build_parser() -> argparse.ArgumentParser:
     v23_release_gate_parser.add_argument("--write-report", action="store_true")
     v23_release_gate_parser.add_argument("--json", action="store_true")
 
+    v24_release_gate_parser = subparsers.add_parser("v24-release-gate", help="Enforce the v2.4 related-work remediation release gate.")
+    v24_release_gate_parser.add_argument("--write-report", action="store_true")
+    v24_release_gate_parser.add_argument("--json", action="store_true")
+
     cli_audit_parser = subparsers.add_parser("cli-audit", help="Audit command grouping, help text, and v1 CLI discoverability.")
     cli_audit_parser.add_argument("--write-report", action="store_true")
 
@@ -1841,6 +1868,94 @@ def build_parser() -> argparse.ArgumentParser:
     )
     selected_related_work_status_parser.add_argument("--benchmark-id", required=True)
 
+    selected_related_work_search_plan_parser = subparsers.add_parser(
+        "selected-related-work-search-plan", help="Plan executable required related-work search rounds."
+    )
+    selected_related_work_search_plan_parser.add_argument("--benchmark-id", required=True)
+
+    selected_related_work_search_run_parser = subparsers.add_parser(
+        "selected-related-work-search-run", help="Run executable required related-work searches."
+    )
+    selected_related_work_search_run_parser.add_argument("--benchmark-id", required=True)
+
+    selected_related_work_search_status_parser = subparsers.add_parser(
+        "selected-related-work-search-status", help="Print selected benchmark related-work search campaign status."
+    )
+    selected_related_work_search_status_parser.add_argument("--benchmark-id", required=True)
+
+    selected_related_work_search_report_parser = subparsers.add_parser(
+        "selected-related-work-search-report", help="Render selected benchmark related-work search campaign report."
+    )
+    selected_related_work_search_report_parser.add_argument("--benchmark-id", required=True)
+
+    attach_related_paper_parser = subparsers.add_parser(
+        "attach-related-paper", help="Attach a known real paper to a selected benchmark related-work category."
+    )
+    attach_related_paper_parser.add_argument("--benchmark-id", required=True)
+    attach_related_paper_parser.add_argument("--category", required=True)
+    attach_related_paper_parser.add_argument("--paper-id", required=True)
+    attach_related_paper_parser.add_argument("--relationship", default="background")
+    attach_related_paper_parser.add_argument("--curator", default="")
+    attach_related_paper_parser.add_argument("--notes", default="")
+
+    reject_related_paper_parser = subparsers.add_parser(
+        "reject-related-paper", help="Reject a known selected benchmark related-work paper with a reason."
+    )
+    reject_related_paper_parser.add_argument("--benchmark-id", required=True)
+    reject_related_paper_parser.add_argument("--paper-id", required=True)
+    reject_related_paper_parser.add_argument("--reason", required=True)
+    reject_related_paper_parser.add_argument("--curator", default="")
+
+    related_work_curation_report_parser = subparsers.add_parser(
+        "related-work-curation-report", help="Render selected benchmark related-work curation report."
+    )
+    related_work_curation_report_parser.add_argument("--benchmark-id", required=True)
+
+    related_work_auto_curate_parser = subparsers.add_parser(
+        "related-work-auto-curate", help="Auto-curate accepted papers from selected benchmark related-work search artifacts."
+    )
+    related_work_auto_curate_parser.add_argument("--benchmark-id", required=True)
+    related_work_auto_curate_parser.add_argument("--curator", default="auto-curation")
+
+    read_selected_related_work_parser = subparsers.add_parser(
+        "read-selected-related-work", help="Read curated selected benchmark related-work papers for evidence-backed positioning."
+    )
+    read_selected_related_work_parser.add_argument("--benchmark-id", required=True)
+    read_selected_related_work_parser.add_argument("--paper-id", default="")
+
+    selected_related_work_reading_report_parser = subparsers.add_parser(
+        "selected-related-work-reading-report", help="Render selected benchmark related-work reading report."
+    )
+    selected_related_work_reading_report_parser.add_argument("--benchmark-id", required=True)
+
+    selected_prior_work_refresh_parser = subparsers.add_parser(
+        "selected-prior-work-refresh", help="Refresh closest-prior-work dossier from curated selected benchmark related work."
+    )
+    selected_prior_work_refresh_parser.add_argument("--benchmark-id", required=True)
+
+    selected_prior_work_dossier_parser = subparsers.add_parser(
+        "selected-prior-work-dossier", help="Render selected benchmark closest-prior-work dossier."
+    )
+    selected_prior_work_dossier_parser.add_argument("--benchmark-id", required=True)
+
+    selected_positioning_parser = subparsers.add_parser(
+        "selected-positioning", help="Build publication-safe selected benchmark contribution positioning."
+    )
+    selected_positioning_parser.add_argument("--benchmark-id", required=True)
+
+    selected_positioning_report_parser = subparsers.add_parser(
+        "selected-positioning-report", help="Render selected benchmark contribution positioning report."
+    )
+    selected_positioning_report_parser.add_argument("--benchmark-id", required=True)
+
+    selected_related_work_matrix_v2_parser = subparsers.add_parser(
+        "selected-related-work-matrix-v2", help="Build and render selected benchmark related-work matrix v2."
+    )
+    selected_related_work_matrix_v2_parser.add_argument("--benchmark-id", required=True)
+
+    selected_must_cite_parser = subparsers.add_parser("selected-must-cite", help="Render selected benchmark must-cite paper list.")
+    selected_must_cite_parser.add_argument("--benchmark-id", required=True)
+
     selected_novelty_report_parser = subparsers.add_parser(
         "selected-benchmark-novelty-report", help="Render selected benchmark conservative novelty positioning."
     )
@@ -1934,11 +2049,13 @@ def build_parser() -> argparse.ArgumentParser:
         "selected-publication-review", help="Run the selected benchmark publication-readiness reviewer panel."
     )
     selected_publication_review_parser.add_argument("--benchmark-id", required=True)
+    selected_publication_review_parser.add_argument("--after-related-work", action="store_true")
 
     selected_publication_fix_list_parser = subparsers.add_parser(
         "selected-publication-fix-list", help="Print selected benchmark publication-readiness fixes."
     )
     selected_publication_fix_list_parser.add_argument("--benchmark-id", required=True)
+    selected_publication_fix_list_parser.add_argument("--after-related-work", action="store_true")
 
     selected_pilot_review_parser = subparsers.add_parser("selected-pilot-review", help="Run the selected benchmark pilot reviewer panel.")
     selected_pilot_review_parser.add_argument("--benchmark-id", required=True)
@@ -1967,6 +2084,21 @@ def build_parser() -> argparse.ArgumentParser:
         "selected-main-paper-package", help="Export the selected benchmark main/pilot-ready paper package."
     )
     selected_main_paper_package_parser.add_argument("--benchmark-id", required=True)
+
+    selected_manuscript_related_work_revise_parser = subparsers.add_parser(
+        "selected-manuscript-related-work-revise", help="Revise selected benchmark manuscript related work from v2.4 curation."
+    )
+    selected_manuscript_related_work_revise_parser.add_argument("--benchmark-id", required=True)
+
+    selected_manuscript_positioning_update_parser = subparsers.add_parser(
+        "selected-manuscript-positioning-update", help="Update selected benchmark manuscript positioning from v2.4 novelty evidence."
+    )
+    selected_manuscript_positioning_update_parser.add_argument("--benchmark-id", required=True)
+
+    selected_paper_package_v24_parser = subparsers.add_parser(
+        "selected-paper-package-v24", help="Export the v2.4 selected benchmark paper package after related-work completion."
+    )
+    selected_paper_package_v24_parser.add_argument("--benchmark-id", required=True)
 
     selected_benchmark_manuscript_parser = subparsers.add_parser(
         "selected-benchmark-manuscript", help="Generate a manuscript-shaped draft for the selected benchmark."
@@ -3099,6 +3231,7 @@ def _dispatch(
             v21=args.v21,
             v22=args.v22,
             v23=args.v23,
+            v24=args.v24,
             v2_ideas=args.v2_ideas,
         )
         target = report.report_path or (config.root / "eval_report.md")
@@ -3124,6 +3257,7 @@ def _dispatch(
                 include_selected_idea=args.include_selected_idea,
                 include_selected_pilot=args.include_selected_pilot,
                 include_selected_main=args.include_selected_main,
+                include_selected_v24=args.include_selected_v24,
             )
         else:
             result = dashboard.build_run(args.run_id)
@@ -4158,6 +4292,16 @@ def _dispatch(
         else:
             print(render_v23_release_gate_markdown(v23_result), end="")
         return 0 if v23_result.passed else 1
+    if args.command == "v24-release-gate":
+        v24_gate = V24ReleaseGateEnforcer(config)
+        v24_result = v24_gate.evaluate()
+        if args.write_report:
+            v24_gate.write_outputs(v24_result)
+        if args.json:
+            print(json.dumps(v24_result.to_dict(), indent=2))
+        else:
+            print(render_v24_release_gate_markdown(v24_result), end="")
+        return 0 if v24_result.passed else 1
     if args.command == "cli-audit":
         cli_audit = CLICommandAuditor(config).audit(build_parser(), write=args.write_report)
         print(render_cli_command_audit(cli_audit), end="")
@@ -4656,6 +4800,76 @@ def _dispatch(
     if args.command == "selected-related-work-status":
         print(RelatedWorkCompletionManager(config).status_report(args.benchmark_id), end="")
         return 0
+    if args.command == "selected-related-work-search-plan":
+        campaign = RequiredRelatedWorkSearchManager(config).plan(args.benchmark_id)
+        print(render_required_related_work_search_report(campaign), end="")
+        return 0
+    if args.command == "selected-related-work-search-run":
+        campaign = RequiredRelatedWorkSearchManager(config).run(args.benchmark_id)
+        print(render_required_related_work_search_report(campaign), end="")
+        return 0 if campaign.status == "complete" else 1
+    if args.command in {"selected-related-work-search-status", "selected-related-work-search-report"}:
+        print(RequiredRelatedWorkSearchManager(config).status_report(args.benchmark_id), end="")
+        return 0
+    if args.command == "attach-related-paper":
+        attachment = RelatedWorkCurationManager(config).attach_paper(
+            args.benchmark_id,
+            category=args.category,
+            paper_id=args.paper_id,
+            relationship=args.relationship,
+            curator=args.curator,
+            notes=args.notes,
+        )
+        print(json.dumps(to_plain(attachment), indent=2))
+        return 0 if attachment.status == "accepted" else 1
+    if args.command == "reject-related-paper":
+        rejected = RelatedWorkCurationManager(config).reject_paper(
+            args.benchmark_id,
+            paper_id=args.paper_id,
+            reason=args.reason,
+            curator=args.curator,
+        )
+        print(json.dumps([to_plain(attachment) for attachment in rejected], indent=2))
+        return 0
+    if args.command == "related-work-curation-report":
+        curation_report = RelatedWorkCurationManager(config).report(args.benchmark_id)
+        print(render_related_work_curation_report(curation_report), end="")
+        return 0
+    if args.command == "related-work-auto-curate":
+        curation_report = RelatedWorkCurationManager(config).auto_curate(args.benchmark_id, curator=args.curator)
+        print(render_related_work_curation_report(curation_report), end="")
+        return 0 if not curation_report.missing_categories else 1
+    if args.command == "read-selected-related-work":
+        statuses = RelatedWorkReadingManager(config).read(args.benchmark_id, paper_id=args.paper_id or None)
+        print(render_related_work_reading_report(statuses), end="")
+        return 0 if statuses else 1
+    if args.command == "selected-related-work-reading-report":
+        print(RelatedWorkReadingManager(config).report(args.benchmark_id), end="")
+        return 0
+    if args.command == "selected-prior-work-refresh":
+        dossier = SelectedBenchmarkPriorWorkRefreshManager(config).refresh(args.benchmark_id)
+        print(render_selected_prior_work_dossier(dossier), end="")
+        return 0 if dossier.novelty_status not in {"unknown", "duplicate"} else 1
+    if args.command == "selected-prior-work-dossier":
+        dossier = SelectedBenchmarkPriorWorkRefreshManager(config).load_or_refresh(args.benchmark_id)
+        print(render_selected_prior_work_dossier(dossier), end="")
+        return 0
+    if args.command == "selected-positioning":
+        positioning_report = SelectedBenchmarkPositioningManager(config).build(args.benchmark_id)
+        print(render_positioning_report(positioning_report), end="")
+        return 0
+    if args.command == "selected-positioning-report":
+        positioning_report = SelectedBenchmarkPositioningManager(config).load_or_build(args.benchmark_id)
+        print(render_positioning_report(positioning_report), end="")
+        return 0
+    if args.command == "selected-related-work-matrix-v2":
+        matrix_v2 = SelectedBenchmarkRelatedWorkMatrixV2Manager(config).build(args.benchmark_id)
+        print(render_related_work_matrix_v2(matrix_v2), end="")
+        has_direct_solution = any(entry.relationship == "directly solves" for entry in matrix_v2.entries)
+        return 0 if not matrix_v2.missing_categories and not has_direct_solution else 1
+    if args.command == "selected-must-cite":
+        print(SelectedBenchmarkRelatedWorkMatrixV2Manager(config).must_cite_report(args.benchmark_id), end="")
+        return 0
     if args.command == "selected-benchmark-novelty-report":
         from gapforge.selected_benchmark.related_work import render_novelty_positioning
 
@@ -4728,11 +4942,20 @@ def _dispatch(
         print(SelectedBenchmarkReviewerPanelBuilder(config).fix_list(args.benchmark_id), end="")
         return 0
     if args.command == "selected-publication-review":
-        publication_review = SelectedBenchmarkReviewerPanelBuilder(config).publication_review(args.benchmark_id)
+        publication_review = SelectedBenchmarkReviewerPanelBuilder(config).publication_review(
+            args.benchmark_id,
+            after_related_work=args.after_related_work,
+        )
         print(render_publication_readiness_review(publication_review), end="")
-        return 0 if publication_review.readiness in {"workshop_candidate", "conference_candidate"} else 1
+        return 0 if publication_review.readiness in {"publication_candidate", "workshop_candidate"} else 1
     if args.command == "selected-publication-fix-list":
-        print(SelectedBenchmarkReviewerPanelBuilder(config).publication_fix_list(args.benchmark_id), end="")
+        print(
+            SelectedBenchmarkReviewerPanelBuilder(config).publication_fix_list(
+                args.benchmark_id,
+                after_related_work=args.after_related_work,
+            ),
+            end="",
+        )
         return 0
     if args.command == "selected-pilot-review":
         from gapforge.selected_benchmark.reviewer import render_pilot_review_panel
@@ -4759,6 +4982,18 @@ def _dispatch(
         selected_main_paper_package = SelectedMainManuscriptManager(config).paper_package(args.benchmark_id)
         print(json.dumps(to_plain(selected_main_paper_package), indent=2))
         return 0
+    if args.command == "selected-manuscript-related-work-revise":
+        related_work_revision = SelectedBenchmarkRelatedWorkManuscriptManager(config).revise_related_work(args.benchmark_id)
+        print(render_selected_related_work_manuscript_revision(related_work_revision), end="")
+        return 0 if not related_work_revision.missing_categories else 1
+    if args.command == "selected-manuscript-positioning-update":
+        positioning_revision = SelectedBenchmarkRelatedWorkManuscriptManager(config).update_positioning(args.benchmark_id)
+        print(render_selected_related_work_manuscript_revision(positioning_revision), end="")
+        return 0
+    if args.command == "selected-paper-package-v24":
+        package_v24 = SelectedBenchmarkRelatedWorkManuscriptManager(config).paper_package_v24(args.benchmark_id)
+        print(render_selected_paper_package_v24(package_v24), end="")
+        return 0 if package_v24.publication_readiness in {"publication_candidate", "workshop_candidate"} else 1
     if args.command == "selected-benchmark-manuscript":
         selected_benchmark_manuscript = SelectedBenchmarkManuscriptManager(config).generate(args.benchmark_id)
         print(json.dumps(to_plain(selected_benchmark_manuscript), indent=2))

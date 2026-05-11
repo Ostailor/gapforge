@@ -101,6 +101,17 @@ from gapforge.selected_benchmark.pilot_run import (
     SelectedPilotRunManifest,
     render_selected_pilot_status,
 )
+from gapforge.selected_benchmark.positioning import (
+    ContributionPositioning,
+    PositioningReport,
+    SelectedBenchmarkPositioningManager,
+    render_positioning_report,
+)
+from gapforge.selected_benchmark.prior_work_refresh import (
+    SelectedBenchmarkPriorWorkDossier,
+    SelectedBenchmarkPriorWorkRefreshManager,
+    render_selected_prior_work_dossier,
+)
 from gapforge.selected_benchmark.related_work import (
     REQUIRED_RELATED_WORK_CATEGORIES,
     SelectedBenchmarkRelatedWorkManager,
@@ -117,6 +128,37 @@ from gapforge.selected_benchmark.related_work_completion import (
     RelatedWorkCompletionManager,
     RelatedWorkCompletionStatus,
     render_related_work_completion_status,
+)
+from gapforge.selected_benchmark.related_work_curation import (
+    RelatedWorkCategoryAttachment,
+    RelatedWorkCurationManager,
+    RelatedWorkCurationReport,
+    render_related_work_curation_report,
+)
+from gapforge.selected_benchmark.related_work_manuscript import (
+    SelectedBenchmarkRelatedWorkManuscriptManager,
+    SelectedPaperPackageV24,
+    SelectedRelatedWorkManuscriptRevision,
+    render_selected_paper_package_v24,
+    render_selected_related_work_manuscript_revision,
+)
+from gapforge.selected_benchmark.related_work_matrix_v2 import (
+    SelectedBenchmarkRelatedWorkMatrixV2,
+    SelectedBenchmarkRelatedWorkMatrixV2Entry,
+    SelectedBenchmarkRelatedWorkMatrixV2Manager,
+    render_must_cite_report,
+    render_related_work_matrix_v2,
+)
+from gapforge.selected_benchmark.related_work_reading import (
+    RelatedWorkReadingManager,
+    RelatedWorkReadingStatus,
+    render_related_work_reading_report,
+)
+from gapforge.selected_benchmark.related_work_search import (
+    RequiredRelatedWorkCategorySearch,
+    RequiredRelatedWorkSearchCampaign,
+    RequiredRelatedWorkSearchManager,
+    render_required_related_work_search_report,
 )
 from gapforge.selected_benchmark.reviewer import (
     PublicationReadinessReview,
@@ -208,13 +250,32 @@ __all__ = [
     "SelectedBenchmarkManuscript",
     "SelectedBenchmarkManuscriptManager",
     "SelectedBenchmarkPaperPackage",
+    "SelectedBenchmarkPositioningManager",
+    "SelectedBenchmarkPriorWorkDossier",
+    "SelectedBenchmarkPriorWorkRefreshManager",
     "SelectedBenchmarkRunResult",
     "SelectedBenchmarkRelatedWorkManager",
     "SelectedBenchmarkReviewerPanelBuilder",
     "SelectedBenchmarkReviewPanel",
     "RelatedWorkCompletionManager",
     "RelatedWorkCompletionStatus",
+    "RelatedWorkCategoryAttachment",
+    "RelatedWorkCurationManager",
+    "RelatedWorkCurationReport",
+    "RelatedWorkReadingManager",
+    "RelatedWorkReadingStatus",
+    "SelectedBenchmarkRelatedWorkMatrixV2",
+    "SelectedBenchmarkRelatedWorkMatrixV2Entry",
+    "SelectedBenchmarkRelatedWorkMatrixV2Manager",
+    "SelectedBenchmarkRelatedWorkManuscriptManager",
+    "SelectedPaperPackageV24",
+    "SelectedRelatedWorkManuscriptRevision",
+    "RequiredRelatedWorkCategorySearch",
+    "RequiredRelatedWorkSearchCampaign",
+    "RequiredRelatedWorkSearchManager",
     "PublicationReadinessReview",
+    "ContributionPositioning",
+    "PositioningReport",
     "SelectedNoveltyPositioning",
     "SelectedPriorWorkRecall",
     "SelectedRelatedWorkEntry",
@@ -250,9 +311,18 @@ __all__ = [
     "render_pilot_power_assessment",
     "render_pilot_power_plan",
     "render_related_work_completion_status",
+    "render_related_work_curation_report",
+    "render_related_work_reading_report",
+    "render_must_cite_report",
+    "render_related_work_matrix_v2",
+    "render_selected_paper_package_v24",
+    "render_selected_related_work_manuscript_revision",
+    "render_required_related_work_search_report",
     "render_selected_pilot_report",
     "render_selected_pilot_manuscript",
     "render_selected_pilot_status",
+    "render_positioning_report",
+    "render_selected_prior_work_dossier",
     "render_pilot_dataset_card",
     "render_pilot_trace_dataset_report",
     "render_selected_benchmark_fix_list",

@@ -1,0 +1,134 @@
+{
+  "topic": "Sequential specificity benchmark with missing related-work category",
+  "related_work_search": {
+    "campaign_exists": true,
+    "required_categories": [
+      "low-FPR detection/evaluation",
+      "multi-agent collusion/covert coordination",
+      "monitor evasion",
+      "sequential testing/change-point detection",
+      "benchmark/evaluation protocol papers",
+      "anomaly detection specificity",
+      "medical screening specificity analogies if used",
+      "cartel/covert-channel analogies if used"
+    ],
+    "queries_by_category": {
+      "low-FPR detection/evaluation": ["low false positive detection specificity"],
+      "multi-agent collusion/covert coordination": ["multi agent collusion coordination"],
+      "monitor evasion": ["monitor evasion audit"],
+      "sequential testing/change-point detection": ["sequential change point false alarm"],
+      "benchmark/evaluation protocol papers": ["benchmark protocol detection evaluation"],
+      "anomaly detection specificity": ["anomaly detection specificity"],
+      "medical screening specificity analogies if used": ["screening specificity false positive"],
+      "cartel/covert-channel analogies if used": ["cartel covert channel coordination"]
+    },
+    "sources_used": ["arxiv", "semantic_scholar"],
+    "search_rounds": [
+      {"category": "low-FPR detection/evaluation", "status": "complete", "accepted_paper_ids": ["rw-low-fpr"]},
+      {"category": "multi-agent collusion/covert coordination", "status": "complete", "accepted_paper_ids": ["rw-collusion"]},
+      {"category": "monitor evasion", "status": "complete", "accepted_paper_ids": ["rw-monitor"]},
+      {"category": "sequential testing/change-point detection", "status": "complete", "accepted_paper_ids": ["rw-sequential"]},
+      {"category": "benchmark/evaluation protocol papers", "status": "complete", "accepted_paper_ids": ["rw-benchmark"]},
+      {"category": "anomaly detection specificity", "status": "complete", "accepted_paper_ids": ["rw-anomaly"]},
+      {"category": "medical screening specificity analogies if used", "status": "complete", "accepted_paper_ids": ["rw-screening"]},
+      {"category": "cartel/covert-channel analogies if used", "status": "blocked", "accepted_paper_ids": []}
+    ],
+    "blocked_categories": ["cartel/covert-channel analogies if used"],
+    "next_commands": ["gapforge selected-related-work-search-run --benchmark-id selected-low-fpr-collusion"],
+    "fallback_preserved_separately": true,
+    "network_required_for_fixture": false
+  },
+  "category_curation": {
+    "report_exists": true,
+    "category_statuses": {
+      "low-FPR detection/evaluation": {"status": "complete", "accepted_real_paper_ids": ["rw-low-fpr"]},
+      "multi-agent collusion/covert coordination": {"status": "complete", "accepted_real_paper_ids": ["rw-collusion"]},
+      "monitor evasion": {"status": "complete", "accepted_real_paper_ids": ["rw-monitor"]},
+      "sequential testing/change-point detection": {"status": "complete", "accepted_real_paper_ids": ["rw-sequential"]},
+      "benchmark/evaluation protocol papers": {"status": "complete", "accepted_real_paper_ids": ["rw-benchmark"]},
+      "anomaly detection specificity": {"status": "complete", "accepted_real_paper_ids": ["rw-anomaly"]},
+      "medical screening specificity analogies if used": {"status": "complete", "accepted_real_paper_ids": ["rw-screening"]},
+      "cartel/covert-channel analogies if used": {"status": "missing", "accepted_real_paper_ids": []}
+    },
+    "accepted_real_paper_count": 7,
+    "missing_categories": ["cartel/covert-channel analogies if used"],
+    "blockers": ["No accepted real paper attached for cartel/covert-channel analogies if used."],
+    "fallback_papers_preserved_separately": true,
+    "fallback_only_counts_as_complete": false,
+    "fake_citations_rejected": true,
+    "missing_categories_hidden": false
+  },
+  "reading_pass": {"report_exists": true, "statuses": [{"paper_id": "rw-benchmark", "source_basis": "full_text", "evidence_span_ids": ["span-benchmark"], "confidence": "high"}]},
+  "prior_work_dossier": {
+    "exists": true,
+    "closest_prior_work_ids": ["rw-benchmark"],
+    "comparison_dimensions": [
+      "problem setting",
+      "low-FPR/specificity focus",
+      "sequential evaluation",
+      "multi-agent collusion/covert coordination",
+      "benchmark/protocol contribution",
+      "observability modes",
+      "honest null distribution",
+      "collusive alternatives",
+      "baselines",
+      "metrics/statistics"
+    ],
+    "comparison_table": [{"paper_id": "rw-benchmark", "dimension": "problem setting", "coverage": "partial"}],
+    "what_is_new": [],
+    "what_is_not_new": [],
+    "decisive_difference_needed": ["complete missing analogy category before claiming readiness"],
+    "counterevidence_preserved": true,
+    "novelty_status": "unknown",
+    "confidence": "low"
+  },
+  "positioning": {
+    "report_exists": true,
+    "revised_claims": ["We report a synthetic evaluation protocol draft with incomplete related-work coverage."],
+    "claim_softening_applied": true,
+    "synthetic_limitations_included": true,
+    "deployment_claim_blocked": true,
+    "closest_prior_work_citations": ["rw-benchmark"],
+    "claims_to_avoid": ["first", "publication-ready", "deployment-valid"]
+  },
+  "related_work_matrix_v2": {
+    "exists": true,
+    "entries": [{"paper_id": "rw-benchmark", "relationship": "adjacent benchmark", "must_cite": true}],
+    "category_coverage": {"cartel/covert-channel analogies if used": []},
+    "must_cite_ids": ["rw-benchmark"],
+    "baseline_source_ids": ["rw-anomaly"],
+    "missing_categories": ["cartel/covert-channel analogies if used"],
+    "reviewer_omission_risks_visible": true,
+    "directly_solving_triggers_no_go": true,
+    "baseline_sources_feed_plan": true
+  },
+  "publication_review": {
+    "exists": true,
+    "after_related_work": true,
+    "readiness": "revise_related_work",
+    "fatal_blockers": [],
+    "major_blockers": ["Missing required related-work category."],
+    "required_revisions": ["Attach at least one accepted real paper for the missing category."],
+    "synthetic_limitations_checked": true,
+    "missing_related_work_blocks_publication": true
+  },
+  "manuscript_revision": {
+    "exists": true,
+    "related_work_section_generated": true,
+    "citations_resolve_to_known_papers": true,
+    "fake_citation_ids": [],
+    "missing_categories": ["cartel/covert-channel analogies if used"],
+    "softened_claims_included": true,
+    "synthetic_limitations_preserved": true,
+    "deployment_validity_claim": false,
+    "publication_ready": false,
+    "must_cite_coverage_visible": true
+  },
+  "claims": {"deployment_validity_overclaim": false},
+  "v24_release_gate": {
+    "v23_release_gate_passes": true,
+    "expected_pass": false,
+    "expected_decision_status": "revise_related_work",
+    "expected_blockers": ["missing related-work category"]
+  }
+}
