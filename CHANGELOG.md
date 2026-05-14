@@ -2,6 +2,79 @@
 
 All notable project changes should be recorded here.
 
+## 2.5.0
+
+GapForge v2.5.0 is the Real Benchmark Grounding, Venue-Style Paper, and OpenReview Reviewer Training release for the locked selected benchmark `benchmark-sequential-specificity-benchmark-for-low-fpr-collusion-audits`. It ships the v2.5 workflow upgrade while preserving an honest manuscript readiness downgrade from the drastic reviewer panel.
+
+### Real Benchmark Grounding
+
+- Added a first-class vetted benchmark registry with explicit source URL, license, terms of use, download/authentication requirements, vetted status, limitations, and provenance.
+- Added fit assessment, benchmark cards, selected-benchmark mapping reports, adapter creation/run reports, and vetted experiment planning/results.
+- Added safety boundaries that treat vetted status and benchmark fit separately; existing benchmarks can be primary, auxiliary, sanity-check, or rejected without forcing relevance.
+- Registered the v2.5 release-verification fixture `Synthetic sequential low-FPR monitoring fixture` as a synthetic allowed substrate, mapped it to the selected benchmark, created a transparent trace-conversion adapter, and ran a separated vetted-adapter experiment.
+
+### Venue-Style Manuscript Workflow
+
+- Added configurable venue profiles for conference, workshop, systems, dataset/benchmark, theory, and preprint styles.
+- Added TeX/source style corpus ingestion that extracts structural features only and preserves license warnings.
+- Added venue style analysis, style recommendations, and venue-aware manuscript rewriting that changes structure/framing without copying source-paper prose or overriding evidence gates.
+- The live v2.5 venue rewrite for `generic_ml_conference` is `not_publication_ready` because bibliography and anonymization checklist blockers remain open.
+
+### OpenReview-Calibrated Review and Drastic Revision
+
+- Added OpenReview-style review dataset ingestion, review issue taxonomy labels, heuristic reviewer training/evaluation, and reviewer calibration reports.
+- Added the drastic reviewer panel with novelty, empirical rigor, benchmark validity, clarity, reproducibility, and area-chair roles.
+- Added drastic revision planning that turns harsh reviews into fatal fixes, major fixes, new experiment requests, related-work requests, claim-softening requirements, manuscript rewrites, and artifact update tasks.
+- The live v2.5 drastic panel returns `reject_likely` with two fatal blockers: missing auditable related-work matrix and missing review-ready artifact package. Publication-candidate status is not allowed while those blockers remain.
+
+### API, Dashboard, Evals, Docs, and Skills
+
+- Exposed v2.5 workflows through `gapforge.api`: vetted benchmark registration/fit, adapter creation, vetted experiments, venue profile selection, style corpus ingestion/analysis, venue rewriting, review dataset creation, reviewer training/evaluation, drastic review, drastic revision planning, and the v2.5 release gate.
+- Added v2.5 dashboard pages for vetted benchmarks, mappings, adapters, venue profiles, style corpus, venue analysis, OpenReview-style datasets, review taxonomy, reviewer calibration, drastic review, drastic revision, and the v2.5 release gate.
+- Added v2.5 eval fixtures and metrics for benchmark fit quality, adapter transparency, venue-style safety, citation/plagiarism safety, review dataset integrity, taxonomy quality, reviewer calibration, drastic review quality, revision-plan actionability, and release-gate correctness.
+- Added v2.5 docs and Codex-readable skills for vetted benchmark mapping, benchmark adapters, venue style analysis, OpenReview review datasets, drastic reviewers, and drastic revision.
+
+### Release Outcome
+
+- v2.4 release gate remains passing with `publication_candidate`.
+- v2.5 release gate has all required artifacts present and all safety checks satisfied, including fake citation/result blocking and copied-prose blocking.
+- v2.5 gate outcome is `revise_for_reviews`, not `conference_candidate`, because the drastic review has fatal blockers.
+- The vetted benchmark path is grounded in a synthetic release fixture and adapter transparency, not in real collusion traces or deployment-validity evidence.
+
+### Validation
+
+- `make ci` passed: ruff format, ruff check, mypy, full pytest (`1253 passed`), and default eval.
+- `make eval`
+- `gapforge eval --v2 --v3 --v4 --v5 --v6 --v7 --v8 --v9 --write-report`
+- `gapforge eval --v2-ideas --write-report`
+- `gapforge eval --v21 --write-report`
+- `gapforge eval --v22 --write-report`
+- `gapforge eval --v23 --write-report`
+- `gapforge eval --v24 --write-report`
+- `gapforge eval --v25 --write-report`
+- `make v2-smoke`
+- `make v3-smoke`
+- `make v4-smoke`
+- `make v6-smoke`
+- `make v7-smoke`
+- `make v8-smoke`
+- `make v9-smoke`
+- `gapforge v1-readiness --write-report --json`
+- `gapforge v2-release-gate --write-report --json`
+- `gapforge v21-release-gate --write-report --json`
+- `gapforge v22-release-gate --write-report --json`
+- `gapforge v23-release-gate --write-report --json`
+- `gapforge v24-release-gate --write-report --json`
+- `gapforge v25-release-gate --write-report --json` completed with status `revise_for_reviews` after all required artifacts were generated.
+
+### Non-Claims and Limitations
+
+- v2.5.0 does not claim top-conference acceptance or top-conference readiness.
+- v2.5.0 does not claim real benchmark validity from a synthetic fixture or auxiliary substrate.
+- v2.5.0 does not copy paper prose or use venue style as a substitute for evidence.
+- v2.5.0 does not treat reviewer calibration as truth generation or human reviewer equivalence.
+- v2.5.0 does not hide harsh reviewer objections; the fatal drastic-review blockers remain visible.
+
 ## 2.4.0
 
 GapForge v2.4.0 is the Related Work Completion and Publication-Readiness Remediation release for the locked selected benchmark `benchmark-sequential-specificity-benchmark-for-low-fpr-collusion-audits`. It addresses the v2.3 fatal publication blocker: v2.3 completed the synthetic main benchmark but was not publication-ready because required related-work categories had no real attached paper records.

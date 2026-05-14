@@ -84,12 +84,14 @@ from gapforge.manuscript import (
 )
 from gapforge.manuscript.anonymization import ManuscriptAnonymizer
 from gapforge.manuscript.bibliography import ManuscriptBibliographyManager
+from gapforge.manuscript.drastic_rebuttal import DrasticRevisionManager, DrasticRevisionPlan
 from gapforge.manuscript.figures import ManuscriptFigureGenerator
 from gapforge.manuscript.rebuttal import ManuscriptRebuttalManager
 from gapforge.manuscript.reviewer_panel import ManuscriptReviewPanelBuilder
 from gapforge.manuscript.submission import SubmissionPackageExporter
 from gapforge.manuscript.tables import ManuscriptTableGenerator
 from gapforge.manuscript.traceability import ManuscriptTraceabilityAuditor
+from gapforge.manuscript.venue_rewriter import VenueManuscriptRewriter, VenueRewriteResult
 from gapforge.metrics.registry import MetricRegistry
 from gapforge.models import (
     AgentActualRunAttestation,
@@ -155,11 +157,21 @@ from gapforge.release_gate.v21 import V21ReleaseGateEnforcer, V21ReleaseGateResu
 from gapforge.release_gate.v22 import V22ReleaseGateEnforcer, V22ReleaseGateResult
 from gapforge.release_gate.v23 import V23ReleaseGateEnforcer, V23ReleaseGateResult
 from gapforge.release_gate.v24 import V24ReleaseGateEnforcer, V24ReleaseGateResult
+from gapforge.release_gate.v25 import V25ReleaseGateEnforcer, V25ReleaseGateResult
 from gapforge.replication import ReplicationPackageExporter, ReplicationPackageVerifier, ReproductionRunner
 from gapforge.reporting import write_final_report
 from gapforge.results import ErrorAnalysisBuilder, ResultAggregator, ResultParser, ResultStatisticsAnalyzer
 from gapforge.results.statistics import StatisticalAnalysisReport
 from gapforge.retrieval import build_project_index, build_run_index
+from gapforge.review_training import (
+    ReviewDataset,
+    ReviewDatasetBuilder,
+    ReviewerEvaluationManager,
+    ReviewerEvaluationResult,
+    ReviewerTrainingManager,
+    ReviewerTrainingRun,
+)
+from gapforge.reviewers.drastic_panel import DrasticReviewPanel, DrasticReviewPanelBuilder
 from gapforge.reviewers.empirical import EmpiricalReviewBuilder
 from gapforge.search_strategy import plan_search_strategy as plan_search_strategy_skill
 from gapforge.selected_benchmark import (
@@ -211,6 +223,7 @@ from gapforge.selected_benchmark import (
     SelectedBenchmarkReviewerPanelBuilder,
     SelectedBenchmarkReviewPanel,
     SelectedBenchmarkRunResult,
+    SelectedBenchmarkVettedMappingManager,
     SelectedBenchmarkWorkspaceManager,
     SelectedMainExecution,
     SelectedMainManuscript,
@@ -223,17 +236,31 @@ from gapforge.selected_benchmark import (
     SelectedPilotPaperPackage,
     SelectedRelatedWorkManuscriptRevision,
     SelectedRelatedWorkMatrix,
+    SelectedVettedBenchmarkExperimentManager,
     SequentialMetricManager,
     SequentialMetricResult,
     SequentialSpecificityBenchmarkSpec,
     SyntheticTraceGenerator,
     TraceDataset,
+    VettedBenchmarkExperimentPlan,
+    VettedBenchmarkExperimentResult,
+    VettedBenchmarkMappingReport,
 )
 from gapforge.sources.base import ResearchSource
 from gapforge.sources.canonical import canonicalize_project, canonicalize_run
 from gapforge.sources.health import check_sources
 from gapforge.sources.live_diagnostics import run_live_source_diagnostic
 from gapforge.state import ResearchStateManager
+from gapforge.style_corpus import StyleCorpusIngestRecord, StyleCorpusManager, VenueStyleAnalyzer, VenueStyleProfile
+from gapforge.venues import VenueProfileManager
+from gapforge.vetted_benchmarks import (
+    BenchmarkAdapter,
+    BenchmarkAdapterRegistry,
+    BenchmarkAdapterRun,
+    BenchmarkEligibilityAssessment,
+    VettedBenchmarkRecord,
+    VettedBenchmarkRegistry,
+)
 
 
 @dataclass(slots=True)
@@ -2376,6 +2403,252 @@ def v24_release_gate(
     return result
 
 
+def register_vetted_benchmark(
+    name: str,
+    *,
+    domain: str = "",
+    source: str = "",
+    source_url: str = "",
+    benchmark_type: str = "unknown",
+    task_types: list[str] | None = None,
+    dataset_ids: list[str] | None = None,
+    metric_ids: list[str] | None = None,
+    baseline_ids: list[str] | None = None,
+    paper_ids: list[str] | None = None,
+    leaderboard_url: str = "",
+    license: str = "",
+    terms_of_use: str = "",
+    download_required: bool = False,
+    authentication_required: bool = False,
+    size_estimate: str = "",
+    citation: str = "",
+    vetted_status: str = "uncertain",
+    limitations: list[str] | None = None,
+    config: GapForgeConfig | None = None,
+) -> VettedBenchmarkRecord:
+    """Register an existing benchmark as an auditable v2.5 grounding option."""
+
+    return VettedBenchmarkRegistry(_config(config)).register(
+        name=name,
+        domain=domain,
+        source=source,
+        source_url=source_url,
+        benchmark_type=benchmark_type,
+        task_types=task_types,
+        dataset_ids=dataset_ids,
+        metric_ids=metric_ids,
+        baseline_ids=baseline_ids,
+        paper_ids=paper_ids,
+        leaderboard_url=leaderboard_url,
+        license=license,
+        terms_of_use=terms_of_use,
+        download_required=download_required,
+        authentication_required=authentication_required,
+        size_estimate=size_estimate,
+        citation=citation,
+        vetted_status=vetted_status,
+        limitations=limitations,
+    )
+
+
+def assess_benchmark_fit(
+    benchmark_id: str,
+    selected_idea_id: str,
+    *,
+    config: GapForgeConfig | None = None,
+) -> BenchmarkEligibilityAssessment:
+    """Assess fit instead of assuming a vetted benchmark validates the selected idea."""
+
+    return VettedBenchmarkRegistry(_config(config)).assess_eligibility(
+        benchmark_id=benchmark_id,
+        selected_idea_id=selected_idea_id,
+    )
+
+
+def map_selected_benchmark_to_vetted(
+    benchmark_id: str,
+    *,
+    vetted_benchmark_id: str = "",
+    config: GapForgeConfig | None = None,
+) -> VettedBenchmarkMappingReport:
+    """Map the selected benchmark to registered vetted benchmarks with unsupported claims visible."""
+
+    return SelectedBenchmarkVettedMappingManager(_config(config)).map_benchmarks(
+        benchmark_id,
+        vetted_benchmark_id=vetted_benchmark_id,
+    )
+
+
+def create_benchmark_adapter(
+    selected_benchmark_id: str,
+    vetted_benchmark_id: str,
+    *,
+    config: GapForgeConfig | None = None,
+) -> BenchmarkAdapter:
+    """Create a transparent adapter from a vetted benchmark to the selected benchmark protocol."""
+
+    return BenchmarkAdapterRegistry(_config(config)).create_adapter(
+        selected_benchmark_id=selected_benchmark_id,
+        vetted_benchmark_id=vetted_benchmark_id,
+    )
+
+
+def run_benchmark_adapter(
+    adapter_id: str,
+    *,
+    config: GapForgeConfig | None = None,
+) -> BenchmarkAdapterRun:
+    """Run a vetted benchmark adapter while preserving source labels, splits, and warnings."""
+
+    return BenchmarkAdapterRegistry(_config(config)).run_adapter(adapter_id)
+
+
+def run_vetted_experiment(
+    benchmark_id: str | None = None,
+    *,
+    plan_id: str | None = None,
+    config: GapForgeConfig | None = None,
+) -> VettedBenchmarkExperimentPlan | VettedBenchmarkExperimentResult:
+    """Plan or run selected-benchmark experiments on vetted adapters, separate from synthetic results."""
+
+    manager = SelectedVettedBenchmarkExperimentManager(_config(config))
+    if plan_id:
+        return manager.run_plan(plan_id)
+    if benchmark_id:
+        return manager.create_plan(benchmark_id)
+    raise ValueError("Provide benchmark_id to create a plan or plan_id to run a vetted experiment.")
+
+
+def select_venue_profile(
+    manuscript_id: str,
+    venue: str,
+    *,
+    config: GapForgeConfig | None = None,
+) -> ManuscriptState:
+    """Assign a venue profile for structure and reviewer expectations, not acceptance claims."""
+
+    return VenueProfileManager(_config(config)).set_profile(manuscript_id, venue)
+
+
+def ingest_style_corpus(
+    source: str | Path,
+    venue: str = "generic_ml_conference",
+    *,
+    source_url: str = "",
+    year: int = 0,
+    dry_run: bool = False,
+    config: GapForgeConfig | None = None,
+) -> StyleCorpusIngestRecord:
+    """Ingest allowed TeX/source as structural style features only."""
+
+    manager = StyleCorpusManager(_config(config))
+    if dry_run:
+        return manager.ingest_source(str(source), dry_run=True)
+    return manager.add_tex(source, venue, source_url=source_url, year=year)
+
+
+def analyze_venue_style(
+    venue: str,
+    *,
+    config: GapForgeConfig | None = None,
+) -> VenueStyleProfile:
+    """Analyze structural/rhetorical venue patterns without copying source-paper prose."""
+
+    return VenueStyleAnalyzer(_config(config)).analyze(venue)
+
+
+def rewrite_manuscript_for_venue(
+    manuscript_id: str,
+    venue: str,
+    *,
+    config: GapForgeConfig | None = None,
+) -> VenueRewriteResult:
+    """Rewrite manuscript structure for a venue while preserving evidence gates and limitations."""
+
+    return VenueManuscriptRewriter(_config(config)).rewrite(manuscript_id, venue)
+
+
+def create_review_dataset(
+    name: str = "openreview_like",
+    *,
+    source: str = "manual",
+    ingest_fixture: bool = False,
+    venue: str = "",
+    year: int | None = None,
+    config: GapForgeConfig | None = None,
+) -> ReviewDataset:
+    """Create or ingest an OpenReview-style critique calibration dataset."""
+
+    builder = ReviewDatasetBuilder(_config(config))
+    if ingest_fixture:
+        return builder.ingest_fixture()
+    if source == "openreview" and venue and year is not None:
+        return builder.ingest_openreview(venue=venue, year=year)
+    return builder.create(name, source=source)
+
+
+def train_reviewer(
+    dataset_id: str,
+    *,
+    mode: str = "heuristic",
+    config: GapForgeConfig | None = None,
+) -> ReviewerTrainingRun:
+    """Train or calibrate a reviewer rubric/model without claiming human-reviewer equivalence."""
+
+    return ReviewerTrainingManager(_config(config)).train(dataset_id, mode=mode)
+
+
+def evaluate_reviewer(
+    dataset_id: str,
+    *,
+    model_id: str = "",
+    config: GapForgeConfig | None = None,
+) -> ReviewerEvaluationResult:
+    """Evaluate reviewer calibration with hallucination and evidence-linkage metrics."""
+
+    return ReviewerEvaluationManager(_config(config)).evaluate(dataset_id, model_id=model_id)
+
+
+def run_drastic_review(
+    *,
+    manuscript_id: str | None = None,
+    benchmark_id: str | None = None,
+    config: GapForgeConfig | None = None,
+) -> DrasticReviewPanel:
+    """Run a harsh evidence-linked reviewer panel without fake citations or invented results."""
+
+    builder = DrasticReviewPanelBuilder(_config(config))
+    if manuscript_id:
+        return builder.review_manuscript(manuscript_id)
+    if benchmark_id:
+        return builder.review_benchmark(benchmark_id)
+    raise ValueError("Provide manuscript_id or benchmark_id.")
+
+
+def create_drastic_revision_plan(
+    manuscript_id: str,
+    *,
+    config: GapForgeConfig | None = None,
+) -> DrasticRevisionPlan:
+    """Convert drastic-review blockers into concrete revision tasks and status downgrades."""
+
+    return DrasticRevisionManager(_config(config)).build(manuscript_id)
+
+
+def v25_release_gate(
+    *,
+    write_report: bool = False,
+    config: GapForgeConfig | None = None,
+) -> V25ReleaseGateResult:
+    """Evaluate the v2.5 real benchmark grounding and reviewer calibration release gate."""
+
+    enforcer = V25ReleaseGateEnforcer(_config(config))
+    result = enforcer.evaluate()
+    if write_report:
+        enforcer.write_outputs(result)
+    return result
+
+
 def get_state(run_id: str, *, config: GapForgeConfig | None = None) -> ResearchRunState:
     """Load a persisted run state."""
 
@@ -2514,6 +2787,7 @@ __all__ = [
     "ReportResult",
     "add_pdf",
     "add_idea_feedback",
+    "analyze_venue_style",
     "aggregate_results",
     "benchmark_compare",
     "attest_agent_run",
@@ -2532,8 +2806,11 @@ __all__ = [
     "create_experiment_manifest",
     "create_experiment_workspace",
     "create_artifact_eval_package",
+    "create_benchmark_adapter",
     "create_project",
+    "create_drastic_revision_plan",
     "create_manuscript",
+    "create_review_dataset",
     "create_run",
     "create_sweep",
     "download_dataset",
@@ -2543,6 +2820,7 @@ __all__ = [
     "export_paper_package_v2",
     "export_replication_package",
     "export_report",
+    "evaluate_reviewer",
     "generate_code_tasks",
     "generate_constructive_gaps",
     "generate_ideas",
@@ -2555,6 +2833,9 @@ __all__ = [
     "idea_yield",
     "mature_direction",
     "mine_gaps",
+    "ingest_style_corpus",
+    "assess_benchmark_fit",
+    "map_selected_benchmark_to_vetted",
     "mutate_idea",
     "novelty_check",
     "parse_results",
@@ -2567,27 +2848,35 @@ __all__ = [
     "register_benchmark",
     "register_dataset",
     "register_metric",
+    "register_vetted_benchmark",
     "render_manuscript",
     "reproducibility_check",
     "reproduce_package",
     "review_campaign",
     "rebuttal_plan",
     "run_error_analysis",
+    "run_benchmark_adapter",
+    "run_drastic_review",
     "run_idea_novelty",
     "run_idea_tournament",
     "run_traceability_check",
     "run_real_literature_campaign",
     "run_campaign",
     "run_experiment",
+    "run_vetted_experiment",
     "search_papers",
     "scaffold_experiment_code",
     "set_venue",
+    "select_venue_profile",
     "submit_job",
     "submission_checklist",
     "submission_package",
     "source_health",
+    "train_reviewer",
     "transfer_ideas",
+    "rewrite_manuscript_for_venue",
     "v2_release_gate",
+    "v25_release_gate",
     "v4_release_gate",
     "v5_release_gate",
     "v6_release_gate",

@@ -21,6 +21,7 @@ from gapforge.evals.fixtures import (
     V22_FIXTURE_NAMES,
     V23_FIXTURE_NAMES,
     V24_FIXTURE_NAMES,
+    V25_FIXTURE_NAMES,
     list_fixtures,
     load_fixture,
     load_v2_idea_fixture,
@@ -35,9 +36,11 @@ from gapforge.evals.fixtures import (
     load_v22_fixture,
     load_v23_fixture,
     load_v24_fixture,
+    load_v25_fixture,
 )
 from gapforge.evals.metrics import (
     actual_run_gate_correctness,
+    adapter_transparency_score,
     agent_output_validation_strictness,
     anonymization_safety,
     artifact_eval_package_score,
@@ -48,10 +51,12 @@ from gapforge.evals.metrics import (
     benchmark_failure_path_preservation,
     benchmark_spec_completeness,
     canonicalization_quality,
+    citation_plagiarism_safety,
     citation_validity_score,
     collusive_distribution_quality,
     direction_maturity_accuracy,
     direction_maturity_gate_accuracy_from_fixture,
+    drastic_review_quality,
     empirical_claim_validity,
     empirical_review_quality,
     error_analysis_quality,
@@ -87,8 +92,12 @@ from gapforge.evals.metrics import (
     result_aggregation_quality,
     result_claim_honesty_score,
     retrieval_relevance_at_k,
+    review_dataset_integrity,
+    review_taxonomy_quality,
     reviewer_blocker_quality,
+    reviewer_calibration_score,
     reviewer_panel_quality,
+    revision_plan_actionability,
     rollback_safety,
     search_strategy_completeness,
     selected_benchmark_release_gate_correctness,
@@ -109,7 +118,10 @@ from gapforge.evals.metrics import (
     v22_release_gate_correctness,
     v23_release_gate_correctness,
     v24_release_gate_correctness,
+    v25_release_gate_correctness,
     venue_checklist_score,
+    venue_style_safety_score,
+    vetted_benchmark_fit_quality,
 )
 from gapforge.models import Claim, ResearchRunState, ResearchTopic, SourceCoverageReport
 
@@ -985,6 +997,97 @@ def test_v24_selected_benchmark_fixture_metrics() -> None:
     assert duplicate["v24_release_gate"]["expected_decision_status"] == "no_go"
     assert deployment["v24_release_gate"]["expected_pass"] is False
     assert revised["manuscript_revision"]["related_work_section_generated"] is True
+
+
+def test_v25_eval_fixtures_are_complete_and_offline() -> None:
+    for name in V25_FIXTURE_NAMES:
+        fixture = load_v25_fixture(name)
+        assert fixture.is_v25
+        assert fixture.topic
+        assert fixture.papers
+        payload = fixture.selected_benchmark_v25_fixture
+        assert payload["vetted_benchmark"]
+        assert payload["vetted_mapping"]
+        assert payload["eligibility"]
+        assert payload["adapter"]
+        assert payload["venue_style"]
+        assert payload["safety"]
+        assert payload["review_dataset"]
+        assert payload["taxonomy"]
+        assert payload["reviewer_calibration"]
+        assert payload["drastic_review"]
+        assert payload["revision_plan"]
+        assert payload["v25_release_gate"]
+
+
+def test_eval_cli_v25_fixture_and_report(tmp_path: Path) -> None:
+    env = {**os.environ, "GAPFORGE_DISABLE_NETWORK": "1"}
+    env["PYTHONPATH"] = str(Path.cwd() / "src")
+    env["GAPFORGE_ROOT"] = str(tmp_path)
+
+    single = subprocess.run(
+        [sys.executable, "-m", "gapforge.cli", "eval", "--fixture", "drastic_review_blocks_paper", "--v25"],
+        cwd=Path.cwd(),
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    report = subprocess.run(
+        [sys.executable, "-m", "gapforge.cli", "eval", "--v25", "--write-report"],
+        cwd=Path.cwd(),
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert single.returncode == 0, single.stderr
+    assert report.returncode == 0, report.stderr
+    text = (tmp_path / "eval_report.md").read_text(encoding="utf-8")
+    assert "Overall score" in report.stdout
+    assert "v2.5 Real Benchmark Grounding" in text
+    assert "drastic_review_blocks_paper" in text
+
+
+def test_v25_fixture_metrics_cover_blockers_and_drastic_review() -> None:
+    primary = load_v25_fixture("vetted_benchmark_primary_fit").selected_benchmark_v25_fixture
+    auxiliary = load_v25_fixture("vetted_benchmark_auxiliary_fit").selected_benchmark_v25_fixture
+    no_fit = load_v25_fixture("vetted_benchmark_no_fit").selected_benchmark_v25_fixture
+    copied = load_v25_fixture("copied_prose_blocked").selected_benchmark_v25_fixture
+    dataset = load_v25_fixture("openreview_dataset_fixture").selected_benchmark_v25_fixture
+    taxonomy = load_v25_fixture("review_taxonomy_labels").selected_benchmark_v25_fixture
+    blocked = load_v25_fixture("drastic_review_blocks_paper").selected_benchmark_v25_fixture
+    improved = load_v25_fixture("drastic_revision_improves_paper").selected_benchmark_v25_fixture
+
+    assert vetted_benchmark_fit_quality(primary) == 1.0
+    assert vetted_benchmark_fit_quality(auxiliary) == 1.0
+    assert vetted_benchmark_fit_quality(no_fit) == 1.0
+    assert adapter_transparency_score(auxiliary) == 1.0
+    assert venue_style_safety_score(load_v25_fixture("venue_style_safe_rewrite").selected_benchmark_v25_fixture) == 1.0
+    assert citation_plagiarism_safety(copied) == 1.0
+    assert review_dataset_integrity(dataset) == 1.0
+    assert review_taxonomy_quality(taxonomy) == 1.0
+    assert reviewer_calibration_score(primary) >= 0.85
+    assert drastic_review_quality(blocked) == 1.0
+    assert revision_plan_actionability(improved) == 1.0
+    assert v25_release_gate_correctness(primary) == 1.0
+    assert v25_release_gate_correctness(no_fit) == 1.0
+    assert v25_release_gate_correctness(copied) == 1.0
+    assert v25_release_gate_correctness(blocked) == 1.0
+    assert copied["v25_release_gate"]["expected_pass"] is False
+    assert blocked["v25_release_gate"]["expected_outcome"] == "revise_for_reviews"
+
+
+def test_v25_run_evals_supports_single_fixture_flag() -> None:
+    report = run_evals(fixture="drastic_review_blocks_paper", v25=True, write_report=False)
+    result = report.results[0]
+
+    assert report.v25
+    assert result.fixture_name == "drastic_review_blocks_paper"
+    assert result.scores.drastic_review_quality == 1.0
+    assert result.scores.v25_release_gate_correctness == 1.0
+    assert result.scores.v25_overall() is not None
 
 
 def test_v2_duplicate_ideas_are_rejected_by_dossier_aware_novelty_gate() -> None:

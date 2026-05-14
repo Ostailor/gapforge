@@ -160,6 +160,16 @@ class EvalScores:
     publication_review_correctness: float | None = None
     manuscript_revision_honesty: float | None = None
     v24_release_gate_correctness: float | None = None
+    vetted_benchmark_fit_quality: float | None = None
+    adapter_transparency_score: float | None = None
+    venue_style_safety_score: float | None = None
+    citation_plagiarism_safety: float | None = None
+    review_dataset_integrity: float | None = None
+    review_taxonomy_quality: float | None = None
+    reviewer_calibration_score: float | None = None
+    drastic_review_quality: float | None = None
+    revision_plan_actionability: float | None = None
+    v25_release_gate_correctness: float | None = None
 
     def overall(self) -> float:
         positive = [
@@ -385,6 +395,24 @@ class EvalScores:
             self.publication_review_correctness,
             self.manuscript_revision_honesty,
             self.v24_release_gate_correctness,
+        ]
+        present = [value for value in values if value is not None]
+        if not present:
+            return None
+        return round(sum(present) / len(present), 3)
+
+    def v25_overall(self) -> float | None:
+        values = [
+            self.vetted_benchmark_fit_quality,
+            self.adapter_transparency_score,
+            self.venue_style_safety_score,
+            self.citation_plagiarism_safety,
+            self.review_dataset_integrity,
+            self.review_taxonomy_quality,
+            self.reviewer_calibration_score,
+            self.drastic_review_quality,
+            self.revision_plan_actionability,
+            self.v25_release_gate_correctness,
         ]
         present = [value for value in values if value is not None]
         if not present:
@@ -2581,6 +2609,230 @@ def v24_release_gate_correctness(fixture: dict[str, object]) -> float:
     return round((0.55 * int(computed_pass is False)) + (0.25 * int(decision_ok)) + (0.2 * int(bool(expected_blockers))), 3)
 
 
+def vetted_benchmark_fit_quality(fixture: dict[str, object]) -> float:
+    benchmark = _dict(fixture.get("vetted_benchmark"))
+    mapping = _dict(fixture.get("vetted_mapping"))
+    eligibility = _dict(fixture.get("eligibility"))
+    recommended = str(eligibility.get("recommended_use", mapping.get("recommended_experiment_role", "")))
+    mapping_type = str(mapping.get("mapping_type", ""))
+    no_fit = bool(mapping.get("no_fit_justification")) or mapping_type == "rejected" or recommended == "not_recommended"
+    checks = [
+        bool(benchmark.get("registry_record_exists")),
+        bool(benchmark.get("license_visible")),
+        bool(benchmark.get("terms_visible")),
+        benchmark.get("download_required_explicit") is not None,
+        benchmark.get("authentication_required_explicit") is not None,
+        bool(eligibility.get("fit_assessed")),
+        bool(mapping.get("unsupported_claims")),
+        not bool(mapping.get("fit_assumed")),
+    ]
+    if no_fit:
+        checks.extend(
+            [
+                bool(mapping.get("no_fit_justification")),
+                recommended == "not_recommended",
+                bool(mapping.get("synthetic_protocol_preserved")),
+                not bool(mapping.get("pretends_validates_collusion")),
+            ]
+        )
+    else:
+        fit_score = _float(eligibility.get("fit_score"))
+        checks.extend(
+            [
+                mapping_type in {"direct", "substrate", "auxiliary", "sanity_check", "analogy"},
+                recommended in {"primary", "auxiliary", "sanity_check"},
+                fit_score >= (0.75 if recommended == "primary" else 0.45),
+                bool(mapping.get("supported_claims")),
+                bool(mapping.get("required_adaptation")),
+            ]
+        )
+    return round(sum(1 for item in checks if item) / len(checks), 3)
+
+
+def adapter_transparency_score(fixture: dict[str, object]) -> float:
+    adapter = _dict(fixture.get("adapter"))
+    mapping = _dict(fixture.get("vetted_mapping"))
+    if bool(adapter.get("not_required_due_to_no_fit")):
+        checks = [
+            bool(mapping.get("no_fit_justification")),
+            bool(adapter.get("no_adapter_report_exists")),
+            bool(adapter.get("synthetic_protocol_preserved")),
+        ]
+        return round(sum(1 for item in checks if item) / len(checks), 3)
+    conversion_warning_expected = bool(adapter.get("conversion_destroys_meaning"))
+    checks = [
+        bool(adapter.get("created")),
+        str(adapter.get("adapter_type"))
+        in {"direct", "trace_conversion", "label_mapping", "metric_mapping", "monitor_wrapper", "auxiliary"},
+        bool(adapter.get("input_schema")),
+        bool(adapter.get("output_schema")),
+        bool(adapter.get("transformation_recorded")),
+        bool(adapter.get("preserves_original_labels")),
+        bool(adapter.get("preserves_original_splits")),
+        bool(adapter.get("limitations_visible")),
+        not bool(adapter.get("calls_adapted_data_real_collusion_traces")),
+    ]
+    if conversion_warning_expected:
+        checks.append(bool(adapter.get("meaning_loss_warning")))
+    return round(sum(1 for item in checks if item) / len(checks), 3)
+
+
+def venue_style_safety_score(fixture: dict[str, object]) -> float:
+    style = _dict(fixture.get("venue_style"))
+    checks = [
+        bool(style.get("venue_profile_selected")),
+        bool(style.get("style_corpus_allowed_or_synthetic")),
+        bool(style.get("style_analysis_generated")),
+        bool(style.get("rewrite_generated")),
+        bool(style.get("structure_not_prose")),
+        not bool(style.get("unsupported_claim_added")),
+        bool(style.get("limitations_preserved")),
+        bool(style.get("blocker_gates_binding")),
+        not bool(style.get("copied_source_prose")),
+    ]
+    if bool(style.get("corpus_too_small")):
+        checks.append(bool(style.get("too_small_warning")))
+    return round(sum(1 for item in checks if item) / len(checks), 3)
+
+
+def citation_plagiarism_safety(fixture: dict[str, object]) -> float:
+    safety = _dict(fixture.get("safety"))
+    copied = bool(safety.get("copied_prose_detected"))
+    fake_citation = bool(safety.get("fake_citation_present"))
+    fake_result = bool(safety.get("fake_result_present"))
+    checks = [
+        bool(safety.get("citation_checker_ran")),
+        bool(safety.get("plagiarism_checker_ran")),
+        bool(safety.get("result_claim_checker_ran")),
+        not bool(safety.get("restricted_source_ingested")),
+    ]
+    if copied:
+        checks.extend([bool(safety.get("copied_prose_blocked")), bool(safety.get("release_gate_blocked"))])
+    else:
+        checks.append(not bool(safety.get("copied_prose_blocked_required", False)))
+    if fake_citation:
+        checks.extend([bool(safety.get("fake_citation_blocked")), bool(safety.get("release_gate_blocked"))])
+    else:
+        checks.append(not bool(safety.get("fake_citation_accepted")))
+    if fake_result:
+        checks.extend([bool(safety.get("fake_result_blocked")), bool(safety.get("release_gate_blocked"))])
+    else:
+        checks.append(not bool(safety.get("fake_result_accepted")))
+    return round(sum(1 for item in checks if item) / len(checks), 3)
+
+
+def review_dataset_integrity(fixture: dict[str, object]) -> float:
+    dataset = _dict(fixture.get("review_dataset"))
+    checks = [
+        bool(dataset.get("created")),
+        _int(dataset.get("paper_count")) >= 1,
+        _int(dataset.get("review_count")) >= 1,
+        bool(dataset.get("scores_parsed")),
+        bool(dataset.get("weaknesses_extracted")),
+        bool(dataset.get("reviewer_ids_hashed")),
+        not bool(dataset.get("private_data_stored")),
+        bool(dataset.get("license_warnings_preserved")),
+        bool(dataset.get("synthetic_fixture_only")),
+    ]
+    return round(sum(1 for item in checks if item) / len(checks), 3)
+
+
+def review_taxonomy_quality(fixture: dict[str, object]) -> float:
+    taxonomy = _dict(fixture.get("taxonomy"))
+    issue_types = {str(item) for item in _list(taxonomy.get("issue_types"))}
+    expected = {str(item) for item in _list(taxonomy.get("expected_issue_types"))}
+    coverage = len(issue_types & expected) / len(expected) if expected else 1.0
+    checks = [
+        bool(taxonomy.get("labels_generated")),
+        coverage >= 0.75,
+        bool(taxonomy.get("severity_mapped")),
+        bool(taxonomy.get("gate_mapping")),
+        bool(taxonomy.get("auditable")),
+        not bool(taxonomy.get("claims_ground_truth_without_human_verification")),
+    ]
+    return round(sum(1 for item in checks if item) / len(checks), 3)
+
+
+def reviewer_calibration_score(fixture: dict[str, object]) -> float:
+    calibration = _dict(fixture.get("reviewer_calibration"))
+    checks = [
+        bool(calibration.get("trained_or_calibrated")),
+        bool(calibration.get("evaluation_report")),
+        _float(calibration.get("issue_recall_proxy")) >= 0.6,
+        _float(calibration.get("severity_calibration_score")) >= 0.6,
+        _float(calibration.get("review_specificity_score")) >= 0.6,
+        _float(calibration.get("evidence_linkage_score")) >= 0.7,
+        _float(calibration.get("hallucination_rate")) <= 0.05,
+        not bool(calibration.get("claims_human_equivalence")),
+    ]
+    if bool(calibration.get("small_training_data")):
+        checks.append(bool(calibration.get("limitations_reported")))
+    return round(sum(1 for item in checks if item) / len(checks), 3)
+
+
+def drastic_review_quality(fixture: dict[str, object]) -> float:
+    review = _dict(fixture.get("drastic_review"))
+    roles = {str(item) for item in _list(review.get("roles"))}
+    required_roles = {"novelty skeptic", "empirical rigor", "benchmark validity", "clarity", "reproducibility", "area chair"}
+    fatal_expected = bool(review.get("fatal_expected"))
+    checks = [
+        bool(review.get("generated")),
+        required_roles <= roles,
+        bool(review.get("harsher_than_baseline")),
+        bool(review.get("evidence_linked")),
+        not bool(review.get("fake_citations")),
+        not bool(review.get("invented_missing_results")),
+        bool(review.get("likely_scores")),
+        bool(review.get("borderline_decision_analysis")),
+    ]
+    if fatal_expected:
+        checks.extend([bool(_list(review.get("fatal_flaws"))), str(review.get("likely_decision")) in {"reject", "revise"}])
+    return round(sum(1 for item in checks if item) / len(checks), 3)
+
+
+def revision_plan_actionability(fixture: dict[str, object]) -> float:
+    revision = _dict(fixture.get("revision_plan"))
+    checks = [
+        bool(revision.get("generated")),
+        bool(_list(revision.get("fatal_fixes"))) or not bool(revision.get("fatal_expected")),
+        bool(_list(revision.get("major_fixes"))) or not bool(revision.get("major_expected")),
+        bool(revision.get("new_experiment_requests_created")) or not bool(revision.get("new_experiments_required")),
+        bool(revision.get("related_work_requests_created")) or not bool(revision.get("new_related_work_required")),
+        bool(revision.get("claim_softening_generated")) or not bool(revision.get("claim_softening_required")),
+        bool(revision.get("artifact_updates_created")) or not bool(revision.get("artifact_updates_required")),
+        not bool(revision.get("fake_rebuttal_answers")),
+        bool(revision.get("publication_status_downgraded_if_blocked")) or not bool(revision.get("fatal_blockers_remaining")),
+    ]
+    return round(sum(1 for item in checks if item) / len(checks), 3)
+
+
+def v25_release_gate_correctness(fixture: dict[str, object]) -> float:
+    expected = _dict(fixture.get("v25_release_gate"))
+    expected_status = str(expected.get("expected_outcome", ""))
+    expected_pass = bool(expected.get("expected_pass"))
+    computed_status = _v25_decision_status(fixture)
+    computed_pass = computed_status in {"conference_candidate", "workshop_candidate", "benchmark_no_fit"}
+    decision_ok = computed_status == expected_status
+    safety = _dict(fixture.get("safety"))
+    copied_or_fake = any(bool(safety.get(key)) for key in ["copied_prose_detected", "fake_citation_present", "fake_result_present"])
+    blockers = _list(expected.get("expected_blockers"))
+    checks = [
+        bool(expected),
+        decision_ok,
+        computed_pass == expected_pass,
+        not bool(_dict(fixture.get("venue_style")).get("copied_source_prose")),
+        citation_plagiarism_safety(fixture) >= 0.9,
+        bool(blockers) if not expected_pass else not blockers,
+    ]
+    if copied_or_fake:
+        checks.append(bool(safety.get("release_gate_blocked")) and computed_status == "no_go")
+    if computed_status == "revise_for_reviews":
+        checks.append(bool(_list(_dict(fixture.get("drastic_review")).get("fatal_flaws"))))
+    if computed_status == "benchmark_no_fit":
+        checks.append(bool(_dict(fixture.get("vetted_mapping")).get("no_fit_justification")))
+    return round(sum(1 for item in checks if item) / len(checks), 3)
+
+
 def _tokens(text: str) -> list[str]:
     return re.findall(r"[a-z0-9-]+", text.lower())
 
@@ -2611,6 +2863,51 @@ def _int(value: object) -> int:
     if isinstance(value, str) and value.isdigit():
         return int(value)
     return 0
+
+
+def _float(value: object) -> float:
+    if isinstance(value, int | float):
+        return float(value)
+    if isinstance(value, str):
+        try:
+            return float(value)
+        except ValueError:
+            return 0.0
+    return 0.0
+
+
+def _v25_decision_status(fixture: dict[str, object]) -> str:
+    safety = _dict(fixture.get("safety"))
+    if bool(safety.get("copied_prose_detected")) or bool(safety.get("fake_citation_present")) or bool(safety.get("fake_result_present")):
+        return "no_go"
+    mapping = _dict(fixture.get("vetted_mapping"))
+    adapter = _dict(fixture.get("adapter"))
+    if bool(mapping.get("no_fit_justification")) and bool(adapter.get("not_required_due_to_no_fit")):
+        return "benchmark_no_fit"
+    review = _dict(fixture.get("drastic_review"))
+    revision = _dict(fixture.get("revision_plan"))
+    if _list(review.get("fatal_flaws")) and bool(revision.get("fatal_blockers_remaining")):
+        return "revise_for_reviews"
+    gate = _dict(fixture.get("v25_release_gate"))
+    requested = str(gate.get("computed_outcome_hint", ""))
+    if requested in {"conference_candidate", "workshop_candidate", "revise_for_reviews", "benchmark_no_fit", "no_go"}:
+        return requested
+    if str(review.get("likely_decision")) == "workshop":
+        return "workshop_candidate"
+    if all(
+        [
+            vetted_benchmark_fit_quality(fixture) >= 0.85,
+            adapter_transparency_score(fixture) >= 0.85,
+            venue_style_safety_score(fixture) >= 0.9,
+            review_dataset_integrity(fixture) >= 0.85,
+            review_taxonomy_quality(fixture) >= 0.85,
+            reviewer_calibration_score(fixture) >= 0.85,
+            drastic_review_quality(fixture) >= 0.85,
+            revision_plan_actionability(fixture) >= 0.85,
+        ]
+    ):
+        return "conference_candidate"
+    return "revise_for_reviews"
 
 
 def _computed_actual_run_gate(campaigns: list[dict[str, object]]) -> bool:

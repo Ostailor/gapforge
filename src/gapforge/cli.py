@@ -154,6 +154,7 @@ from gapforge.llm.transcripts import LLMTranscriptLogger
 from gapforge.manuscript import ManuscriptManager
 from gapforge.manuscript.anonymization import ManuscriptAnonymizer
 from gapforge.manuscript.bibliography import ManuscriptBibliographyManager
+from gapforge.manuscript.drastic_rebuttal import DrasticRevisionManager, render_drastic_revision_plan
 from gapforge.manuscript.figures import ManuscriptFigureGenerator
 from gapforge.manuscript.rebuttal import ManuscriptRebuttalManager
 from gapforge.manuscript.reviewer_panel import ManuscriptReviewPanelBuilder, render_manuscript_review_panel_markdown
@@ -162,6 +163,7 @@ from gapforge.manuscript.submission import SubmissionPackageExporter
 from gapforge.manuscript.submission_checklist import SubmissionChecklistManager
 from gapforge.manuscript.tables import ManuscriptTableGenerator
 from gapforge.manuscript.traceability import ManuscriptTraceabilityAuditor
+from gapforge.manuscript.venue_rewriter import VenueManuscriptRewriter, rewrite_result_json
 from gapforge.manuscript.venues import ManuscriptVenueManager, venue_templates_json
 from gapforge.metrics import MetricRegistry, render_metric_registry_markdown, render_statistical_plan_markdown
 from gapforge.metrics.low_fpr_power import (
@@ -241,6 +243,7 @@ from gapforge.release_gate import (
     V22ReleaseGateEnforcer,
     V23ReleaseGateEnforcer,
     V24ReleaseGateEnforcer,
+    V25ReleaseGateEnforcer,
     render_v04_release_gate_markdown,
     render_v09_release_gate_markdown,
     render_v1_readiness_markdown,
@@ -249,6 +252,7 @@ from gapforge.release_gate import (
     render_v22_release_gate_markdown,
     render_v23_release_gate_markdown,
     render_v24_release_gate_markdown,
+    render_v25_release_gate_markdown,
 )
 from gapforge.release_gate.v05 import render_v05_release_gate_markdown
 from gapforge.release_gate.v06 import render_v06_release_gate_markdown
@@ -285,9 +289,20 @@ from gapforge.retrieval.index_store import RetrievalIndexStore
 from gapforge.review.audit import render_human_reviews_markdown
 from gapforge.review.edits import HumanReviewEditor
 from gapforge.review.queue import ReviewQueueManager, render_review_queue_markdown
+from gapforge.review_training import (
+    ReviewDatasetBuilder,
+    ReviewerEvaluationManager,
+    ReviewerTrainingManager,
+    ReviewTaxonomyLabeler,
+    render_review_labels,
+    reviewer_evaluation_json,
+    reviewer_training_json,
+)
 from gapforge.reviewers import (
+    DrasticReviewPanelBuilder,
     EmpiricalReviewBuilder,
     ReviewPanelBuilder,
+    render_drastic_review_panel,
     render_empirical_review_markdown,
     render_meta_review_markdown,
     render_rebuttal_plans_markdown,
@@ -334,9 +349,11 @@ from gapforge.selected_benchmark import (
     SelectedBenchmarkRelatedWorkManuscriptManager,
     SelectedBenchmarkRelatedWorkMatrixV2Manager,
     SelectedBenchmarkReviewerPanelBuilder,
+    SelectedBenchmarkVettedMappingManager,
     SelectedBenchmarkWorkspaceManager,
     SelectedMainManuscriptManager,
     SelectedPilotManuscriptManager,
+    SelectedVettedBenchmarkExperimentManager,
     SequentialMetricManager,
     SyntheticTraceGenerator,
     render_collusive_distribution_report,
@@ -373,6 +390,9 @@ from gapforge.sources.live_diagnostics import (
 from gapforge.sources.policies import default_source_policy_profiles, get_source_policy_profile
 from gapforge.sources.stopping import refresh_stopping_assessment, render_stopping_assessment_markdown
 from gapforge.state import ResearchStateManager
+from gapforge.style_corpus import StyleCorpusManager, VenueStyleAnalyzer
+from gapforge.venues import VenueProfileManager, get_venue_profile, list_venue_profiles, render_venue_profile, render_venue_profile_list
+from gapforge.vetted_benchmarks import BenchmarkAdapterRegistry, VettedBenchmarkRegistry, render_eligibility_assessment
 
 
 def _add_agent_skill_options(command_parser: argparse.ArgumentParser) -> None:
@@ -717,6 +737,7 @@ def build_parser() -> argparse.ArgumentParser:
     eval_parser.add_argument("--v22", action="store_true", help="Run v2.2 pilot benchmark evaluation fixtures.")
     eval_parser.add_argument("--v23", action="store_true", help="Run v2.3 main benchmark decision evaluation fixtures.")
     eval_parser.add_argument("--v24", action="store_true", help="Run v2.4 related-work remediation evaluation fixtures.")
+    eval_parser.add_argument("--v25", action="store_true", help="Run v2.5 real benchmark grounding evaluation fixtures.")
     eval_parser.add_argument("--v2-ideas", action="store_true", help="Run v2 Idea Discovery Engine evaluation fixtures.")
     eval_parser.add_argument("--write-report", action="store_true")
 
@@ -764,6 +785,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--include-selected-v24",
         action="store_true",
         help="Include v2.4 selected benchmark related-work remediation dashboard pages.",
+    )
+    dashboard_parser.add_argument(
+        "--include-selected-v25",
+        action="store_true",
+        help="Include v2.5 real benchmark grounding, venue style, and reviewer calibration dashboard pages.",
     )
 
     selected_idea_full_report_parser = subparsers.add_parser(
@@ -1410,6 +1436,12 @@ def build_parser() -> argparse.ArgumentParser:
     v24_release_gate_parser.add_argument("--write-report", action="store_true")
     v24_release_gate_parser.add_argument("--json", action="store_true")
 
+    v25_release_gate_parser = subparsers.add_parser(
+        "v25-release-gate", help="Enforce the v2.5 real benchmark and reviewer calibration gate."
+    )
+    v25_release_gate_parser.add_argument("--write-report", action="store_true")
+    v25_release_gate_parser.add_argument("--json", action="store_true")
+
     cli_audit_parser = subparsers.add_parser("cli-audit", help="Audit command grouping, help text, and v1 CLI discoverability.")
     cli_audit_parser.add_argument("--write-report", action="store_true")
 
@@ -1679,6 +1711,46 @@ def build_parser() -> argparse.ArgumentParser:
         "selected-benchmark-report", help="Print the selected benchmark specification report."
     )
     selected_benchmark_report_parser.add_argument("--benchmark-id", required=True)
+
+    selected_vetted_benchmark_map_parser = subparsers.add_parser(
+        "selected-vetted-benchmark-map", help="Map selected benchmark protocol to registered vetted benchmarks."
+    )
+    selected_vetted_benchmark_map_parser.add_argument("--benchmark-id", required=True)
+    selected_vetted_benchmark_map_parser.add_argument("--vetted-benchmark-id", default="")
+
+    selected_vetted_benchmark_report_parser = subparsers.add_parser(
+        "selected-vetted-benchmark-report", help="Render selected benchmark vetted-benchmark mapping report."
+    )
+    selected_vetted_benchmark_report_parser.add_argument("--benchmark-id", required=True)
+
+    benchmark_adapter_create_parser = subparsers.add_parser(
+        "benchmark-adapter-create", help="Create an adapter from a vetted benchmark to a selected benchmark."
+    )
+    benchmark_adapter_create_parser.add_argument("--selected-benchmark-id", required=True)
+    benchmark_adapter_create_parser.add_argument("--vetted-benchmark-id", required=True)
+
+    benchmark_adapter_run_parser = subparsers.add_parser(
+        "benchmark-adapter-run", help="Run a vetted benchmark adapter on its registered dataset."
+    )
+    benchmark_adapter_run_parser.add_argument("--adapter-id", required=True)
+
+    benchmark_adapter_report_parser = subparsers.add_parser("benchmark-adapter-report", help="Render a vetted benchmark adapter report.")
+    benchmark_adapter_report_parser.add_argument("--adapter-id", required=True)
+
+    selected_vetted_experiment_plan_parser = subparsers.add_parser(
+        "selected-vetted-experiment-plan", help="Plan selected-benchmark experiments on vetted benchmark adapters."
+    )
+    selected_vetted_experiment_plan_parser.add_argument("--benchmark-id", required=True)
+
+    selected_vetted_experiment_run_parser = subparsers.add_parser(
+        "selected-vetted-experiment-run", help="Run a selected-benchmark vetted-adapter experiment plan."
+    )
+    selected_vetted_experiment_run_parser.add_argument("--plan-id", required=True)
+
+    selected_vetted_experiment_report_parser = subparsers.add_parser(
+        "selected-vetted-experiment-report", help="Render a selected-benchmark vetted-adapter experiment report."
+    )
+    selected_vetted_experiment_report_parser.add_argument("--plan-id", required=True)
 
     generate_traces_parser = subparsers.add_parser("generate-traces", help="Generate synthetic selected-benchmark traces.")
     generate_traces_parser.add_argument("--benchmark-id", required=True)
@@ -2444,6 +2516,47 @@ def build_parser() -> argparse.ArgumentParser:
     )
     benchmark_comparison_report_parser.add_argument("--workspace-id", required=True)
 
+    vetted_benchmark_register_parser = subparsers.add_parser(
+        "vetted-benchmark-register", help="Register an existing vetted benchmark as a real-grounding option."
+    )
+    vetted_benchmark_register_parser.add_argument("--name", required=True)
+    vetted_benchmark_register_parser.add_argument("--domain", default="")
+    vetted_benchmark_register_parser.add_argument("--source", default="")
+    vetted_benchmark_register_parser.add_argument("--source-url", default="")
+    vetted_benchmark_register_parser.add_argument("--benchmark-type", default="unknown")
+    vetted_benchmark_register_parser.add_argument("--task-type", action="append", dest="task_types", default=[])
+    vetted_benchmark_register_parser.add_argument("--dataset-id", action="append", dest="dataset_ids", default=[])
+    vetted_benchmark_register_parser.add_argument("--metric-id", action="append", dest="metric_ids", default=[])
+    vetted_benchmark_register_parser.add_argument("--baseline-id", action="append", dest="baseline_ids", default=[])
+    vetted_benchmark_register_parser.add_argument("--paper-id", action="append", dest="paper_ids", default=[])
+    vetted_benchmark_register_parser.add_argument("--leaderboard-url", default="")
+    vetted_benchmark_register_parser.add_argument("--license", default="")
+    vetted_benchmark_register_parser.add_argument("--terms-of-use", default="")
+    vetted_benchmark_register_parser.add_argument("--download-required", action="store_true")
+    vetted_benchmark_register_parser.add_argument("--authentication-required", action="store_true")
+    vetted_benchmark_register_parser.add_argument("--size-estimate", default="")
+    vetted_benchmark_register_parser.add_argument("--citation", default="")
+    vetted_benchmark_register_parser.add_argument(
+        "--vetted-status", choices=["canonical", "widely_used", "emerging", "uncertain"], default="uncertain"
+    )
+    vetted_benchmark_register_parser.add_argument("--limitation", action="append", dest="limitations", default=[])
+
+    subparsers.add_parser("vetted-benchmark-list", help="List registered vetted benchmarks.")
+
+    vetted_benchmark_card_parser = subparsers.add_parser("vetted-benchmark-card", help="Render a vetted benchmark card.")
+    vetted_benchmark_card_parser.add_argument("--benchmark-id", required=True)
+
+    vetted_benchmark_eligibility_parser = subparsers.add_parser(
+        "vetted-benchmark-eligibility", help="Assess whether a vetted benchmark fits a selected idea."
+    )
+    vetted_benchmark_eligibility_parser.add_argument("--benchmark-id", required=True)
+    vetted_benchmark_eligibility_parser.add_argument("--idea-id", required=True)
+
+    vetted_benchmark_report_parser = subparsers.add_parser(
+        "vetted-benchmark-report", help="Render a project-level vetted benchmark grounding report."
+    )
+    vetted_benchmark_report_parser.add_argument("--project-id", required=True)
+
     stats_plan_parser = subparsers.add_parser("stats-plan", help="Create a statistical test plan.")
     stats_plan_scope = stats_plan_parser.add_mutually_exclusive_group(required=True)
     stats_plan_scope.add_argument("--workspace-id")
@@ -2508,6 +2621,49 @@ def build_parser() -> argparse.ArgumentParser:
     review_panel_parser = subparsers.add_parser("review-panel", help="Build a v0.3 review panel for a project direction.")
     review_panel_parser.add_argument("--project-id", required=True)
     review_panel_parser.add_argument("--direction-id", required=True)
+
+    review_dataset_create_parser = subparsers.add_parser(
+        "review-dataset-create", help="Create an OpenReview-style review calibration dataset shell."
+    )
+    review_dataset_create_parser.add_argument("--name", required=True)
+
+    review_dataset_ingest_parser = subparsers.add_parser(
+        "review-dataset-ingest", help="Record a guarded public review dataset ingestion request."
+    )
+    review_dataset_ingest_parser.add_argument("--source", required=True)
+    review_dataset_ingest_parser.add_argument("--venue", required=True)
+    review_dataset_ingest_parser.add_argument("--year", type=int, required=True)
+
+    subparsers.add_parser("review-dataset-ingest-fixture", help="Ingest the synthetic OpenReview-style review fixture.")
+
+    review_dataset_report_parser = subparsers.add_parser("review-dataset-report", help="Render a review calibration dataset report.")
+    review_dataset_report_parser.add_argument("--dataset-id", required=True)
+
+    review_labels_generate_parser = subparsers.add_parser(
+        "review-labels-generate", help="Generate heuristic taxonomy labels for a review calibration dataset."
+    )
+    review_labels_generate_parser.add_argument("--dataset-id", required=True)
+
+    review_taxonomy_report_parser = subparsers.add_parser(
+        "review-taxonomy-report", help="Render a review issue taxonomy report for a review calibration dataset."
+    )
+    review_taxonomy_report_parser.add_argument("--dataset-id", required=True)
+
+    reviewer_train_parser = subparsers.add_parser("reviewer-train", help="Train or calibrate a reviewer rubric/model.")
+    reviewer_train_parser.add_argument("--dataset-id", required=True)
+    reviewer_train_parser.add_argument(
+        "--mode",
+        choices=["heuristic", "retrieval_calibrated", "codex_task_pack", "local_model"],
+        default="heuristic",
+    )
+
+    reviewer_evaluate_parser = subparsers.add_parser("reviewer-evaluate", help="Evaluate a calibrated reviewer model/rubric.")
+    reviewer_evaluate_parser.add_argument("--dataset-id", required=True)
+
+    reviewer_calibration_report_parser = subparsers.add_parser(
+        "reviewer-calibration-report", help="Render reviewer calibration metrics and limitations."
+    )
+    reviewer_calibration_report_parser.add_argument("--dataset-id", required=True)
 
     rebuttal_plan_parser = subparsers.add_parser(
         "rebuttal-plan",
@@ -2597,9 +2753,52 @@ def build_parser() -> argparse.ArgumentParser:
 
     subparsers.add_parser("venue-list", help="List built-in manuscript venue templates.")
 
+    subparsers.add_parser("venue-profile-list", help="List built-in conference-style venue profiles.")
+
+    venue_profile_parser = subparsers.add_parser("venue-profile", help="Render a built-in venue profile.")
+    venue_profile_parser.add_argument("--venue", required=True)
+
     manuscript_set_venue_parser = subparsers.add_parser("manuscript-set-venue", help="Assign a venue template to a manuscript.")
     manuscript_set_venue_parser.add_argument("--manuscript-id", required=True)
     manuscript_set_venue_parser.add_argument("--venue", required=True)
+
+    manuscript_set_venue_profile_parser = subparsers.add_parser(
+        "manuscript-set-venue-profile", help="Assign a conference-style venue profile to a manuscript."
+    )
+    manuscript_set_venue_profile_parser.add_argument("--manuscript-id", required=True)
+    manuscript_set_venue_profile_parser.add_argument("--venue", required=True)
+
+    style_corpus_add_tex_parser = subparsers.add_parser("style-corpus-add-tex", help="Add a local TeX source to the style corpus.")
+    style_corpus_add_tex_parser.add_argument("--path", required=True)
+    style_corpus_add_tex_parser.add_argument("--venue", required=True)
+
+    style_corpus_ingest_parser = subparsers.add_parser("style-corpus-ingest", help="Ingest or dry-run a style corpus source.")
+    style_corpus_ingest_parser.add_argument("--source", required=True)
+    style_corpus_ingest_parser.add_argument("--dry-run", action="store_true")
+
+    subparsers.add_parser("style-corpus-report", help="Render the style corpus report.")
+
+    venue_style_analyze_parser = subparsers.add_parser("venue-style-analyze", help="Analyze venue style corpus patterns.")
+    venue_style_analyze_parser.add_argument("--venue", required=True)
+
+    venue_style_recommend_parser = subparsers.add_parser(
+        "venue-style-recommend", help="Generate structural venue-style recommendations for a manuscript."
+    )
+    venue_style_recommend_parser.add_argument("--manuscript-id", required=True)
+
+    venue_style_report_parser = subparsers.add_parser("venue-style-report", help="Render a venue style analysis report.")
+    venue_style_report_parser.add_argument("--venue", required=True)
+
+    manuscript_rewrite_for_venue_parser = subparsers.add_parser(
+        "manuscript-rewrite-for-venue", help="Rewrite manuscript section structure for a venue profile without bypassing evidence gates."
+    )
+    manuscript_rewrite_for_venue_parser.add_argument("--manuscript-id", required=True)
+    manuscript_rewrite_for_venue_parser.add_argument("--venue", required=True)
+
+    manuscript_style_report_parser = subparsers.add_parser(
+        "manuscript-style-report", help="Render the latest venue style revision report for a manuscript."
+    )
+    manuscript_style_report_parser.add_argument("--manuscript-id", required=True)
 
     submission_checklist_parser = subparsers.add_parser("submission-checklist", help="Build a venue-aware submission checklist.")
     submission_checklist_parser.add_argument("--manuscript-id", required=True)
@@ -2633,6 +2832,28 @@ def build_parser() -> argparse.ArgumentParser:
 
     manuscript_fix_list_parser = subparsers.add_parser("manuscript-fix-list", help="Print manuscript reviewer required fixes.")
     manuscript_fix_list_parser.add_argument("--manuscript-id", required=True)
+
+    drastic_review_parser = subparsers.add_parser("drastic-review", help="Run a harsh OpenReview-calibrated reviewer panel.")
+    drastic_review_target = drastic_review_parser.add_mutually_exclusive_group(required=True)
+    drastic_review_target.add_argument("--manuscript-id")
+    drastic_review_target.add_argument("--benchmark-id")
+
+    drastic_review_report_parser = subparsers.add_parser("drastic-review-report", help="Print a harsh reviewer panel report.")
+    drastic_review_report_parser.add_argument("--manuscript-id", required=True)
+
+    drastic_revision_plan_parser = subparsers.add_parser(
+        "drastic-revision-plan", help="Convert drastic review output into concrete manuscript revision tasks."
+    )
+    drastic_revision_plan_parser.add_argument("--manuscript-id", required=True)
+
+    apply_drastic_revision_parser = subparsers.add_parser(
+        "apply-drastic-revision", help="Apply or preview drastic review revision requests and status downgrades."
+    )
+    apply_drastic_revision_parser.add_argument("--manuscript-id", required=True)
+    apply_drastic_revision_parser.add_argument("--dry-run", action="store_true")
+
+    drastic_revision_status_parser = subparsers.add_parser("drastic-revision-status", help="Print drastic revision status.")
+    drastic_revision_status_parser.add_argument("--manuscript-id", required=True)
 
     revision_plan_parser = subparsers.add_parser("revision-plan", help="Create a manuscript revision plan from rebuttal items.")
     revision_plan_parser.add_argument("--manuscript-id", required=True)
@@ -3232,6 +3453,7 @@ def _dispatch(
             v22=args.v22,
             v23=args.v23,
             v24=args.v24,
+            v25=args.v25,
             v2_ideas=args.v2_ideas,
         )
         target = report.report_path or (config.root / "eval_report.md")
@@ -3258,6 +3480,7 @@ def _dispatch(
                 include_selected_pilot=args.include_selected_pilot,
                 include_selected_main=args.include_selected_main,
                 include_selected_v24=args.include_selected_v24,
+                include_selected_v25=args.include_selected_v25,
             )
         else:
             result = dashboard.build_run(args.run_id)
@@ -4302,6 +4525,16 @@ def _dispatch(
         else:
             print(render_v24_release_gate_markdown(v24_result), end="")
         return 0 if v24_result.passed else 1
+    if args.command == "v25-release-gate":
+        v25_gate = V25ReleaseGateEnforcer(config)
+        v25_result = v25_gate.evaluate()
+        if args.write_report:
+            v25_gate.write_outputs(v25_result)
+        if args.json:
+            print(json.dumps(v25_result.to_dict(), indent=2))
+        else:
+            print(render_v25_release_gate_markdown(v25_result), end="")
+        return 0 if v25_result.passed else 1
     if args.command == "cli-audit":
         cli_audit = CLICommandAuditor(config).audit(build_parser(), write=args.write_report)
         print(render_cli_command_audit(cli_audit), end="")
@@ -4637,6 +4870,41 @@ def _dispatch(
         return 0
     if args.command == "selected-benchmark-report":
         print(SelectedBenchmarkManager(config).render_report(args.benchmark_id), end="")
+        return 0
+    if args.command == "selected-vetted-benchmark-map":
+        mapping_report = SelectedBenchmarkVettedMappingManager(config).map_benchmarks(
+            args.benchmark_id,
+            vetted_benchmark_id=args.vetted_benchmark_id,
+        )
+        print(json.dumps(to_plain(mapping_report), indent=2))
+        return 0
+    if args.command == "selected-vetted-benchmark-report":
+        print(SelectedBenchmarkVettedMappingManager(config).render_report(args.benchmark_id), end="")
+        return 0
+    if args.command == "benchmark-adapter-create":
+        adapter = BenchmarkAdapterRegistry(config).create_adapter(
+            selected_benchmark_id=args.selected_benchmark_id,
+            vetted_benchmark_id=args.vetted_benchmark_id,
+        )
+        print(json.dumps(to_plain(adapter), indent=2))
+        return 0
+    if args.command == "benchmark-adapter-run":
+        adapter_run = BenchmarkAdapterRegistry(config).run_adapter(args.adapter_id)
+        print(json.dumps(to_plain(adapter_run), indent=2))
+        return 0
+    if args.command == "benchmark-adapter-report":
+        print(BenchmarkAdapterRegistry(config).render_report(args.adapter_id), end="")
+        return 0
+    if args.command == "selected-vetted-experiment-plan":
+        vetted_experiment_plan = SelectedVettedBenchmarkExperimentManager(config).create_plan(args.benchmark_id)
+        print(json.dumps(to_plain(vetted_experiment_plan), indent=2))
+        return 0
+    if args.command == "selected-vetted-experiment-run":
+        vetted_experiment_result = SelectedVettedBenchmarkExperimentManager(config).run_plan(args.plan_id)
+        print(json.dumps(to_plain(vetted_experiment_result), indent=2))
+        return 0
+    if args.command == "selected-vetted-experiment-report":
+        print(SelectedVettedBenchmarkExperimentManager(config).render_report(args.plan_id), end="")
         return 0
     if args.command == "generate-traces":
         dataset = SyntheticTraceGenerator(config).generate(args.benchmark_id, count=args.count, split=args.split)
@@ -5421,6 +5689,46 @@ def _dispatch(
     if args.command == "benchmark-comparison-report":
         print(BenchmarkComparisonBuilder(config).render_workspace_report(args.workspace_id), end="")
         return 0
+    if args.command == "vetted-benchmark-register":
+        vetted_record = VettedBenchmarkRegistry(config).register(
+            name=args.name,
+            domain=args.domain,
+            source=args.source,
+            source_url=args.source_url,
+            benchmark_type=args.benchmark_type,
+            task_types=args.task_types,
+            dataset_ids=args.dataset_ids,
+            metric_ids=args.metric_ids,
+            baseline_ids=args.baseline_ids,
+            paper_ids=args.paper_ids,
+            leaderboard_url=args.leaderboard_url,
+            license=args.license,
+            terms_of_use=args.terms_of_use,
+            download_required=args.download_required,
+            authentication_required=args.authentication_required,
+            size_estimate=args.size_estimate,
+            citation=args.citation,
+            vetted_status=args.vetted_status,
+            limitations=args.limitations,
+        )
+        print(json.dumps(to_plain(vetted_record), indent=2))
+        return 0
+    if args.command == "vetted-benchmark-list":
+        print(VettedBenchmarkRegistry(config).render_list(), end="")
+        return 0
+    if args.command == "vetted-benchmark-card":
+        print(VettedBenchmarkRegistry(config).render_card(args.benchmark_id), end="")
+        return 0
+    if args.command == "vetted-benchmark-eligibility":
+        eligibility_assessment = VettedBenchmarkRegistry(config).assess_eligibility(
+            benchmark_id=args.benchmark_id,
+            selected_idea_id=args.idea_id,
+        )
+        print(render_eligibility_assessment(eligibility_assessment), end="")
+        return 0
+    if args.command == "vetted-benchmark-report":
+        print(VettedBenchmarkRegistry(config).render_project_report(args.project_id), end="")
+        return 0
     if args.command == "stats-plan":
         metric_registry = MetricRegistry(config)
         stats_plan = metric_registry.create_stats_plan(
@@ -5482,6 +5790,42 @@ def _dispatch(
     if args.command == "review-panel":
         panel = ReviewPanelBuilder(config).build_for_project(args.project_id, args.direction_id)
         print(render_review_panel_markdown(panel), end="")
+        return 0
+    if args.command == "review-dataset-create":
+        review_dataset = ReviewDatasetBuilder(config).create(args.name)
+        print(json.dumps(to_plain(review_dataset), indent=2))
+        return 0
+    if args.command == "review-dataset-ingest":
+        if args.source != "openreview":
+            print("review-dataset-ingest currently supports --source openreview only", file=sys.stderr)
+            return 2
+        review_dataset = ReviewDatasetBuilder(config).ingest_openreview(venue=args.venue, year=args.year)
+        print(json.dumps(to_plain(review_dataset), indent=2))
+        return 0
+    if args.command == "review-dataset-ingest-fixture":
+        review_dataset = ReviewDatasetBuilder(config).ingest_fixture()
+        print(json.dumps(to_plain(review_dataset), indent=2))
+        return 0
+    if args.command == "review-dataset-report":
+        print(ReviewDatasetBuilder(config).render_report(args.dataset_id), end="")
+        return 0
+    if args.command == "review-labels-generate":
+        labels = ReviewTaxonomyLabeler(config).generate(args.dataset_id)
+        print(render_review_labels(labels), end="")
+        return 0
+    if args.command == "review-taxonomy-report":
+        print(ReviewTaxonomyLabeler(config).render_report(args.dataset_id), end="")
+        return 0
+    if args.command == "reviewer-train":
+        training_run = ReviewerTrainingManager(config).train(args.dataset_id, mode=args.mode)
+        print(reviewer_training_json(training_run), end="")
+        return 0 if training_run.status in {"complete", "planned", "skipped"} else 1
+    if args.command == "reviewer-evaluate":
+        evaluation = ReviewerEvaluationManager(config).evaluate(args.dataset_id)
+        print(reviewer_evaluation_json(evaluation), end="")
+        return 0
+    if args.command == "reviewer-calibration-report":
+        print(ReviewerEvaluationManager(config).render_report(args.dataset_id), end="")
         return 0
     if args.command == "rebuttal-plan":
         if args.manuscript_id:
@@ -5588,9 +5932,47 @@ def _dispatch(
     if args.command == "venue-list":
         print(venue_templates_json(), end="")
         return 0
+    if args.command == "venue-profile-list":
+        print(render_venue_profile_list(list_venue_profiles()), end="")
+        return 0
+    if args.command == "venue-profile":
+        print(render_venue_profile(get_venue_profile(args.venue)), end="")
+        return 0
     if args.command == "manuscript-set-venue":
         manuscript_state = ManuscriptVenueManager(config).set_venue(args.manuscript_id, args.venue)
         print(json.dumps(to_plain(manuscript_state.manuscript), indent=2))
+        return 0
+    if args.command == "manuscript-set-venue-profile":
+        manuscript_state = VenueProfileManager(config).set_profile(args.manuscript_id, args.venue)
+        print(json.dumps(to_plain(manuscript_state.manuscript), indent=2))
+        return 0
+    if args.command == "style-corpus-add-tex":
+        ingest_record = StyleCorpusManager(config).add_tex(args.path, args.venue)
+        print(json.dumps(to_plain(ingest_record), indent=2))
+        return 0 if ingest_record.status != "rejected" else 1
+    if args.command == "style-corpus-ingest":
+        ingest_record = StyleCorpusManager(config).ingest_source(args.source, dry_run=args.dry_run)
+        print(json.dumps(to_plain(ingest_record), indent=2))
+        return 0 if ingest_record.status != "rejected" else 1
+    if args.command == "style-corpus-report":
+        print(StyleCorpusManager(config).render_report(), end="")
+        return 0
+    if args.command == "venue-style-analyze":
+        style_profile = VenueStyleAnalyzer(config).analyze(args.venue)
+        print(json.dumps(to_plain(style_profile), indent=2))
+        return 0
+    if args.command == "venue-style-recommend":
+        print(VenueStyleAnalyzer(config).render_recommendations(args.manuscript_id), end="")
+        return 0
+    if args.command == "venue-style-report":
+        print(VenueStyleAnalyzer(config).render_report(args.venue), end="")
+        return 0
+    if args.command == "manuscript-rewrite-for-venue":
+        rewrite_result = VenueManuscriptRewriter(config).rewrite(args.manuscript_id, args.venue)
+        print(rewrite_result_json(rewrite_result), end="")
+        return 0
+    if args.command == "manuscript-style-report":
+        print(VenueManuscriptRewriter(config).render_style_report(args.manuscript_id), end="")
         return 0
     if args.command == "submission-checklist":
         checklist_manager = SubmissionChecklistManager(config)
@@ -5641,6 +6023,30 @@ def _dispatch(
         return 0
     if args.command == "manuscript-fix-list":
         print(ManuscriptReviewPanelBuilder(config).fix_list(args.manuscript_id), end="")
+        return 0
+    if args.command == "drastic-review":
+        drastic_builder = DrasticReviewPanelBuilder(config)
+        if args.manuscript_id:
+            drastic_panel = drastic_builder.review_manuscript(args.manuscript_id)
+        else:
+            drastic_panel = drastic_builder.review_benchmark(args.benchmark_id)
+        print(render_drastic_review_panel(drastic_panel), end="")
+        return 0
+    if args.command == "drastic-review-report":
+        print(DrasticReviewPanelBuilder(config).render_manuscript_report(args.manuscript_id), end="")
+        return 0
+    if args.command == "drastic-revision-plan":
+        drastic_revision_manager = DrasticRevisionManager(config)
+        drastic_revision_plan = drastic_revision_manager.build(args.manuscript_id)
+        print(render_drastic_revision_plan(drastic_revision_plan), end="")
+        return 0
+    if args.command == "apply-drastic-revision":
+        drastic_revision_manager = DrasticRevisionManager(config)
+        drastic_revision_plan = drastic_revision_manager.apply(args.manuscript_id, dry_run=args.dry_run)
+        print(render_drastic_revision_plan(drastic_revision_plan), end="")
+        return 0
+    if args.command == "drastic-revision-status":
+        print(DrasticRevisionManager(config).status(args.manuscript_id), end="")
         return 0
     if args.command == "revision-plan":
         revision_manager = ManuscriptRevisionManager(config)

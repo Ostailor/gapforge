@@ -49,7 +49,9 @@ from gapforge.release_gate.v21 import V21ReleaseGateEnforcer, render_v21_release
 from gapforge.release_gate.v22 import V22ReleaseGateEnforcer, render_v22_release_gate_markdown
 from gapforge.release_gate.v23 import V23ReleaseGateEnforcer, render_v23_release_gate_markdown
 from gapforge.release_gate.v24 import V24ReleaseGateEnforcer, render_v24_release_gate_markdown
+from gapforge.release_gate.v25 import V25ReleaseGateEnforcer, render_v25_release_gate_markdown
 from gapforge.state import ResearchStateManager
+from gapforge.venues import list_venue_profiles
 
 PAGES = [
     ("index.html", "Overview"),
@@ -170,6 +172,21 @@ SELECTED_V24_PAGES = [
     ("v24_release_gate.html", "v2.4 Release Gate"),
 ]
 
+SELECTED_V25_PAGES = [
+    ("vetted_benchmarks.html", "Vetted Benchmarks"),
+    ("benchmark_mappings.html", "Benchmark Mappings"),
+    ("benchmark_adapters.html", "Benchmark Adapters"),
+    ("venue_profiles.html", "Venue Profiles"),
+    ("style_corpus.html", "Style Corpus"),
+    ("venue_style_analysis.html", "Venue Style Analysis"),
+    ("openreview_dataset.html", "OpenReview Dataset"),
+    ("review_taxonomy.html", "Review Taxonomy"),
+    ("reviewer_calibration.html", "Reviewer Calibration"),
+    ("drastic_review.html", "Drastic Review"),
+    ("drastic_revision.html", "Drastic Revision"),
+    ("v25_release_gate.html", "v2.5 Release Gate"),
+]
+
 
 @dataclass(slots=True)
 class DashboardResult:
@@ -203,6 +220,7 @@ class StaticDashboardBuilder:
         include_selected_pilot: bool = False,
         include_selected_main: bool = False,
         include_selected_v24: bool = False,
+        include_selected_v25: bool = False,
     ) -> DashboardResult:
         program = self.project_manager.load_project(project_id)
         states = [self.state_manager.load_run(run_id) for run_id in program.run_ids]
@@ -215,6 +233,7 @@ class StaticDashboardBuilder:
             include_selected_pilot=include_selected_pilot,
             include_selected_main=include_selected_main,
             include_selected_v24=include_selected_v24,
+            include_selected_v25=include_selected_v25,
             config=self.config,
         )
         return _write_dashboard(Path(program.project.root_dir) / "dashboard", context)
@@ -264,6 +283,7 @@ class _DashboardContext:
         selected_pilot_enabled: bool = False,
         selected_main_enabled: bool = False,
         selected_v24_enabled: bool = False,
+        selected_v25_enabled: bool = False,
     ) -> None:
         self.title = title
         self.subtitle = subtitle
@@ -292,6 +312,7 @@ class _DashboardContext:
         self.selected_pilot_enabled = selected_pilot_enabled
         self.selected_main_enabled = selected_main_enabled
         self.selected_v24_enabled = selected_v24_enabled
+        self.selected_v25_enabled = selected_v25_enabled
 
     @classmethod
     def from_run(cls, state: ResearchRunState) -> _DashboardContext:
@@ -330,6 +351,7 @@ class _DashboardContext:
         include_selected_pilot: bool = False,
         include_selected_main: bool = False,
         include_selected_v24: bool = False,
+        include_selected_v25: bool = False,
         config: GapForgeConfig | None = None,
     ) -> _DashboardContext:
         coverage_reports = [state.source_coverage for state in states if state.source_coverage is not None]
@@ -372,13 +394,15 @@ class _DashboardContext:
             else _empty_manuscript_context(),
             ideas=_load_idea_context(program.project.id, config) if include_ideas and config is not None else _empty_idea_context(),
             selected_idea=_load_selected_idea_context(program.project.id, config)
-            if (include_selected_idea or include_selected_pilot or include_selected_main or include_selected_v24) and config is not None
+            if (include_selected_idea or include_selected_pilot or include_selected_main or include_selected_v24 or include_selected_v25)
+            and config is not None
             else _empty_selected_idea_context(),
             ideas_enabled=include_ideas,
             selected_idea_enabled=include_selected_idea,
             selected_pilot_enabled=include_selected_pilot,
             selected_main_enabled=include_selected_main,
             selected_v24_enabled=include_selected_v24,
+            selected_v25_enabled=include_selected_v25,
         )
 
     @classmethod
@@ -569,6 +593,23 @@ def _write_dashboard(root: Path, context: _DashboardContext) -> DashboardResult:
                 "v24_release_gate.html": _render_selected_v24_release_gate_page(context),
             }
         )
+    if context.selected_v25_enabled:
+        pages.update(
+            {
+                "vetted_benchmarks.html": _render_v25_vetted_benchmarks_page(context),
+                "benchmark_mappings.html": _render_v25_benchmark_mappings_page(context),
+                "benchmark_adapters.html": _render_v25_benchmark_adapters_page(context),
+                "venue_profiles.html": _render_v25_venue_profiles_page(context),
+                "style_corpus.html": _render_v25_style_corpus_page(context),
+                "venue_style_analysis.html": _render_v25_venue_style_analysis_page(context),
+                "openreview_dataset.html": _render_v25_openreview_dataset_page(context),
+                "review_taxonomy.html": _render_v25_review_taxonomy_page(context),
+                "reviewer_calibration.html": _render_v25_reviewer_calibration_page(context),
+                "drastic_review.html": _render_v25_drastic_review_page(context),
+                "drastic_revision.html": _render_v25_drastic_revision_page(context),
+                "v25_release_gate.html": _render_selected_v25_release_gate_page(context),
+            }
+        )
     written = []
     for filename, body in pages.items():
         path = root / filename
@@ -643,6 +684,8 @@ def _pages_for_context(context: _DashboardContext) -> list[tuple[str, str]]:
         pages.extend(SELECTED_MAIN_PAGES)
     if context.selected_v24_enabled:
         pages.extend(SELECTED_V24_PAGES)
+    if context.selected_v25_enabled:
+        pages.extend(SELECTED_V25_PAGES)
     return pages
 
 
@@ -3828,6 +3871,420 @@ def _render_selected_v24_release_gate_page(context: _DashboardContext) -> str:
     )
 
 
+def _render_v25_vetted_benchmarks_page(context: _DashboardContext) -> str:
+    records = _dict_items(context.selected_idea["vetted_benchmark_records"])
+    cards = _dict_items(context.selected_idea["vetted_benchmark_cards"])
+    eligibility = _dict_items(context.selected_idea["vetted_benchmark_eligibility"])
+    return "\n".join(
+        [
+            _v25_boundary(),
+            "<h2>Vetted Benchmark Registry</h2>",
+            _table(
+                ["ID", "Name", "Domain", "Type", "License", "Terms", "Download", "Auth", "Vetted Status"],
+                [
+                    [
+                        _code(str(item.get("id", ""))),
+                        _e(str(item.get("name", ""))),
+                        _e(str(item.get("domain", ""))),
+                        _e(str(item.get("benchmark_type", ""))),
+                        _e(str(item.get("license", "unknown") or "unknown")),
+                        _e(str(item.get("terms_of_use", "unknown") or "unknown")),
+                        _e(str(item.get("download_required", ""))),
+                        _e(str(item.get("authentication_required", ""))),
+                        _e(str(item.get("vetted_status", ""))),
+                    ]
+                    for item in records
+                ],
+            ),
+            "<h2>Cards</h2>",
+            _table(
+                ["Benchmark", "Why Vetted", "Intended Use", "Metrics", "Limitations"],
+                [
+                    [
+                        _code(str(item.get("benchmark_id", ""))),
+                        _e(str(item.get("why_vetted", ""))),
+                        _e(str(item.get("intended_use", ""))),
+                        _e(", ".join(str(value) for value in _as_list(item.get("standard_metrics")))),
+                        _e("; ".join(str(value) for value in _as_list(item.get("known_limitations")))),
+                    ]
+                    for item in cards
+                ],
+            ),
+            "<h2>Eligibility Assessments</h2>",
+            _table(
+                ["Benchmark", "Idea", "Fit", "Recommended Use", "Can Low-FPR", "Blockers"],
+                [
+                    [
+                        _code(str(item.get("benchmark_id", ""))),
+                        _code(str(item.get("selected_idea_id", ""))),
+                        _e(str(item.get("fit_score", ""))),
+                        _e(str(item.get("recommended_use", ""))),
+                        _e(str(item.get("can_support_low_fpr", ""))),
+                        _e("; ".join(str(value) for value in _as_list(item.get("blockers")))),
+                    ]
+                    for item in eligibility
+                ],
+            ),
+        ]
+    )
+
+
+def _render_v25_benchmark_mappings_page(context: _DashboardContext) -> str:
+    report = _dict(context.selected_idea["vetted_benchmark_mapping_report"])
+    mappings = _dict_items(context.selected_idea["vetted_benchmark_mappings"]) or _dict_items(report.get("mappings"))
+    return "\n".join(
+        [
+            _v25_boundary(),
+            "<h2>Selected Benchmark Mapping Report</h2>",
+            _kv_table(
+                [
+                    ("Report", report.get("id", "missing")),
+                    ("Selected benchmark", report.get("selected_benchmark_id", "missing")),
+                    ("Primary candidates", ", ".join(str(item) for item in _as_list(report.get("primary_candidate_ids")))),
+                    ("Auxiliary candidates", ", ".join(str(item) for item in _as_list(report.get("auxiliary_candidate_ids")))),
+                    ("Rejected candidates", ", ".join(str(item) for item in _as_list(report.get("rejected_candidate_ids")))),
+                    ("Conclusion", report.get("conclusion", "missing")),
+                ]
+            ),
+            "<h2>Mappings</h2>",
+            _table(
+                ["Vetted Benchmark", "Type", "Role", "Maps", "Does Not Map", "Unsupported Claims"],
+                [
+                    [
+                        _code(str(item.get("vetted_benchmark_id", ""))),
+                        _e(str(item.get("mapping_type", ""))),
+                        _e(str(item.get("recommended_experiment_role", ""))),
+                        _e("; ".join(str(value) for value in _as_list(item.get("what_maps")))),
+                        _e("; ".join(str(value) for value in _as_list(item.get("what_does_not_map")))),
+                        _e("; ".join(str(value) for value in _as_list(item.get("unsupported_claims")))),
+                    ]
+                    for item in mappings
+                ],
+            ),
+        ]
+    )
+
+
+def _render_v25_benchmark_adapters_page(context: _DashboardContext) -> str:
+    adapters = _dict_items(context.selected_idea["benchmark_adapters"])
+    runs = _dict_items(context.selected_idea["benchmark_adapter_runs"])
+    plans = _dict_items(context.selected_idea["vetted_experiment_plans"])
+    results = _dict_items(context.selected_idea["vetted_experiment_results"])
+    return "\n".join(
+        [
+            _v25_boundary(),
+            "<h2>Benchmark Adapters</h2>",
+            _table(
+                ["Adapter", "Vetted Benchmark", "Selected Benchmark", "Type", "Input", "Output", "Limitations"],
+                [
+                    [
+                        _code(str(item.get("id", ""))),
+                        _code(str(item.get("vetted_benchmark_id", ""))),
+                        _code(str(item.get("selected_benchmark_id", ""))),
+                        _e(str(item.get("adapter_type", ""))),
+                        _e(json.dumps(item.get("input_schema", {}), sort_keys=True)),
+                        _e(json.dumps(item.get("output_schema", {}), sort_keys=True)),
+                        _e("; ".join(str(value) for value in _as_list(item.get("limitations")))),
+                    ]
+                    for item in adapters
+                ],
+            ),
+            "<h2>Adapter Runs</h2>",
+            _table(
+                ["Run", "Adapter", "Dataset", "Status", "Output Dataset", "Warnings"],
+                [
+                    [
+                        _code(str(item.get("id", ""))),
+                        _code(str(item.get("adapter_id", ""))),
+                        _code(str(item.get("dataset_id", ""))),
+                        _e(str(item.get("status", ""))),
+                        _code(str(item.get("output_dataset_id", ""))),
+                        _e("; ".join(str(value) for value in _as_list(item.get("warnings")))),
+                    ]
+                    for item in runs
+                ],
+            ),
+            "<h2>Vetted Experiment Plans</h2>",
+            _json_table(plans),
+            "<h2>Vetted Experiment Results</h2>",
+            _json_table(results),
+        ]
+    )
+
+
+def _render_v25_venue_profiles_page(context: _DashboardContext) -> str:
+    profiles = _dict_items(context.selected_idea["venue_profiles"])
+    selected = _dict(context.selected_idea["selected_venue_profile"])
+    return "\n".join(
+        [
+            _v25_boundary(),
+            "<h2>Selected Venue Profile</h2>",
+            _kv_table(
+                [
+                    ("ID", selected.get("id", "missing")),
+                    ("Name", selected.get("name", "missing")),
+                    ("Type", selected.get("venue_type", "missing")),
+                    ("Paper style", selected.get("paper_style", "missing")),
+                    ("Acceptance claim", "not implied"),
+                ]
+            ),
+            "<h2>Built-In Profiles</h2>",
+            _table(
+                ["ID", "Name", "Field", "Type", "Style", "Required Sections", "Reviewer Norms"],
+                [
+                    [
+                        _code(str(item.get("id", ""))),
+                        _e(str(item.get("name", ""))),
+                        _e(str(item.get("field", ""))),
+                        _e(str(item.get("venue_type", ""))),
+                        _e(str(item.get("paper_style", ""))),
+                        _e(", ".join(str(value) for value in _as_list(item.get("required_sections")))),
+                        _e("; ".join(str(value) for value in _as_list(item.get("reviewer_norms")))),
+                    ]
+                    for item in profiles
+                ],
+            ),
+        ]
+    )
+
+
+def _render_v25_style_corpus_page(context: _DashboardContext) -> str:
+    papers = _dict_items(context.selected_idea["style_corpus_papers"])
+    records = _dict_items(context.selected_idea["style_corpus_ingest_records"])
+    return "\n".join(
+        [
+            _v25_boundary(),
+            "<h2>Style Corpus Papers</h2>",
+            _table(
+                ["ID", "Title", "Venue", "Year", "License", "Sections", "Abstract Length", "Limitations"],
+                [
+                    [
+                        _code(str(item.get("id", ""))),
+                        _e(str(item.get("title", ""))),
+                        _e(str(item.get("venue", ""))),
+                        _e(str(item.get("year", ""))),
+                        _e(str(item.get("license_status", ""))),
+                        _e(" / ".join(str(value) for value in _as_list(item.get("section_titles")))),
+                        _e(str(item.get("abstract_length", ""))),
+                        _e(str(item.get("limitations_presence", ""))),
+                    ]
+                    for item in papers
+                ],
+            ),
+            "<h2>Ingest Records</h2>",
+            _table(
+                ["ID", "Source", "Status", "Papers", "Rejected Sources", "Warnings"],
+                [
+                    [
+                        _code(str(item.get("id", ""))),
+                        _e(str(item.get("source", ""))),
+                        _e(str(item.get("status", ""))),
+                        _e(", ".join(str(value) for value in _as_list(item.get("papers_ingested")))),
+                        _e(", ".join(str(value) for value in _as_list(item.get("rejected_sources")))),
+                        _e("; ".join(str(value) for value in _as_list(item.get("license_warnings")))),
+                    ]
+                    for item in records
+                ],
+            ),
+        ]
+    )
+
+
+def _render_v25_venue_style_analysis_page(context: _DashboardContext) -> str:
+    profiles = _dict_items(context.selected_idea["venue_style_profiles"])
+    recommendations = _dict_items(context.selected_idea["venue_style_recommendations"])
+    rewrite = _dict(context.selected_idea["venue_style_revision_report"])
+    return "\n".join(
+        [
+            _v25_boundary(),
+            "<h2>Venue Style Profiles</h2>",
+            _json_table(profiles),
+            "<h2>Style Recommendations</h2>",
+            _json_table(recommendations),
+            "<h2>Venue Rewrite Report</h2>",
+            _kv_table(
+                [
+                    ("Report", rewrite.get("id", "missing")),
+                    ("Manuscript", rewrite.get("manuscript_id", "missing")),
+                    ("Venue", rewrite.get("venue_profile_id", "missing")),
+                    ("Status", rewrite.get("status", "missing")),
+                    ("Limitations preserved", rewrite.get("limitations_preserved", "missing")),
+                    ("Publication ready", rewrite.get("publication_ready", "missing")),
+                    ("Copied text warnings", "; ".join(str(item) for item in _as_list(rewrite.get("copied_text_warnings")))),
+                ]
+            ),
+        ]
+    )
+
+
+def _render_v25_openreview_dataset_page(context: _DashboardContext) -> str:
+    datasets = _dict_items(context.selected_idea["review_datasets"])
+    reviews = _dict_items(context.selected_idea["review_records"])
+    return "\n".join(
+        [
+            _v25_boundary(),
+            "<h2>Review Datasets</h2>",
+            _table(
+                ["ID", "Name", "Source", "Venue Years", "Papers", "Reviews", "License Warnings"],
+                [
+                    [
+                        _code(str(item.get("id", ""))),
+                        _e(str(item.get("name", ""))),
+                        _e(str(item.get("source", ""))),
+                        _e(", ".join(str(value) for value in _as_list(item.get("venue_years")))),
+                        _e(str(item.get("paper_count", ""))),
+                        _e(str(item.get("review_count", ""))),
+                        _e("; ".join(str(value) for value in _as_list(item.get("license_warnings")))),
+                    ]
+                    for item in datasets
+                ],
+            ),
+            "<h2>Review Records</h2>",
+            _json_table(reviews),
+        ]
+    )
+
+
+def _render_v25_review_taxonomy_page(context: _DashboardContext) -> str:
+    reports = _dict_items(context.selected_idea["review_taxonomy_reports"])
+    labels = _dict_items(context.selected_idea["review_taxonomy_labels"])
+    return "\n".join(
+        [
+            _v25_boundary(),
+            "<h2>Taxonomy Reports</h2>",
+            _json_table(reports),
+            "<h2>Issue Labels</h2>",
+            _table(
+                ["Review", "Paper", "Issue", "Severity", "Mapped Gate", "Evidence"],
+                [
+                    [
+                        _code(str(item.get("review_id", ""))),
+                        _code(str(item.get("paper_id", ""))),
+                        _e(str(item.get("issue_type", ""))),
+                        _e(str(item.get("severity", ""))),
+                        _e(str(item.get("mapped_gapforge_gate", ""))),
+                        _e(str(item.get("evidence_text", ""))),
+                    ]
+                    for item in labels
+                ],
+            ),
+        ]
+    )
+
+
+def _render_v25_reviewer_calibration_page(context: _DashboardContext) -> str:
+    training = _dict_items(context.selected_idea["reviewer_training_runs"])
+    evaluations = _dict_items(context.selected_idea["reviewer_evaluations"])
+    reports = _dict_items(context.selected_idea["reviewer_calibration_reports"])
+    return "\n".join(
+        [
+            _v25_boundary(),
+            "<h2>Reviewer Training Runs</h2>",
+            _json_table(training),
+            "<h2>Reviewer Evaluation Results</h2>",
+            _table(
+                ["ID", "Model", "Dataset", "Issue Recall", "Severity", "Specificity", "Hallucination", "Evidence Linkage"],
+                [
+                    [
+                        _code(str(item.get("id", ""))),
+                        _code(str(item.get("model_id", ""))),
+                        _code(str(item.get("dataset_id", ""))),
+                        _e(str(item.get("issue_recall_proxy", ""))),
+                        _e(str(item.get("severity_calibration_score", ""))),
+                        _e(str(item.get("review_specificity_score", ""))),
+                        _e(str(item.get("hallucination_rate", ""))),
+                        _e(str(item.get("evidence_linkage_score", ""))),
+                    ]
+                    for item in evaluations
+                ],
+            ),
+            "<h2>Calibration Reports</h2>",
+            _table(
+                ["Dataset", "Path", "Preview"],
+                [
+                    [_code(str(item.get("dataset_id", ""))), _e(str(item.get("path", ""))), _e(str(item.get("summary", "")))]
+                    for item in reports
+                ],
+            ),
+        ]
+    )
+
+
+def _render_v25_drastic_review_page(context: _DashboardContext) -> str:
+    panel = _dict(context.selected_idea["drastic_review_panel"])
+    reviews = _dict_items(panel.get("reviewer_reports"))
+    return "\n".join(
+        [
+            _v25_boundary(),
+            "<h2>Drastic Review Panel</h2>",
+            _kv_table(
+                [
+                    ("Panel", panel.get("id", "missing")),
+                    ("Target", panel.get("target_id", "missing")),
+                    ("Target type", panel.get("target_type", "missing")),
+                    ("Likely decision", panel.get("likely_decision", "missing")),
+                    ("Workshop candidate", panel.get("workshop_candidate", "missing")),
+                ]
+            ),
+            "<h2>Fatal Flaws</h2>",
+            _list([str(item) for item in _as_list(panel.get("fatal_flaws"))], css_class="warning"),
+            "<h2>Required Revisions</h2>",
+            _list([str(item) for item in _as_list(panel.get("required_revisions"))], css_class="warning"),
+            "<h2>Reviewer Reports</h2>",
+            _json_table(reviews),
+        ]
+    )
+
+
+def _render_v25_drastic_revision_page(context: _DashboardContext) -> str:
+    plan = _dict(context.selected_idea["drastic_revision_plan"])
+    return "\n".join(
+        [
+            _v25_boundary(),
+            "<h2>Drastic Revision Plan</h2>",
+            _kv_table(
+                [
+                    ("Plan", plan.get("id", "missing")),
+                    ("Manuscript", plan.get("manuscript_id", "missing")),
+                    ("Review panel", plan.get("review_panel_id", "missing")),
+                    ("Status", plan.get("status", "missing")),
+                ]
+            ),
+            "<h2>Fatal Fixes</h2>",
+            _list([str(item) for item in _as_list(plan.get("fatal_fixes"))], css_class="warning"),
+            "<h2>New Experiments Required</h2>",
+            _list([str(item) for item in _as_list(plan.get("new_experiments_required"))], css_class="warning"),
+            "<h2>New Related Work Required</h2>",
+            _list([str(item) for item in _as_list(plan.get("new_related_work_required"))], css_class="warning"),
+            "<h2>Claim Softening Required</h2>",
+            _list([str(item) for item in _as_list(plan.get("claim_softening_required"))], css_class="warning"),
+        ]
+    )
+
+
+def _render_selected_v25_release_gate_page(context: _DashboardContext) -> str:
+    result = _dict(context.selected_idea["v25_release_gate"])
+    markdown = str(context.selected_idea.get("v25_release_gate_markdown") or "")
+    if markdown:
+        body = "<pre>" + _e(markdown) + "</pre>"
+    elif result:
+        body = "<pre>" + _e(json.dumps(result, indent=2)) + "</pre>"
+    else:
+        body = "<p>No v2.5 release gate report is available.</p>"
+    return (
+        "<h2>v2.5 Release Gate</h2>"
+        '<p class="warning">v2.5 visibility does not imply benchmark validity, venue acceptance, or reviewer truth. '
+        "Copied prose, fake citations, fake results, and unresolved drastic fatal blockers remain release blockers.</p>" + body
+    )
+
+
+def _v25_boundary() -> str:
+    return (
+        '<p class="warning">v2.5 artifacts are evidence and critique surfaces. Vetted benchmark status is not automatic fit; '
+        "venue style is structure rather than copied prose; reviewer calibration is not truth generation.</p>"
+    )
+
+
 def _json_table(items: list[Any]) -> str:
     rows: list[list[str]] = []
     for item in items:
@@ -4086,6 +4543,33 @@ def _empty_selected_idea_context() -> dict[str, Any]:
         "paper_package_v24": {},
         "v24_release_gate": {},
         "v24_release_gate_markdown": "",
+        "vetted_benchmark_records": [],
+        "vetted_benchmark_cards": [],
+        "vetted_benchmark_eligibility": [],
+        "vetted_benchmark_mapping_report": {},
+        "vetted_benchmark_mappings": [],
+        "benchmark_adapters": [],
+        "benchmark_adapter_runs": [],
+        "vetted_experiment_plans": [],
+        "vetted_experiment_results": [],
+        "venue_profiles": [],
+        "selected_venue_profile": {},
+        "style_corpus_papers": [],
+        "style_corpus_ingest_records": [],
+        "venue_style_profiles": [],
+        "venue_style_recommendations": [],
+        "venue_style_revision_report": {},
+        "review_datasets": [],
+        "review_records": [],
+        "review_taxonomy_reports": [],
+        "review_taxonomy_labels": [],
+        "reviewer_training_runs": [],
+        "reviewer_evaluations": [],
+        "reviewer_calibration_reports": [],
+        "drastic_review_panel": {},
+        "drastic_revision_plan": {},
+        "v25_release_gate": {},
+        "v25_release_gate_markdown": "",
     }
 
 
@@ -4175,6 +4659,62 @@ def _load_selected_idea_context(project_id: str, config: GapForgeConfig) -> dict
         benchmark_dir / "main_manuscript" / "related_work_manuscript_revision_v24.json"
     )
     context["paper_package_v24"] = _read_json_safely(benchmark_dir / "paper_package_v24" / "selected_paper_package_v24.json")
+    context["vetted_benchmark_records"] = _read_json_files_safely(config.data_dir / "vetted_benchmarks" / "records", "*.record.json")
+    context["vetted_benchmark_cards"] = _read_json_files_safely(config.data_dir / "vetted_benchmarks" / "cards", "*.card.json")
+    context["vetted_benchmark_eligibility"] = _read_json_files_safely(
+        config.data_dir / "vetted_benchmarks" / "eligibility", "*.eligibility.json"
+    )
+    context["vetted_benchmark_mapping_report"] = _read_json_safely(
+        benchmark_dir / "vetted_mappings" / "selected_vetted_benchmark_mapping_report.json"
+    ) or _read_json_safely(benchmark_dir / "vetted_mapping" / "selected_vetted_benchmark_mapping_report.json")
+    context["vetted_benchmark_mappings"] = _read_json_files_safely(benchmark_dir / "vetted_mappings", "selected-vetted-mapping-*.json")
+    if not context["vetted_benchmark_mappings"]:
+        context["vetted_benchmark_mappings"] = _read_json_files_safely(benchmark_dir / "vetted_mapping", "selected-vetted-mapping-*.json")
+    context["benchmark_adapters"] = _read_json_files_safely(config.data_dir / "vetted_benchmarks" / "adapters", "*.adapter.json")
+    context["benchmark_adapter_runs"] = _read_json_files_safely(config.data_dir / "vetted_benchmarks" / "adapter_runs", "*/run.json")
+    context["vetted_experiment_plans"] = _read_json_files_safely(benchmark_dir / "vetted_experiments", "*.plan.json")
+    context["vetted_experiment_results"] = _read_json_files_safely(benchmark_dir / "vetted_experiments", "*.result.json")
+    context["venue_profiles"] = [to_plain(profile) for profile in list_venue_profiles()]
+    context["style_corpus_papers"] = _read_json_files_safely(config.data_dir / "style_corpus" / "papers", "style-paper-*.json")
+    context["style_corpus_ingest_records"] = _read_json_files_safely(
+        config.data_dir / "style_corpus" / "ingest_records", "style-corpus-ingest*.json"
+    )
+    context["venue_style_profiles"] = _read_json_files_safely(config.data_dir / "style_corpus" / "analysis", "*.style_profile.json")
+    context["venue_style_recommendations"] = _read_json_records_files_safely(
+        config.data_dir / "style_corpus" / "analysis" / "recommendations", "*.style_recommendations.json"
+    )
+    context["review_datasets"] = _read_json_files_safely(config.data_dir / "review_training" / "datasets", "*/dataset.json")
+    context["review_records"] = _read_json_files_safely(config.data_dir / "review_training" / "datasets", "*/reviews/*.json")
+    context["review_taxonomy_reports"] = _read_json_files_safely(
+        config.data_dir / "review_training" / "datasets", "*/taxonomy/review_taxonomy_report.json"
+    )
+    context["review_taxonomy_labels"] = _read_json_files_safely(
+        config.data_dir / "review_training" / "datasets", "*/taxonomy/labels/review-label-*.json"
+    )
+    context["reviewer_training_runs"] = _read_json_files_safely(
+        config.data_dir / "review_training" / "datasets", "*/training_runs/reviewer-training-*.json"
+    )
+    context["reviewer_evaluations"] = _read_json_files_safely(
+        config.data_dir / "review_training" / "datasets", "*/reviewer_evaluation.json"
+    )
+    context["reviewer_calibration_reports"] = [
+        {"path": str(path), "dataset_id": path.parent.name, "summary": _read_text_safely(path)[:1200]}
+        for path in sorted((config.data_dir / "review_training" / "datasets").glob("*/reviewer_calibration_report.md"))
+    ]
+    manuscript_roots = sorted((project_dir / "manuscripts").glob("*"))
+    manuscript_root = manuscript_roots[-1] if manuscript_roots else None
+    if manuscript_root is not None:
+        context["selected_venue_profile"] = _read_json_safely(manuscript_root / "submission" / "venue_profile.json")
+        context["venue_style_revision_report"] = _read_json_safely(manuscript_root / "submission" / "venue_style_revision_report.json")
+        context["drastic_review_panel"] = _read_json_safely(manuscript_root / "reviews" / "drastic" / "drastic_review_panel.json")
+        context["drastic_revision_plan"] = _read_json_safely(manuscript_root / "reviews" / "drastic" / "drastic_revision_plan.json")
+    try:
+        v25_result = V25ReleaseGateEnforcer(config).evaluate()
+        if not v25_result.project_id or v25_result.project_id == project_id:
+            context["v25_release_gate"] = v25_result.to_dict()
+            context["v25_release_gate_markdown"] = render_v25_release_gate_markdown(v25_result)
+    except (FileNotFoundError, json.JSONDecodeError, TypeError, ValueError):
+        context["v25_release_gate"] = _read_json_safely(config.data_dir / "release_gate" / "v25_release_gate_latest.json")
     for dataset_dir in sorted((benchmark_dir / "trace_datasets").glob("*")):
         if not dataset_dir.is_dir():
             continue
@@ -4609,6 +5149,22 @@ def _read_json_files_safely(root: Path, pattern: str) -> list[dict[str, Any]]:
     records: list[dict[str, Any]] = []
     for path in sorted(root.glob(pattern)):
         _append_json_safely(records, path)
+    return records
+
+
+def _read_json_records_files_safely(root: Path, pattern: str) -> list[dict[str, Any]]:
+    if not root.exists():
+        return []
+    records: list[dict[str, Any]] = []
+    for path in sorted(root.glob(pattern)):
+        try:
+            raw = _read_json_value_if_exists(path)
+        except (OSError, json.JSONDecodeError, TypeError, ValueError):
+            continue
+        if isinstance(raw, dict):
+            records.append(raw)
+        elif isinstance(raw, list):
+            records.extend(item for item in raw if isinstance(item, dict))
     return records
 
 

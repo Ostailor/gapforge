@@ -1,0 +1,113 @@
+{
+  "topic": "Sequential specificity benchmark with explicit vetted-benchmark no-fit finding",
+  "vetted_benchmark": {
+    "registry_record_exists": true,
+    "license_visible": true,
+    "terms_visible": true,
+    "download_required_explicit": false,
+    "authentication_required_explicit": false
+  },
+  "vetted_mapping": {
+    "mapping_type": "rejected",
+    "recommended_experiment_role": "not_recommended",
+    "required_adaptation": [],
+    "supported_claims": [],
+    "unsupported_claims": ["benchmark task lacks sequential monitoring or collusion-relevant labels"],
+    "fit_assumed": false,
+    "no_fit_justification": true,
+    "synthetic_protocol_preserved": true,
+    "pretends_validates_collusion": false
+  },
+  "eligibility": {
+    "fit_assessed": true,
+    "fit_score": 0.18,
+    "recommended_use": "not_recommended"
+  },
+  "adapter": {
+    "not_required_due_to_no_fit": true,
+    "no_adapter_report_exists": true,
+    "synthetic_protocol_preserved": true
+  },
+  "venue_style": {
+    "venue_profile_selected": true,
+    "style_corpus_allowed_or_synthetic": true,
+    "style_analysis_generated": true,
+    "rewrite_generated": true,
+    "structure_not_prose": true,
+    "unsupported_claim_added": false,
+    "limitations_preserved": true,
+    "blocker_gates_binding": true,
+    "copied_source_prose": false
+  },
+  "safety": {
+    "citation_checker_ran": true,
+    "plagiarism_checker_ran": true,
+    "result_claim_checker_ran": true,
+    "restricted_source_ingested": false,
+    "fake_citation_accepted": false,
+    "fake_result_accepted": false
+  },
+  "review_dataset": {
+    "created": true,
+    "paper_count": 1,
+    "review_count": 2,
+    "scores_parsed": true,
+    "weaknesses_extracted": true,
+    "reviewer_ids_hashed": true,
+    "private_data_stored": false,
+    "license_warnings_preserved": true,
+    "synthetic_fixture_only": true
+  },
+  "taxonomy": {
+    "labels_generated": true,
+    "issue_types": ["experiment mismatch", "dataset limitation"],
+    "expected_issue_types": ["experiment mismatch", "dataset limitation"],
+    "severity_mapped": true,
+    "gate_mapping": true,
+    "auditable": true,
+    "claims_ground_truth_without_human_verification": false
+  },
+  "reviewer_calibration": {
+    "trained_or_calibrated": true,
+    "evaluation_report": true,
+    "issue_recall_proxy": 0.7,
+    "severity_calibration_score": 0.68,
+    "review_specificity_score": 0.72,
+    "evidence_linkage_score": 0.8,
+    "hallucination_rate": 0.0,
+    "claims_human_equivalence": false,
+    "small_training_data": true,
+    "limitations_reported": true
+  },
+  "drastic_review": {
+    "generated": true,
+    "roles": ["novelty skeptic", "empirical rigor", "benchmark validity", "clarity", "reproducibility", "area chair"],
+    "harsher_than_baseline": true,
+    "evidence_linked": true,
+    "fake_citations": false,
+    "invented_missing_results": false,
+    "likely_scores": true,
+    "borderline_decision_analysis": true,
+    "fatal_expected": false,
+    "fatal_flaws": [],
+    "likely_decision": "workshop"
+  },
+  "revision_plan": {
+    "generated": true,
+    "fatal_expected": false,
+    "major_expected": true,
+    "major_fixes": ["state that no vetted benchmark directly fits"],
+    "new_experiments_required": false,
+    "new_related_work_required": false,
+    "claim_softening_required": true,
+    "claim_softening_generated": true,
+    "artifact_updates_required": false,
+    "fake_rebuttal_answers": false,
+    "fatal_blockers_remaining": false
+  },
+  "v25_release_gate": {
+    "expected_outcome": "benchmark_no_fit",
+    "expected_pass": true,
+    "expected_blockers": []
+  }
+}

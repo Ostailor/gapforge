@@ -164,6 +164,50 @@ def test_dashboard_cli_accepts_selected_pilot_flag(tmp_path: Path) -> None:
     assert (config.project_root / program.project.id / "dashboard" / "v22_release_gate.html").exists()
 
 
+def test_dashboard_cli_accepts_selected_v25_flag(tmp_path: Path) -> None:
+    config = GapForgeConfig.from_cwd(tmp_path)
+    program = ProjectMemoryManager(config).create_project("Selected v2.5 Dashboard")
+    env = {**os.environ, "PYTHONPATH": str(Path(__file__).resolve().parents[1] / "src")}
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "gapforge.cli",
+            "dashboard",
+            "--project-id",
+            program.project.id,
+            "--include-selected-v25",
+        ],
+        cwd=tmp_path,
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    dashboard_dir = config.project_root / program.project.id / "dashboard"
+    expected = {
+        "vetted_benchmarks.html",
+        "benchmark_mappings.html",
+        "benchmark_adapters.html",
+        "venue_profiles.html",
+        "style_corpus.html",
+        "venue_style_analysis.html",
+        "openreview_dataset.html",
+        "review_taxonomy.html",
+        "reviewer_calibration.html",
+        "drastic_review.html",
+        "drastic_revision.html",
+        "v25_release_gate.html",
+    }
+    for filename in expected:
+        assert (dashboard_dir / filename).exists()
+    assert "Vetted benchmark status is not automatic fit" in (dashboard_dir / "vetted_benchmarks.html").read_text(encoding="utf-8")
+    assert "Copied prose, fake citations, fake results" in (dashboard_dir / "v25_release_gate.html").read_text(encoding="utf-8")
+
+
 def test_dashboard_cli_generates_run_dashboard(tmp_path: Path) -> None:
     config = GapForgeConfig.from_cwd(tmp_path)
     state = _dashboard_run(config)

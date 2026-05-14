@@ -9,6 +9,8 @@ from gapforge.manuscript.manager import ManuscriptManager
 from gapforge.manuscript.models import VENUE_FORMATS, VENUE_TYPES, ManuscriptState, VenueTemplate
 from gapforge.models import Provenance, to_plain
 from gapforge.state import utc_now_iso
+from gapforge.venues.constraints import profile_to_venue_template
+from gapforge.venues.profiles import get_venue_profile, is_venue_profile
 
 
 def list_venue_templates() -> list[VenueTemplate]:
@@ -94,10 +96,12 @@ def list_venue_templates() -> list[VenueTemplate]:
 
 
 def get_venue_template(template_id: str) -> VenueTemplate:
+    if is_venue_profile(template_id):
+        return profile_to_venue_template(get_venue_profile(template_id))
     for template in list_venue_templates():
         if template.id == template_id:
             return template
-    allowed = ", ".join(template.id for template in list_venue_templates())
+    allowed = ", ".join([*[template.id for template in list_venue_templates()], "venue profile ids"])
     raise ValueError(f"Unknown venue template `{template_id}`. Expected one of: {allowed}")
 
 

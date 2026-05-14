@@ -34,8 +34,9 @@ GAPFORGE_DISABLE_NETWORK=1 gapforge report --strict
 17. For v2.2 releases, complete the pilot-scale benchmark study process in `docs/V2_2_ROADMAP.md`, `docs/V2_2_PILOT_BENCHMARK.md`, `docs/V2_2_ACCEPTANCE_CRITERIA.md`, `docs/V2_2_POWER_AND_SAMPLE_SIZE.md`, and `docs/V2_2_REVIEWER_BLOCKERS.md`.
 18. For v2.3 releases, complete the main-scale benchmark and publication-readiness process in `docs/V2_3_ROADMAP.md`, `docs/V2_3_MAIN_BENCHMARK.md`, `docs/V2_3_RELATED_WORK_COMPLETION.md`, `docs/V2_3_PUBLICATION_READINESS.md`, and `docs/V2_3_ACCEPTANCE_CRITERIA.md`.
 19. For v2.4 releases, complete the related-work remediation process in `docs/V2_4_ROADMAP.md`, `docs/V2_4_RELATED_WORK_COMPLETION.md`, `docs/V2_4_PUBLICATION_REMEDIATION.md`, and `docs/V2_4_ACCEPTANCE_CRITERIA.md`.
-20. Commit with a message that records constraints, rejected alternatives if useful, confidence, scope risk, tested commands, and known gaps.
-21. Tag the release only after the checks pass.
+20. For v2.5 releases, complete the real benchmark grounding, venue-style manuscript, and OpenReview reviewer-calibration process in `docs/V2_5_ROADMAP.md`, `docs/V2_5_REAL_BENCHMARK_GROUNDING.md`, `docs/V2_5_VENUE_STYLE_MANUSCRIPT.md`, `docs/V2_5_OPENREVIEW_REVIEWER_DATASET.md`, and `docs/V2_5_ACCEPTANCE_CRITERIA.md`.
+21. Commit with a message that records constraints, rejected alternatives if useful, confidence, scope risk, tested commands, and known gaps.
+22. Tag the release only after the checks pass.
 
 ## v0.3 Validation Levels
 
@@ -797,6 +798,79 @@ Release notes must distinguish:
 
 If required categories remain incomplete, release notes must say `v2.4 related-work remediation ended in revise/no-go; publication claims remain blocked`. Do not call the manuscript publication-ready while related work remains fallback-only or any fatal reviewer blocker remains.
 
+## v2.5 Real Benchmark Grounding, Venue-Style Paper, and OpenReview Reviewer Training Gate
+
+v2.5 starts from the v2.4 `publication_candidate` outcome. The selected benchmark has related-work remediation, plausible novelty status, and a bounded synthetic benchmark/protocol package, but it still needs stronger grounding against existing benchmark artifacts, venue-style packaging, and harsher review calibration before it resembles a serious top-conference submission package.
+
+v2.5 continues the locked selected idea:
+
+- Idea ID: `idea-sequential-specificity-benchmark-for-low-fpr-collusion-audits`
+- Title: `Sequential specificity benchmark for low-FPR collusion audits`
+
+Before tagging v2.5, the release process should require:
+
+```bash
+make ci
+make eval
+gapforge v24-release-gate --write-report --json
+gapforge selected-benchmark-inventory --benchmark-id <benchmark-id>
+gapforge selected-vetted-benchmark-adapter-plan --benchmark-id <benchmark-id>
+gapforge selected-vetted-benchmark-adapter --benchmark-id <benchmark-id> --source-benchmark <source-id>
+gapforge selected-vetted-benchmark-adapter-report --benchmark-id <benchmark-id>
+gapforge selected-protocol-adaptation-report --benchmark-id <benchmark-id>
+gapforge selected-venue-style-source-audit --benchmark-id <benchmark-id> --venue <venue-id>
+gapforge selected-venue-style-manuscript --benchmark-id <benchmark-id> --venue <venue-id>
+gapforge openreview-review-dataset-build --benchmark-id <benchmark-id> --venue-family <venue-family>
+gapforge openreview-reviewer-calibrate --benchmark-id <benchmark-id>
+gapforge selected-openreview-review-pass --benchmark-id <benchmark-id>
+gapforge selected-review-driven-revision --benchmark-id <benchmark-id>
+gapforge selected-rebuttal-package-v25 --benchmark-id <benchmark-id>
+gapforge selected-paper-package-v25 --benchmark-id <benchmark-id>
+gapforge v25-release-gate --write-report --json
+gapforge dashboard --project-id <selected-project-id> --include-selected-v25
+```
+
+Equivalent scripts may use `gapforge.api` wrappers only when they produce the same adapter, source-use audit, review-dataset, reviewer-calibration, manuscript, rebuttal, and release-gate artifacts. Prose cannot replace missing benchmark-adapter, venue-style, OpenReview-calibrated review, or review-driven revision evidence.
+
+The v2.5 release gate should require:
+
+- deterministic CI remains passing
+- v2.4 publication-candidate handoff remains available
+- v2.4 related-work, novelty, citation, and synthetic/deployment limits are preserved
+- at least one vetted benchmark or dataset source record exists
+- license, access, retrieval, and attribution status are recorded for adapter sources
+- at least one vetted benchmark adapter is accepted for a bounded scope
+- adapter mapping rules, exclusions, leakage checks, and limitations are inspectable
+- adapter claims are separated from synthetic benchmark claims
+- no known-dataset use is treated as proof of benchmark validity
+- venue profile exists
+- public paper TeX/source use is audited and limited to allowed structure/style/format analysis
+- no copied prose, captions, equations, distinctive macros, or reviewer-response text is present
+- venue-style manuscript package links claims to records, adapters, artifacts, or limitations
+- OpenReview-style review dataset, rubric, or calibration record exists with source and use-policy metadata
+- calibrated reviewer pass covers novelty, soundness, benchmark validity, empirical validity, reproducibility, clarity, and related-work concerns
+- reviewer outputs tag objections as evidence-backed, plausible, or speculative
+- hallucinated citations, results, datasets, baselines, venues, or acceptance claims block the gate
+- manuscript and rebuttal revisions map major objections to evidence, edits, limitations, narrowed claims, new experiments, or fatal blockers
+- harsh unresolved objections remain visible
+- no top-conference acceptance, likely acceptance, deployment-validity, `SOTA`, `first`, or strong novelty claim passes
+
+Release notes must distinguish:
+
+- v2.4 publication-candidate handoff
+- accepted, rejected, and blocked benchmark adapters
+- adapter source/license/access status
+- adapter-supported claims and unsupported claims
+- venue profile and source-use audit status
+- manuscript package status
+- OpenReview review-dataset and calibration status
+- reviewer hallucination and quality checks
+- harsh reviewer objections
+- manuscript and rebuttal changes
+- final v2.5 go/no-go recommendation
+
+If any minimum artifact is missing, release notes must say `v2.5 ended in revise/no-go; benchmark grounding, venue-style, or reviewer-calibration artifacts are incomplete`. Do not call the paper submission-ready, accepted, or top-conference-ready from v2.5 artifacts alone.
+
 ## Tagging
 
 Use semantic version tags:
@@ -848,4 +922,8 @@ Release notes should include:
 - For v2.4, do not claim publication readiness unless required related-work categories have real attached paper records or dependent claims are dropped.
 - For v2.4, do not hide closest prior work that weakens novelty, and do not infer novelty from missing or failed searches.
 - For v2.4, preserve the v2.3 synthetic/deployment limitation and issue revise/no-go if related-work, novelty, citation, manuscript, or reviewer blockers remain.
+- For v2.5, do not claim benchmark validity merely because a known dataset was adapted.
+- For v2.5, do not use public paper TeX/source for copied prose, captions, equations, distinctive macros, or reviewer responses; use it only for allowed structure/style/format analysis.
+- For v2.5, do not treat OpenReview reviewer modeling as truth generation, acceptance prediction, or evidence that harsh objections are resolved.
+- For v2.5, require at least one vetted benchmark adapter, one venue-style manuscript package, and one OpenReview-calibrated reviewer pass before any review-candidate release statement.
 - Do not publish generated `runs/`, caches, or local environment artifacts as source.

@@ -52,6 +52,15 @@ v2.2 selected pilot benchmark skills:
 - `pilot-reviewer`
 - `pilot-manuscript`
 
+v2.5 grounding, venue style, and reviewer calibration skills:
+
+- `vetted-benchmark-mapping`
+- `benchmark-adapter`
+- `venue-style-analysis`
+- `openreview-review-dataset`
+- `drastic-reviewer`
+- `drastic-revision`
+
 Shared rules:
 
 - Do not hallucinate citations, results, venues, datasets, metrics, quotes, or bibliography entries.
@@ -69,3 +78,4 @@ Shared rules:
 - Never import agent output before validation.
 - For v2.1, remember: synthetic smoke benchmark is not a final research result; low-FPR claims require power; every result claim must be artifact-backed; no fake results.
 - For v2.2, remember: synthetic pilot data is still not deployment evidence; `alpha=0.01` is pilot-gated, `alpha=0.001` is main-scale unless powered, and unresolved reviewer blockers must remain visible.
+- For v2.5, remember: a vetted benchmark is not automatically a good fit; venue style is structure/rhetoric/format rather than copied prose; OpenReview reviewer modeling is critique calibration, not truth generation; no fake citation, fake result, fake review, copied paper prose, or acceptance claim is allowed.

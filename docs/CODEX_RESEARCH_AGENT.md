@@ -383,6 +383,48 @@ For v2 task packs, prompts should include:
 
 Codex/GPT-5.4 output may create or modify idea candidates only after schema validation and import. Human preference feedback may steer search, but it cannot waive evidence requirements. If no candidate survives, Codex should help produce a research agenda fallback and explicit failure report rather than force a generic idea to pass.
 
+## v2.5 Benchmark Grounding, Venue Style, and Reviewer Calibration Role
+
+For v2.5, Codex/GPT-5.4 may help ground the selected benchmark in existing vetted benchmark artifacts, restructure the manuscript into venue style, and calibrate OpenReview-style reviewer critique. Codex remains an assistant whose outputs must be validated, audited, and linked to recorded evidence.
+
+Codex may help:
+
+- inventory public benchmarks or datasets that might support a bounded adapter
+- draft adapter plans from source metadata, licenses, label semantics, and split policies
+- implement or critique deterministic adapter mappings after source records exist
+- write protocol adaptation reports that separate synthetic scaffold assumptions from real benchmark adapter assumptions
+- analyze public paper TeX/source for section structure, rhetorical pacing, appendix shape, and artifact-checklist conventions when use is allowed
+- draft venue-style manuscript sections from known claims, related-work records, adapter artifacts, and result artifacts
+- build OpenReview-style review schemas, rubric labels, and critique-calibration datasets from public allowed review records
+- generate harsh simulated reviews that attack novelty, soundness, benchmark validity, empirical design, reproducibility, clarity, and related-work coverage
+- map reviewer objections to manuscript edits, narrowed claims, additional experiments, rebuttal responses, limitations, or fatal blockers
+
+Codex must not:
+
+- claim a known dataset validates the benchmark protocol by itself
+- invent datasets, labels, licenses, baselines, metrics, results, citations, reviews, scores, decisions, or venue acceptance
+- use copyrighted or unavailable paper source beyond allowed structure/style/format analysis
+- copy paper prose, captions, equations, distinctive macros, or reviewer-response text
+- train or prompt reviewer models to fabricate citations or results
+- treat OpenReview-style reviews as truth, consensus, or acceptance prediction
+- hide harsh reviewer objections or rewrite them into weaker objections to pass the release gate
+- answer rebuttal objections with unsupported assertions
+- weaken v2.4 related-work, novelty, synthetic/deployment, citation, or reviewer gates
+
+For v2.5 task packs, prompts should include:
+
+- selected benchmark ID and v2.4 publication-candidate handoff
+- allowed source benchmark records, licenses, access status, dataset cards, and split policies
+- adapter mapping requirements and unsupported-label handling rules
+- source-use policy for public paper TeX/source analysis
+- venue profile, anonymity mode, page limits, artifact checklist, and expected section structure
+- allowed claim IDs, related-work records, citation keys, result artifacts, and adapter artifacts
+- OpenReview dataset source records, use-policy notes, redaction status, and review schema
+- reviewer calibration and hallucination-check requirements
+- objection classification values and rebuttal evidence rules
+
+Any Codex-generated v2.5 output must pass source-use audit, adapter validation, citation audit, review hallucination checks, manuscript traceability, and human review before it can support a v2.5 review-candidate claim. If an adapter, source-use, or reviewer-calibration blocker remains, Codex should preserve it as revise/no-go evidence.
+
 ## v2 Skill Routing
 
 Use the dedicated v2 skills when preparing or reviewing idea discovery work:

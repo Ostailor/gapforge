@@ -40,6 +40,29 @@ class HealthyApiSource:
         ]
 
 
+def test_api_exposes_v25_workflow_surface() -> None:
+    names = [
+        "register_vetted_benchmark",
+        "assess_benchmark_fit",
+        "create_benchmark_adapter",
+        "run_vetted_experiment",
+        "select_venue_profile",
+        "ingest_style_corpus",
+        "analyze_venue_style",
+        "rewrite_manuscript_for_venue",
+        "create_review_dataset",
+        "train_reviewer",
+        "evaluate_reviewer",
+        "run_drastic_review",
+        "create_drastic_revision_plan",
+        "v25_release_gate",
+    ]
+
+    for name in names:
+        assert callable(getattr(api, name))
+        assert name in api.__all__
+
+
 def test_api_create_project_and_run(tmp_path: Path) -> None:
     config = GapForgeConfig.from_cwd(tmp_path)
 

@@ -16,6 +16,7 @@ from gapforge.manuscript.venues import get_venue_template
 from gapforge.models import Provenance, from_dict, to_plain
 from gapforge.replication.package import ReplicationPackageExporter
 from gapforge.state import utc_now_iso
+from gapforge.venues.profiles import is_venue_profile
 
 
 class SubmissionChecklistManager:
@@ -119,7 +120,8 @@ def _check_required_sections(
     present = {section.section_type for section in state.sections}
     missing = [section_type for section_type in template.sections_required if section_type not in present]
     checks["required_sections"] = "pass" if not missing else f"fail: missing {', '.join(missing)}"
-    blocking.extend(f"Required section `{section_type}` is missing for venue `{template.id}`." for section_type in missing)
+    label = "venue profile" if is_venue_profile(template.id) else "venue"
+    blocking.extend(f"Required section `{section_type}` is missing for {label} `{template.id}`." for section_type in missing)
 
 
 def _check_bibliography(

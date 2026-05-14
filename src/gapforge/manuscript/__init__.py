@@ -27,6 +27,13 @@ from gapforge.manuscript.models import (
 from gapforge.manuscript.sections import MANUSCRIPT_SECTION_STATUSES, MANUSCRIPT_SECTION_TYPES
 from gapforge.manuscript.submission_checklist import SubmissionChecklistManager
 from gapforge.manuscript.tables import ManuscriptTableGenerator
+from gapforge.manuscript.venue_rewriter import (
+    ClaimSofteningReport,
+    RewrittenSectionRecord,
+    VenueManuscriptRewriter,
+    VenueRewriteResult,
+    VenueStyleRevisionReport,
+)
 from gapforge.manuscript.venues import ManuscriptVenueManager
 
 __all__ = [
@@ -56,5 +63,10 @@ __all__ = [
     "SubmissionChecklist",
     "SubmissionChecklistManager",
     "SubmissionPackage",
+    "ClaimSofteningReport",
+    "RewrittenSectionRecord",
     "VenueTemplate",
+    "VenueManuscriptRewriter",
+    "VenueRewriteResult",
+    "VenueStyleRevisionReport",
 ]

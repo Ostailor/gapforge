@@ -41,6 +41,11 @@ GapForge v2 planning docs:
 - [v2.4 related-work completion](docs/V2_4_RELATED_WORK_COMPLETION.md)
 - [v2.4 publication remediation](docs/V2_4_PUBLICATION_REMEDIATION.md)
 - [v2.4 acceptance criteria](docs/V2_4_ACCEPTANCE_CRITERIA.md)
+- [v2.5 real benchmark grounding roadmap](docs/V2_5_ROADMAP.md)
+- [v2.5 real benchmark grounding](docs/V2_5_REAL_BENCHMARK_GROUNDING.md)
+- [v2.5 venue-style manuscript](docs/V2_5_VENUE_STYLE_MANUSCRIPT.md)
+- [v2.5 OpenReview reviewer dataset](docs/V2_5_OPENREVIEW_REVIEWER_DATASET.md)
+- [v2.5 acceptance criteria](docs/V2_5_ACCEPTANCE_CRITERIA.md)
 
 GapForge is intentionally skeptical. It can recommend a direction only when evidence gates support one, and it can refuse when literature coverage, novelty evidence, or empirical support is insufficient. It is not an exhaustive autonomous literature reviewer, and it must not fabricate citations, experimental results, venue acceptance, publication readiness, or novelty claims. Deterministic and offline-safe paths remain the default.
 
@@ -63,6 +68,7 @@ GapForge is intentionally skeptical. It can recommend a direction only when evid
 - **v2.2.0**: Pilot-Scale Benchmark Study release. v2.2 requires a pilot run manifest, expanded honest-agent null distribution, expanded collusive-agent alternatives, stronger hard negatives, full baseline monitor suite, pilot result artifacts, sequential low-FPR uncertainty analysis, prior-work and related-work attachment, reviewer-blocker classification, and a pilot manuscript package. It must not claim deployment validity, unsupported `alpha=0.001` operational specificity, main benchmark maturity, or publication readiness from synthetic pilot data.
 - **v2.3.0**: Main-Scale Benchmark and Publication-Readiness Upgrade. v2.3 directly addresses v2.2 blockers by requiring a main-scale sample-size plan, an explicit `alpha=0.001` power-or-drop decision, real prior-work records for required categories, related-work matrix completion, stronger baselines, main dataset generation or no-go, main benchmark execution or no-go, publication-readiness reviewer panel, manuscript package upgrade, and a clear go/no-go recommendation.
 - **v2.4.0**: Related Work Completion and Publication-Readiness Remediation. v2.4 starts from the v2.3 `revise_benchmark` outcome: the synthetic main benchmark completed and powered `alpha=0.001`, but publication readiness remained blocked because required related-work categories had no real attached paper records. v2.4 requires real category-specific search campaigns, real paper attachment, closest-prior-work dossier refresh, novelty and benchmark positioning updates, contribution claim softening when needed, reviewer rerun, manuscript revision, and an updated go/no-go decision. It must not claim publication readiness from fallback-only related work, hide prior work, weaken synthetic/deployment limits, or invent citations.
+- **v2.5.0**: Real Benchmark Grounding, Venue-Style Paper, and OpenReview Reviewer Training. v2.5 starts from the v2.4 publication-candidate package and requires at least one vetted benchmark adapter, one venue-style manuscript package, and one OpenReview-calibrated reviewer pass. It treats known datasets as bounded grounding evidence, venue style as structure/rhetoric/format rather than copied prose, and reviewer modeling as critique calibration rather than truth generation or acceptance prediction.
 
 ## Why Not Just Summarization?
 
@@ -878,6 +884,36 @@ Planning docs:
 - [docs/V2_4_PUBLICATION_REMEDIATION.md](docs/V2_4_PUBLICATION_REMEDIATION.md)
 - [docs/V2_4_ACCEPTANCE_CRITERIA.md](docs/V2_4_ACCEPTANCE_CRITERIA.md)
 - [docs/V2_3_ACCEPTANCE_CRITERIA.md](docs/V2_3_ACCEPTANCE_CRITERIA.md)
+
+## v2.5 Real Benchmark Grounding, Venue-Style Paper, and OpenReview Reviewer Training
+
+v2.5 is the next hardening lane after the v2.4 publication-candidate package for `Sequential specificity benchmark for low-FPR collusion audits`. It requires real benchmark grounding as a separate artifact from the synthetic benchmark scaffold, a venue-style manuscript package built from allowed structure/style analysis rather than copied prose, and an OpenReview-calibrated reviewer pass used for critique calibration rather than truth generation.
+
+The minimum v2.5 release gate requires one accepted vetted benchmark adapter, one venue-style manuscript package, and one OpenReview-calibrated reviewer pass. Known datasets do not prove benchmark validity by themselves, reviewer models cannot fabricate citations or results, and harsh objections must remain visible in manuscript and rebuttal artifacts.
+
+The intended v2.5 path is:
+
+```bash
+gapforge selected-benchmark-inventory --benchmark-id <benchmark-id>
+gapforge selected-vetted-benchmark-adapter --benchmark-id <benchmark-id> --source-benchmark <source-id>
+gapforge selected-protocol-adaptation-report --benchmark-id <benchmark-id>
+gapforge selected-venue-style-source-audit --benchmark-id <benchmark-id> --venue <venue-id>
+gapforge selected-venue-style-manuscript --benchmark-id <benchmark-id> --venue <venue-id>
+gapforge openreview-review-dataset-build --benchmark-id <benchmark-id> --venue-family <venue-family>
+gapforge openreview-reviewer-calibrate --benchmark-id <benchmark-id>
+gapforge selected-openreview-review-pass --benchmark-id <benchmark-id>
+gapforge selected-review-driven-revision --benchmark-id <benchmark-id>
+gapforge selected-paper-package-v25 --benchmark-id <benchmark-id>
+gapforge v25-release-gate --write-report --json
+```
+
+Planning docs:
+
+- [docs/V2_5_ROADMAP.md](docs/V2_5_ROADMAP.md)
+- [docs/V2_5_REAL_BENCHMARK_GROUNDING.md](docs/V2_5_REAL_BENCHMARK_GROUNDING.md)
+- [docs/V2_5_VENUE_STYLE_MANUSCRIPT.md](docs/V2_5_VENUE_STYLE_MANUSCRIPT.md)
+- [docs/V2_5_OPENREVIEW_REVIEWER_DATASET.md](docs/V2_5_OPENREVIEW_REVIEWER_DATASET.md)
+- [docs/V2_5_ACCEPTANCE_CRITERIA.md](docs/V2_5_ACCEPTANCE_CRITERIA.md)
 
 ## Active v0.3 Loop
 

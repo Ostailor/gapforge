@@ -396,6 +396,34 @@ v2.4 non-goals:
 
 If required categories remain incomplete, v2.4 must produce a visible `revise_benchmark`, `no_go_related_work`, `no_go_novelty`, or `no_go_publication` decision instead of publication-ready language.
 
+## v2.5 Real Benchmark Grounding, Venue-Style Paper, and OpenReview Reviewer Training Limits
+
+v2.5 is the hardening release after the v2.4 `publication_candidate` outcome for `idea-sequential-specificity-benchmark-for-low-fpr-collusion-audits`. It adds real benchmark grounding, venue-style manuscript packaging, and OpenReview-calibrated reviewer critique, but it still cannot turn a bounded benchmark/protocol package into venue acceptance or deployment validity.
+
+v2.5 must still preserve these limits:
+
+- real benchmark grounding is separate from synthetic benchmark scaffolding
+- a known or respected dataset does not prove the selected benchmark protocol is valid
+- vetted benchmark adapters support only the scope justified by their source labels, splits, license, and mapping rules
+- adapter results cannot be generalized to real-world collusion deployment without additional evidence
+- public paper TeX/source may be inspected only for allowed structure, style, and format analysis
+- venue style is not copied prose, copied captions, copied equations, copied distinctive macros, or copied reviewer responses
+- OpenReview-style reviewer modeling calibrates critique and severity, not truth
+- reviewer models and rubrics can miss objections, overstate concerns, or hallucinate unless checked
+- simulated review scores do not predict top-conference acceptance
+- harsh reviewer objections must remain visible unless resolved with evidence, manuscript changes, narrowed claims, or explicit concessions
+
+v2.5 non-goals:
+
+- claiming benchmark validity merely from using a known dataset
+- claiming top-conference acceptance, likely acceptance, or camera-ready status
+- copying copyrighted paper text or disallowed source material
+- training reviewer models that fabricate citations, datasets, baselines, metrics, or results
+- hiding severe reviewer objections to make the paper look ready
+- weakening v2.4 related-work, novelty, synthetic/deployment, citation, or reviewer gates
+
+If no vetted benchmark adapter, venue-style manuscript package, or OpenReview-calibrated reviewer pass exists, v2.5 must end in revise or no-go language instead of review-candidate language.
+
 ## Operational Guidance
 
 Use strict mode and coverage assessment before interpreting outputs:

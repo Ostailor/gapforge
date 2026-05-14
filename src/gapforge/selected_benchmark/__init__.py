@@ -185,6 +185,19 @@ from gapforge.selected_benchmark.trace_generator import (
     render_trace_dataset_report,
     render_trace_list,
 )
+from gapforge.selected_benchmark.vetted_experiment import (
+    SelectedVettedBenchmarkExperimentManager,
+    VettedBenchmarkExperimentPlan,
+    VettedBenchmarkExperimentResult,
+    render_vetted_benchmark_experiment_plan,
+    render_vetted_benchmark_experiment_report,
+)
+from gapforge.selected_benchmark.vetted_mapping import (
+    SelectedBenchmarkVettedMapping,
+    SelectedBenchmarkVettedMappingManager,
+    VettedBenchmarkMappingReport,
+    render_vetted_mapping_report,
+)
 from gapforge.selected_benchmark.workspace import (
     SelectedBenchmarkWorkspaceConfig,
     SelectedBenchmarkWorkspaceManager,
@@ -257,6 +270,9 @@ __all__ = [
     "SelectedBenchmarkRelatedWorkManager",
     "SelectedBenchmarkReviewerPanelBuilder",
     "SelectedBenchmarkReviewPanel",
+    "SelectedBenchmarkVettedMapping",
+    "SelectedBenchmarkVettedMappingManager",
+    "SelectedVettedBenchmarkExperimentManager",
     "RelatedWorkCompletionManager",
     "RelatedWorkCompletionStatus",
     "RelatedWorkCategoryAttachment",
@@ -285,6 +301,9 @@ __all__ = [
     "SyntheticTraceGenerator",
     "TraceDataset",
     "TraceStep",
+    "VettedBenchmarkExperimentPlan",
+    "VettedBenchmarkExperimentResult",
+    "VettedBenchmarkMappingReport",
     "default_monitor_baselines",
     "render_baseline_strength_assessment",
     "default_collusive_scenarios",
@@ -340,4 +359,7 @@ __all__ = [
     "render_sequential_metric_report",
     "render_trace_dataset_report",
     "render_trace_list",
+    "render_vetted_benchmark_experiment_plan",
+    "render_vetted_benchmark_experiment_report",
+    "render_vetted_mapping_report",
 ]

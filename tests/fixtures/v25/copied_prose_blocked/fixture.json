@@ -1,0 +1,119 @@
+{
+  "topic": "Venue rewrite rejects copied prose from source papers",
+  "vetted_benchmark": {
+    "registry_record_exists": true,
+    "license_visible": true,
+    "terms_visible": true,
+    "download_required_explicit": false,
+    "authentication_required_explicit": false
+  },
+  "vetted_mapping": {
+    "mapping_type": "sanity_check",
+    "recommended_experiment_role": "sanity_check",
+    "required_adaptation": ["fixture-only adapter"],
+    "supported_claims": ["safety blocker triggers on copied prose"],
+    "unsupported_claims": ["copied style text cannot be used in manuscript"],
+    "fit_assumed": false
+  },
+  "eligibility": {
+    "fit_assessed": true,
+    "fit_score": 0.5,
+    "recommended_use": "sanity_check"
+  },
+  "adapter": {
+    "created": true,
+    "adapter_type": "auxiliary",
+    "input_schema": "style_fixture_v1",
+    "output_schema": "blocked_rewrite_fixture_v1",
+    "transformation_recorded": true,
+    "preserves_original_labels": true,
+    "preserves_original_splits": true,
+    "limitations_visible": true,
+    "calls_adapted_data_real_collusion_traces": false
+  },
+  "venue_style": {
+    "venue_profile_selected": true,
+    "style_corpus_allowed_or_synthetic": true,
+    "style_analysis_generated": true,
+    "rewrite_generated": true,
+    "structure_not_prose": true,
+    "unsupported_claim_added": false,
+    "limitations_preserved": true,
+    "blocker_gates_binding": true,
+    "copied_source_prose": false
+  },
+  "safety": {
+    "citation_checker_ran": true,
+    "plagiarism_checker_ran": true,
+    "result_claim_checker_ran": true,
+    "restricted_source_ingested": false,
+    "copied_prose_detected": true,
+    "copied_prose_blocked": true,
+    "release_gate_blocked": true,
+    "fake_citation_accepted": false,
+    "fake_result_accepted": false
+  },
+  "review_dataset": {
+    "created": true,
+    "paper_count": 1,
+    "review_count": 2,
+    "scores_parsed": true,
+    "weaknesses_extracted": true,
+    "reviewer_ids_hashed": true,
+    "private_data_stored": false,
+    "license_warnings_preserved": true,
+    "synthetic_fixture_only": true
+  },
+  "taxonomy": {
+    "labels_generated": true,
+    "issue_types": ["writing clarity", "reproducibility issue"],
+    "expected_issue_types": ["writing clarity"],
+    "severity_mapped": true,
+    "gate_mapping": true,
+    "auditable": true,
+    "claims_ground_truth_without_human_verification": false
+  },
+  "reviewer_calibration": {
+    "trained_or_calibrated": true,
+    "evaluation_report": true,
+    "issue_recall_proxy": 0.7,
+    "severity_calibration_score": 0.7,
+    "review_specificity_score": 0.75,
+    "evidence_linkage_score": 0.8,
+    "hallucination_rate": 0.0,
+    "claims_human_equivalence": false
+  },
+  "drastic_review": {
+    "generated": true,
+    "roles": ["novelty skeptic", "empirical rigor", "benchmark validity", "clarity", "reproducibility", "area chair"],
+    "harsher_than_baseline": true,
+    "evidence_linked": true,
+    "fake_citations": false,
+    "invented_missing_results": false,
+    "likely_scores": true,
+    "borderline_decision_analysis": true,
+    "fatal_expected": true,
+    "fatal_flaws": ["copied source-paper prose in generated rewrite"],
+    "likely_decision": "reject"
+  },
+  "revision_plan": {
+    "generated": true,
+    "fatal_expected": true,
+    "fatal_fixes": ["regenerate rewrite from structure-only recommendations"],
+    "major_expected": true,
+    "major_fixes": ["rerun plagiarism safety report"],
+    "new_experiments_required": false,
+    "new_related_work_required": false,
+    "claim_softening_required": false,
+    "artifact_updates_required": true,
+    "artifact_updates_created": true,
+    "fake_rebuttal_answers": false,
+    "publication_status_downgraded_if_blocked": true,
+    "fatal_blockers_remaining": true
+  },
+  "v25_release_gate": {
+    "expected_outcome": "no_go",
+    "expected_pass": false,
+    "expected_blockers": ["copied prose detected"]
+  }
+}

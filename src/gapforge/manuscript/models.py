@@ -18,6 +18,17 @@ MANUSCRIPT_SECTION_TYPES = {
     "ethics",
     "conclusion",
     "appendix",
+    "background",
+    "benchmark_protocol",
+    "dataset",
+    "design",
+    "discussion",
+    "evaluation",
+    "implementation",
+    "main_results",
+    "preliminaries",
+    "proofs",
+    "threat_model",
 }
 MANUSCRIPT_SECTION_STATUSES = {"missing", "drafted", "needs_review", "approved"}
 MANUSCRIPT_CLAIM_USE_TYPES = {"background", "novelty", "method", "result", "limitation", "future_work"}
