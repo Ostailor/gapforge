@@ -10,7 +10,7 @@ from gapforge.config import GapForgeConfig
 from gapforge.manuscript.manager import ManuscriptManager
 from gapforge.models import ExperimentCodeTask, Provenance, SearchQueryRecord, from_dict, to_plain
 from gapforge.project_memory import ProjectMemoryManager
-from gapforge.reviewers.drastic_panel import DrasticReviewPanel, DrasticReviewPanelBuilder
+from gapforge.reviewers.drastic_panel import DrasticReviewPanel, DrasticReviewPanelBuilder, DrasticReviewRerunResult
 from gapforge.state import slugify, utc_now_iso
 
 
@@ -27,6 +27,7 @@ class DrasticRevisionPlan:
     claim_softening_required: list[str] = field(default_factory=list)
     manuscript_rewrites_required: list[str] = field(default_factory=list)
     artifact_updates_required: list[str] = field(default_factory=list)
+    closed_items: list[str] = field(default_factory=list)
     status: str = "blocked"
     provenance: Provenance = field(default_factory=lambda: Provenance(created_by_skill="drastic-revision-plan"))
 
@@ -69,6 +70,28 @@ class DrasticRevisionManager:
         plan = self.load(manuscript_id)
         self._downgrade_publication_candidate_if_blocked(plan)
         return render_drastic_revision_status(plan)
+
+    def close_item(self, manuscript_id: str, item_id: str) -> DrasticRevisionPlan:
+        plan = self.load(manuscript_id)
+        rerun = DrasticReviewPanelBuilder(self.config).rerun_manuscript(manuscript_id)
+        _ensure_item_can_close(plan, item_id, rerun)
+        closed = _close_matching_items(plan, item_id)
+        if not closed:
+            raise ValueError(f"No drastic revision item matched `{item_id}`.")
+        plan.closed_items = _unique([*plan.closed_items, *closed])
+        plan.status = _plan_status(plan)
+        plan.provenance = Provenance(
+            created_by_skill="drastic-revision-close",
+            source_ids=[plan.id, manuscript_id, item_id, rerun.id, *closed],
+            timestamp=utc_now_iso(),
+            reasoning_summary="Closed drastic revision item only after the current rerun no longer reported the matched fatal blocker.",
+        )
+        self._write_plan(plan)
+        self._downgrade_publication_candidate_if_blocked(plan)
+        return plan
+
+    def readiness_delta(self, manuscript_id: str) -> str:
+        return DrasticReviewPanelBuilder(self.config).readiness_delta_report(manuscript_id)
 
     def render_markdown(self, plan: DrasticRevisionPlan) -> str:
         return render_drastic_revision_plan(plan)
@@ -204,6 +227,10 @@ def render_drastic_revision_plan(plan: DrasticRevisionPlan) -> str:
         "## Artifact Updates Required",
         "",
         *[f"- {item}" for item in (plan.artifact_updates_required or ["none"])],
+        "",
+        "## Closed Items",
+        "",
+        *[f"- {item}" for item in (plan.closed_items or ["none"])],
     ]
     return "\n".join(lines).rstrip() + "\n"
 
@@ -218,6 +245,7 @@ def render_drastic_revision_status(plan: DrasticRevisionPlan) -> str:
         f"- New experiments required: {len(plan.new_experiments_required)}\n"
         f"- New related-work searches required: {len(plan.new_related_work_required)}\n"
         f"- Claim softening required: {len(plan.claim_softening_required)}\n"
+        f"- Closed items: {len(plan.closed_items)}\n"
     )
 
 
@@ -270,6 +298,64 @@ def _plan_from_panel(manuscript_id: str, panel: DrasticReviewPanel) -> DrasticRe
 
 def _prefix_fixes(prefix: str, fixes: list[str]) -> list[str]:
     return [f"{prefix}:{fix}" if not fix.startswith(f"{prefix}:") else fix for fix in fixes]
+
+
+def _ensure_item_can_close(plan: DrasticRevisionPlan, item_id: str, rerun: DrasticReviewRerunResult) -> None:
+    matched_fatal = [item for item in plan.fatal_fixes if _item_matches(item, item_id)]
+    if not matched_fatal:
+        return
+    remaining = " ".join(rerun.remaining_blockers).lower()
+    for item in matched_fatal:
+        blocker_key = _fatal_item_key(item)
+        if blocker_key and blocker_key.lower() in remaining:
+            raise ValueError(f"Cannot close `{item_id}` because fatal blocker `{blocker_key}` remains in the latest drastic rerun.")
+
+
+def _close_matching_items(plan: DrasticRevisionPlan, item_id: str) -> list[str]:
+    closed: list[str] = []
+    for field_name in [
+        "fatal_fixes",
+        "major_fixes",
+        "optional_fixes",
+        "new_experiments_required",
+        "new_related_work_required",
+        "claim_softening_required",
+        "manuscript_rewrites_required",
+        "artifact_updates_required",
+    ]:
+        values = list(getattr(plan, field_name))
+        remaining = []
+        for value in values:
+            if _item_matches(value, item_id):
+                closed.append(value)
+            else:
+                remaining.append(value)
+        setattr(plan, field_name, remaining)
+    return _unique(closed)
+
+
+def _item_matches(value: str, item_id: str) -> bool:
+    normalized_value = " ".join(value.split())
+    normalized_item = " ".join(item_id.split())
+    return (
+        normalized_value == normalized_item
+        or slugify(normalized_value) == slugify(normalized_item)
+        or normalized_item in normalized_value
+        or slugify(normalized_item) in slugify(normalized_value)
+    )
+
+
+def _fatal_item_key(item: str) -> str:
+    cleaned = item.removeprefix("fatal:")
+    return cleaned.split(maxsplit=1)[0]
+
+
+def _plan_status(plan: DrasticRevisionPlan) -> str:
+    if plan.fatal_fixes:
+        return "fatal_blockers_open"
+    if plan.major_fixes:
+        return "needs_revision"
+    return "ready"
 
 
 def _review_required_fixes(panel: DrasticReviewPanel) -> list[str]:

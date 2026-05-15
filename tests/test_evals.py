@@ -22,6 +22,7 @@ from gapforge.evals.fixtures import (
     V23_FIXTURE_NAMES,
     V24_FIXTURE_NAMES,
     V25_FIXTURE_NAMES,
+    V26_FIXTURE_NAMES,
     list_fixtures,
     load_fixture,
     load_v2_idea_fixture,
@@ -37,13 +38,16 @@ from gapforge.evals.fixtures import (
     load_v23_fixture,
     load_v24_fixture,
     load_v25_fixture,
+    load_v26_fixture,
 )
 from gapforge.evals.metrics import (
     actual_run_gate_correctness,
+    adapter_assessment_honesty,
     adapter_transparency_score,
     agent_output_validation_strictness,
     anonymization_safety,
     artifact_eval_package_score,
+    artifact_package_loader_correctness,
     baseline_calibration_quality,
     baseline_strength_quality,
     baseline_suite_completeness,
@@ -57,6 +61,7 @@ from gapforge.evals.metrics import (
     direction_maturity_accuracy,
     direction_maturity_gate_accuracy_from_fixture,
     drastic_review_quality,
+    drastic_review_rerun_quality,
     empirical_claim_validity,
     empirical_review_quality,
     error_analysis_quality,
@@ -74,6 +79,7 @@ from gapforge.evals.metrics import (
     manuscript_maturity_honesty,
     manuscript_package_honesty,
     manuscript_traceability_score,
+    matrix_loader_correctness,
     mutation_quality,
     novelty_research_loop_quality,
     paper_package_honesty,
@@ -83,6 +89,8 @@ from gapforge.evals.metrics import (
     prior_work_recall_gate_score,
     publication_review_quality,
     quality_review_gate_correctness,
+    readiness_status_correctness,
+    real_benchmark_search_quality,
     real_literature_refusal_quality,
     rebuttal_actionability,
     related_work_attachment_quality,
@@ -97,6 +105,7 @@ from gapforge.evals.metrics import (
     reviewer_blocker_quality,
     reviewer_calibration_score,
     reviewer_panel_quality,
+    revision_package_completeness,
     revision_plan_actionability,
     rollback_safety,
     search_strategy_completeness,
@@ -119,6 +128,7 @@ from gapforge.evals.metrics import (
     v23_release_gate_correctness,
     v24_release_gate_correctness,
     v25_release_gate_correctness,
+    v26_release_gate_correctness,
     venue_checklist_score,
     venue_style_safety_score,
     vetted_benchmark_fit_quality,
@@ -1088,6 +1098,95 @@ def test_v25_run_evals_supports_single_fixture_flag() -> None:
     assert result.scores.drastic_review_quality == 1.0
     assert result.scores.v25_release_gate_correctness == 1.0
     assert result.scores.v25_overall() is not None
+
+
+def test_v26_eval_fixtures_are_complete_and_offline() -> None:
+    for name in V26_FIXTURE_NAMES:
+        fixture = load_v26_fixture(name)
+        assert fixture.is_v26
+        assert fixture.topic
+        assert fixture.papers
+        payload = fixture.selected_benchmark_v26_fixture
+        assert payload["matrix_loader"]
+        assert payload["artifact_package_loader"]
+        assert payload["real_benchmark_search"]
+        assert payload["adapter_assessment"]
+        assert payload["real_benchmark_experiment"]
+        assert payload["venue_artifact_integration"]
+        assert payload["drastic_review_rerun"]
+        assert payload["revision_package"]
+        assert payload["safety"]
+        assert payload["v26_release_gate"]
+
+
+def test_eval_cli_v26_fixture_and_report(tmp_path: Path) -> None:
+    env = {**os.environ, "GAPFORGE_DISABLE_NETWORK": "1"}
+    env["PYTHONPATH"] = str(Path.cwd() / "src")
+    env["GAPFORGE_ROOT"] = str(tmp_path)
+
+    single = subprocess.run(
+        [sys.executable, "-m", "gapforge.cli", "eval", "--fixture", "matrix_package_resolved_workshop_candidate", "--v26"],
+        cwd=Path.cwd(),
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    report = subprocess.run(
+        [sys.executable, "-m", "gapforge.cli", "eval", "--v26", "--write-report"],
+        cwd=Path.cwd(),
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert single.returncode == 0, single.stderr
+    assert report.returncode == 0, report.stderr
+    text = (tmp_path / "eval_report.md").read_text(encoding="utf-8")
+    assert "Overall score" in report.stdout
+    assert "v2.6 Drastic Remediation" in text
+    assert "matrix_package_resolved_workshop_candidate" in text
+
+
+def test_v26_fixture_metrics_cover_remediation_and_readiness() -> None:
+    workshop = load_v26_fixture("matrix_package_resolved_workshop_candidate").selected_benchmark_v26_fixture
+    matrix_missing = load_v26_fixture("matrix_missing_blocked").selected_benchmark_v26_fixture
+    artifact_missing = load_v26_fixture("artifact_package_missing_blocked").selected_benchmark_v26_fixture
+    no_fit = load_v26_fixture("real_benchmark_no_fit_honest").selected_benchmark_v26_fixture
+    sanity = load_v26_fixture("real_benchmark_sanity_check").selected_benchmark_v26_fixture
+    copied = load_v26_fixture("copied_prose_blocked").selected_benchmark_v26_fixture
+    fatal = load_v26_fixture("fatal_reviewers_remain_revise").selected_benchmark_v26_fixture
+    conference = load_v26_fixture("conference_candidate_no_fatal_blockers").selected_benchmark_v26_fixture
+
+    assert matrix_loader_correctness(workshop) == 1.0
+    assert artifact_package_loader_correctness(workshop) == 1.0
+    assert real_benchmark_search_quality(no_fit) == 1.0
+    assert adapter_assessment_honesty(sanity) == 1.0
+    assert drastic_review_rerun_quality(fatal) == 1.0
+    assert revision_package_completeness(conference) == 1.0
+    assert readiness_status_correctness(workshop) == 1.0
+    assert v26_release_gate_correctness(workshop) == 1.0
+    assert v26_release_gate_correctness(matrix_missing) == 1.0
+    assert v26_release_gate_correctness(artifact_missing) == 1.0
+    assert v26_release_gate_correctness(no_fit) == 1.0
+    assert v26_release_gate_correctness(copied) == 1.0
+    assert v26_release_gate_correctness(fatal) == 1.0
+    assert v26_release_gate_correctness(conference) == 1.0
+    assert workshop["v26_release_gate"]["expected_status"] == "workshop_candidate"
+    assert conference["v26_release_gate"]["expected_status"] == "conference_candidate"
+    assert fatal["v26_release_gate"]["expected_status"] == "revise_for_reviews"
+
+
+def test_v26_run_evals_supports_single_fixture_flag() -> None:
+    report = run_evals(fixture="fatal_reviewers_remain_revise", v26=True, write_report=False)
+    result = report.results[0]
+
+    assert report.v26
+    assert result.fixture_name == "fatal_reviewers_remain_revise"
+    assert result.scores.drastic_review_rerun_quality == 1.0
+    assert result.scores.v26_release_gate_correctness == 1.0
+    assert result.scores.v26_overall() is not None
 
 
 def test_v2_duplicate_ideas_are_rejected_by_dossier_aware_novelty_gate() -> None:

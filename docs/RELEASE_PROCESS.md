@@ -35,8 +35,9 @@ GAPFORGE_DISABLE_NETWORK=1 gapforge report --strict
 18. For v2.3 releases, complete the main-scale benchmark and publication-readiness process in `docs/V2_3_ROADMAP.md`, `docs/V2_3_MAIN_BENCHMARK.md`, `docs/V2_3_RELATED_WORK_COMPLETION.md`, `docs/V2_3_PUBLICATION_READINESS.md`, and `docs/V2_3_ACCEPTANCE_CRITERIA.md`.
 19. For v2.4 releases, complete the related-work remediation process in `docs/V2_4_ROADMAP.md`, `docs/V2_4_RELATED_WORK_COMPLETION.md`, `docs/V2_4_PUBLICATION_REMEDIATION.md`, and `docs/V2_4_ACCEPTANCE_CRITERIA.md`.
 20. For v2.5 releases, complete the real benchmark grounding, venue-style manuscript, and OpenReview reviewer-calibration process in `docs/V2_5_ROADMAP.md`, `docs/V2_5_REAL_BENCHMARK_GROUNDING.md`, `docs/V2_5_VENUE_STYLE_MANUSCRIPT.md`, `docs/V2_5_OPENREVIEW_REVIEWER_DATASET.md`, and `docs/V2_5_ACCEPTANCE_CRITERIA.md`.
-21. Commit with a message that records constraints, rejected alternatives if useful, confidence, scope risk, tested commands, and known gaps.
-22. Tag the release only after the checks pass.
+21. For v2.6 releases, complete the drastic review remediation and real artifact package process in `docs/V2_6_ROADMAP.md`, `docs/V2_6_DRASTIC_REVIEW_REMEDIATION.md`, `docs/V2_6_ARTIFACT_PACKAGE_REMEDIATION.md`, `docs/V2_6_REAL_BENCHMARK_UPGRADE.md`, and `docs/V2_6_ACCEPTANCE_CRITERIA.md`.
+22. Commit with a message that records constraints, rejected alternatives if useful, confidence, scope risk, tested commands, and known gaps.
+23. Tag the release only after the checks pass.
 
 ## v0.3 Validation Levels
 
@@ -871,6 +872,77 @@ Release notes must distinguish:
 
 If any minimum artifact is missing, release notes must say `v2.5 ended in revise/no-go; benchmark grounding, venue-style, or reviewer-calibration artifacts are incomplete`. Do not call the paper submission-ready, accepted, or top-conference-ready from v2.5 artifacts alone.
 
+## v2.6 Drastic Review Remediation and Real Artifact Package Gate
+
+v2.6 starts from the v2.5 `revise_for_reviews` outcome. The selected manuscript has venue-style shaping, benchmark adapter plumbing, and OpenReview-calibrated drastic review, but the drastic review preserved two fatal blockers:
+
+- `missing:related_work_matrix`
+- `missing:artifact_package`
+
+v2.6 continues the locked selected idea:
+
+- Idea ID: `idea-sequential-specificity-benchmark-for-low-fpr-collusion-audits`
+- Title: `Sequential specificity benchmark for low-FPR collusion audits`
+- Manuscript ID: `manuscript-sequential-specificity-benchmark-for-low-fpr-collusion-audits`
+
+Before tagging v2.6, the release process should require:
+
+```bash
+make ci
+make eval
+gapforge v25-release-gate --write-report --json
+gapforge drastic-review-load --manuscript-id <manuscript-id>
+gapforge drastic-revision-plan-load --manuscript-id <manuscript-id>
+gapforge selected-related-work-matrix-recover --benchmark-id <benchmark-id>
+gapforge selected-related-work-matrix-check --benchmark-id <benchmark-id>
+gapforge selected-artifact-package-recover --manuscript-id <manuscript-id>
+gapforge selected-artifact-package-check --manuscript-id <manuscript-id>
+gapforge selected-public-benchmark-inventory --benchmark-id <benchmark-id>
+gapforge selected-public-benchmark-adapter-attempt --benchmark-id <benchmark-id> --source-benchmark <source-id>
+gapforge selected-public-benchmark-no-fit-report --benchmark-id <benchmark-id>
+gapforge manuscript-revise-after-artifact-repair --manuscript-id <manuscript-id>
+gapforge drastic-review --manuscript-id <manuscript-id> --rerun
+gapforge drastic-revision-plan-close --manuscript-id <manuscript-id>
+gapforge v26-release-gate --write-report --json
+gapforge dashboard --project-id <selected-project-id> --include-selected-v26
+```
+
+Equivalent scripts may use `gapforge.api` wrappers only when they produce the same matrix recovery, artifact package recovery, benchmark adapter/no-fit, manuscript revision, drastic rerun, revision-plan closure, and release-gate artifacts. Prose cannot replace missing related-work matrix, artifact package, benchmark fit/no-fit, or drastic-review evidence.
+
+The v2.6 release gate should require:
+
+- deterministic CI remains passing
+- v2.5 release-gate and drastic-review records remain loadable or are recovered from release records
+- v2.5 fatal blockers are preserved until resolved by evidence
+- selected related-work matrix is loadable before publication-readiness or conference-candidate status
+- selected artifact evaluation package is loadable before publication-readiness or conference-candidate status
+- related-work matrix references real traceable paper records and preserves missing or weak categories
+- artifact package manifest, reviewer files, commands, data notes, expected outputs, result artifacts, and known failures are checked
+- no artifact package files, commands, datasets, hashes, results, or reviewer checklists are invented
+- at least one real external/public benchmark adapter is attempted, or a benchmark no-fit report is completed
+- synthetic v2.5 fixture benchmark evidence is not described as real collusion benchmark validity
+- manuscript is revised only with links to matrix, artifact package, adapter/no-fit, result artifacts, or explicit limitations
+- venue-style sources are not copied
+- drastic review is rerun after remediation using same or stricter standards
+- drastic revision plan ends as closed, downgraded, open, or new-fatal with evidence
+- final readiness decision is one of `workshop_candidate`, `conference_candidate`, `revise_for_reviews`, `benchmark_no_fit`, or `no_go`
+- no acceptance, likely-acceptance, camera-ready, deployment-validity, `SOTA`, `first`, or unsupported real-collusion-validity claim passes
+
+Release notes must distinguish:
+
+- v2.5 drastic-review blocker handoff
+- related-work matrix recovery, repair, and loadability status
+- artifact package recovery, creation, and loadability status
+- public benchmark candidates accepted, rejected, blocked, or no-fit
+- synthetic fixture boundary
+- manuscript claim changes and limitation changes
+- drastic rerun outcome
+- drastic revision plan closure or downgrade status
+- final v2.6 readiness decision
+- remaining risks and exact claims still blocked
+
+If the related-work matrix or artifact package is missing or unloadable, release notes must say `v2.6 ended without publication readiness; related-work matrix or artifact package blockers remain`. If no public benchmark fits, release notes may say `v2.6 ended in benchmark_no_fit` only when the no-fit report is complete and claims are narrowed accordingly. Do not call the paper accepted, camera-ready, or real-collusion benchmark-valid from v2.6 artifacts alone.
+
 ## Tagging
 
 Use semantic version tags:
@@ -926,4 +998,9 @@ Release notes should include:
 - For v2.5, do not use public paper TeX/source for copied prose, captions, equations, distinctive macros, or reviewer responses; use it only for allowed structure/style/format analysis.
 - For v2.5, do not treat OpenReview reviewer modeling as truth generation, acceptance prediction, or evidence that harsh objections are resolved.
 - For v2.5, require at least one vetted benchmark adapter, one venue-style manuscript package, and one OpenReview-calibrated reviewer pass before any review-candidate release statement.
+- For v2.6, do not claim publication readiness unless the selected related-work matrix and artifact evaluation package are loadable.
+- For v2.6, do not close drastic-review fatal blockers with rebuttal prose, softer review language, or hidden limitations.
+- For v2.6, do not treat the v2.5 synthetic fixture as real collusion benchmark grounding.
+- For v2.6, do not invent artifact package files, commands, hashes, datasets, results, reviewer checklists, citations, or benchmark labels.
+- For v2.6, allow `benchmark_no_fit` only when the public benchmark inventory and no-fit report are complete and manuscript claims are narrowed accordingly.
 - Do not publish generated `runs/`, caches, or local environment artifacts as source.

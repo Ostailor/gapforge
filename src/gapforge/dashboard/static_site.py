@@ -50,6 +50,7 @@ from gapforge.release_gate.v22 import V22ReleaseGateEnforcer, render_v22_release
 from gapforge.release_gate.v23 import V23ReleaseGateEnforcer, render_v23_release_gate_markdown
 from gapforge.release_gate.v24 import V24ReleaseGateEnforcer, render_v24_release_gate_markdown
 from gapforge.release_gate.v25 import V25ReleaseGateEnforcer, render_v25_release_gate_markdown
+from gapforge.release_gate.v26 import V26ReleaseGateEnforcer, render_v26_release_gate_markdown
 from gapforge.state import ResearchStateManager
 from gapforge.venues import list_venue_profiles
 
@@ -187,6 +188,18 @@ SELECTED_V25_PAGES = [
     ("v25_release_gate.html", "v2.5 Release Gate"),
 ]
 
+SELECTED_V26_PAGES = [
+    ("matrix_loader.html", "Matrix Loader"),
+    ("artifact_package_loader.html", "Artifact Package Loader"),
+    ("real_benchmark_search.html", "Real Benchmark Search"),
+    ("real_benchmark_adapter.html", "Real Benchmark Adapter"),
+    ("real_benchmark_experiment.html", "Real Benchmark Experiment"),
+    ("venue_artifact_integration.html", "Venue Artifact Integration"),
+    ("drastic_review_rerun.html", "Drastic Review Rerun"),
+    ("venue_revision_package.html", "Venue Revision Package"),
+    ("v26_release_gate.html", "v2.6 Release Gate"),
+]
+
 
 @dataclass(slots=True)
 class DashboardResult:
@@ -221,6 +234,7 @@ class StaticDashboardBuilder:
         include_selected_main: bool = False,
         include_selected_v24: bool = False,
         include_selected_v25: bool = False,
+        include_selected_v26: bool = False,
     ) -> DashboardResult:
         program = self.project_manager.load_project(project_id)
         states = [self.state_manager.load_run(run_id) for run_id in program.run_ids]
@@ -234,6 +248,7 @@ class StaticDashboardBuilder:
             include_selected_main=include_selected_main,
             include_selected_v24=include_selected_v24,
             include_selected_v25=include_selected_v25,
+            include_selected_v26=include_selected_v26,
             config=self.config,
         )
         return _write_dashboard(Path(program.project.root_dir) / "dashboard", context)
@@ -284,6 +299,7 @@ class _DashboardContext:
         selected_main_enabled: bool = False,
         selected_v24_enabled: bool = False,
         selected_v25_enabled: bool = False,
+        selected_v26_enabled: bool = False,
     ) -> None:
         self.title = title
         self.subtitle = subtitle
@@ -313,6 +329,7 @@ class _DashboardContext:
         self.selected_main_enabled = selected_main_enabled
         self.selected_v24_enabled = selected_v24_enabled
         self.selected_v25_enabled = selected_v25_enabled
+        self.selected_v26_enabled = selected_v26_enabled
 
     @classmethod
     def from_run(cls, state: ResearchRunState) -> _DashboardContext:
@@ -352,6 +369,7 @@ class _DashboardContext:
         include_selected_main: bool = False,
         include_selected_v24: bool = False,
         include_selected_v25: bool = False,
+        include_selected_v26: bool = False,
         config: GapForgeConfig | None = None,
     ) -> _DashboardContext:
         coverage_reports = [state.source_coverage for state in states if state.source_coverage is not None]
@@ -394,7 +412,14 @@ class _DashboardContext:
             else _empty_manuscript_context(),
             ideas=_load_idea_context(program.project.id, config) if include_ideas and config is not None else _empty_idea_context(),
             selected_idea=_load_selected_idea_context(program.project.id, config)
-            if (include_selected_idea or include_selected_pilot or include_selected_main or include_selected_v24 or include_selected_v25)
+            if (
+                include_selected_idea
+                or include_selected_pilot
+                or include_selected_main
+                or include_selected_v24
+                or include_selected_v25
+                or include_selected_v26
+            )
             and config is not None
             else _empty_selected_idea_context(),
             ideas_enabled=include_ideas,
@@ -403,6 +428,7 @@ class _DashboardContext:
             selected_main_enabled=include_selected_main,
             selected_v24_enabled=include_selected_v24,
             selected_v25_enabled=include_selected_v25,
+            selected_v26_enabled=include_selected_v26,
         )
 
     @classmethod
@@ -610,6 +636,20 @@ def _write_dashboard(root: Path, context: _DashboardContext) -> DashboardResult:
                 "v25_release_gate.html": _render_selected_v25_release_gate_page(context),
             }
         )
+    if context.selected_v26_enabled:
+        pages.update(
+            {
+                "matrix_loader.html": _render_v26_matrix_loader_page(context),
+                "artifact_package_loader.html": _render_v26_artifact_package_loader_page(context),
+                "real_benchmark_search.html": _render_v26_real_benchmark_search_page(context),
+                "real_benchmark_adapter.html": _render_v26_real_benchmark_adapter_page(context),
+                "real_benchmark_experiment.html": _render_v26_real_benchmark_experiment_page(context),
+                "venue_artifact_integration.html": _render_v26_venue_artifact_integration_page(context),
+                "drastic_review_rerun.html": _render_v26_drastic_review_rerun_page(context),
+                "venue_revision_package.html": _render_v26_venue_revision_package_page(context),
+                "v26_release_gate.html": _render_selected_v26_release_gate_page(context),
+            }
+        )
     written = []
     for filename, body in pages.items():
         path = root / filename
@@ -686,6 +726,8 @@ def _pages_for_context(context: _DashboardContext) -> list[tuple[str, str]]:
         pages.extend(SELECTED_V24_PAGES)
     if context.selected_v25_enabled:
         pages.extend(SELECTED_V25_PAGES)
+    if context.selected_v26_enabled:
+        pages.extend(SELECTED_V26_PAGES)
     return pages
 
 
@@ -4285,6 +4327,261 @@ def _v25_boundary() -> str:
     )
 
 
+def _v26_boundary() -> str:
+    return (
+        '<p class="warning">v2.6 pages expose remediation state. They do not claim acceptance, camera-ready status, '
+        "deployment validity, or real collusion benchmark validity unless the loaded artifacts and mapping support it.</p>"
+    )
+
+
+def _render_v26_matrix_loader_page(context: _DashboardContext) -> str:
+    result = _dict(context.selected_idea["related_work_matrix_load_result"])
+    repair = _dict(context.selected_idea["related_work_matrix_repair_record"])
+    return "\n".join(
+        [
+            _v26_boundary(),
+            "<h2>Related-Work Matrix Loader</h2>",
+            _kv_table(
+                [
+                    ("Status", result.get("status", "missing")),
+                    ("Matrix ID", result.get("matrix_id", "missing")),
+                    ("Selected path", result.get("selected_path", "missing")),
+                    ("Entries", result.get("entry_count", 0)),
+                    ("Must-cite count", result.get("must_cite_count", 0)),
+                    ("Closest prior work count", result.get("closest_prior_work_count", 0)),
+                ]
+            ),
+            "<h2>Missing Categories</h2>",
+            _list([str(item) for item in _as_list(result.get("missing_categories"))], css_class="warning"),
+            "<h2>Warnings</h2>",
+            _list([str(item) for item in _as_list(result.get("warnings"))], css_class="warning"),
+            "<h2>Blockers</h2>",
+            _list([str(item) for item in _as_list(result.get("blockers"))], css_class="warning"),
+            "<h2>Repair Record</h2>",
+            _json_table([repair] if repair else []),
+        ]
+    )
+
+
+def _render_v26_artifact_package_loader_page(context: _DashboardContext) -> str:
+    result = _dict(context.selected_idea["artifact_package_load_result"])
+    repair = _dict(context.selected_idea["artifact_package_repair_record"])
+    return "\n".join(
+        [
+            _v26_boundary(),
+            "<h2>Artifact Package Loader</h2>",
+            _kv_table(
+                [
+                    ("Status", result.get("status", "missing")),
+                    ("Package ID", result.get("selected_package_id", "missing")),
+                    ("Workspace", result.get("workspace_id", "missing")),
+                    ("Expected outputs", result.get("expected_outputs_present", False)),
+                    ("Replication package", result.get("replication_package_present", False)),
+                    ("Hardware requirements", result.get("hardware_requirements_present", False)),
+                    ("Run instructions", result.get("run_instructions_present", False)),
+                ]
+            ),
+            "<h2>Required Files Present</h2>",
+            _list([str(item) for item in _as_list(result.get("required_files_present"))]),
+            "<h2>Missing Files</h2>",
+            _list([str(item) for item in _as_list(result.get("missing_files"))], css_class="warning"),
+            "<h2>Warnings</h2>",
+            _list([str(item) for item in _as_list(result.get("warnings"))], css_class="warning"),
+            "<h2>Blockers</h2>",
+            _list([str(item) for item in _as_list(result.get("blockers"))], css_class="warning"),
+            "<h2>Repair Record</h2>",
+            _json_table([repair] if repair else []),
+        ]
+    )
+
+
+def _render_v26_real_benchmark_search_page(context: _DashboardContext) -> str:
+    search = _dict(context.selected_idea["real_benchmark_search"])
+    candidates = _dict_items(context.selected_idea["real_benchmark_candidates"])
+    no_fit = str(context.selected_idea.get("real_benchmark_no_fit_report") or "")
+    return "\n".join(
+        [
+            _v26_boundary(),
+            "<h2>Real Benchmark Candidate Search</h2>",
+            _kv_table(
+                [
+                    ("Status", search.get("status", "missing")),
+                    ("Selected benchmark", search.get("selected_benchmark_id", "missing")),
+                    ("Candidates", ", ".join(str(item) for item in _as_list(search.get("candidate_benchmark_ids")))),
+                    ("Rejected", ", ".join(str(item) for item in _as_list(search.get("rejected_candidate_ids")))),
+                    ("No-fit reason", search.get("no_fit_reason", "")),
+                ]
+            ),
+            "<h2>Queries</h2>",
+            _list([str(item) for item in _as_list(search.get("search_queries"))]),
+            "<h2>Candidates</h2>",
+            _table(
+                ["ID", "Name", "Type", "Domain", "License", "Access", "Fit", "Reason"],
+                [
+                    [
+                        _code(str(item.get("id", ""))),
+                        _e(str(item.get("name", ""))),
+                        _e(str(item.get("benchmark_type", ""))),
+                        _e(str(item.get("domain", ""))),
+                        _e(str(item.get("license", ""))),
+                        _e(str(item.get("dataset_access", ""))),
+                        _e(str(item.get("fit_status", ""))),
+                        _e(str(item.get("fit_reason", ""))),
+                    ]
+                    for item in candidates
+                ],
+            ),
+            "<h2>No-Fit Report</h2>",
+            "<pre>" + _e(no_fit) + "</pre>" if no_fit else "<p>No benchmark no-fit report is available.</p>",
+        ]
+    )
+
+
+def _render_v26_real_benchmark_adapter_page(context: _DashboardContext) -> str:
+    assessments = _dict_items(context.selected_idea["real_benchmark_adapter_assessments"])
+    adapters = _dict_items(context.selected_idea["real_benchmark_adapters"])
+    return "\n".join(
+        [
+            _v26_boundary(),
+            "<h2>Real Benchmark Adapter Assessments</h2>",
+            _table(
+                ["Assessment", "Candidate", "Possible", "Type", "Claim Support", "Sequentialization", "Blockers"],
+                [
+                    [
+                        _code(str(item.get("id", ""))),
+                        _code(str(item.get("candidate_benchmark_id", ""))),
+                        _e(str(item.get("adapter_possible", ""))),
+                        _e(str(item.get("adapter_type", ""))),
+                        _e(str(item.get("expected_claim_support", ""))),
+                        _e(str(item.get("sequentialization_needed", ""))),
+                        _e("; ".join(str(value) for value in _as_list(item.get("blockers")))),
+                    ]
+                    for item in assessments
+                ],
+            ),
+            "<h2>Created Adapters</h2>",
+            _json_table(adapters),
+        ]
+    )
+
+
+def _render_v26_real_benchmark_experiment_page(context: _DashboardContext) -> str:
+    attempts = _dict_items(context.selected_idea["real_benchmark_experiment_attempts"])
+    return "\n".join(
+        [
+            _v26_boundary(),
+            "<h2>Real Benchmark Experiment Attempts</h2>",
+            _table(
+                ["Attempt", "Candidate", "Adapter", "Status", "Run Type", "Claim Support", "Limitations"],
+                [
+                    [
+                        _code(str(item.get("id", ""))),
+                        _code(str(item.get("candidate_benchmark_id", ""))),
+                        _code(str(item.get("adapter_id", ""))),
+                        _e(str(item.get("status", ""))),
+                        _e(str(item.get("run_type", ""))),
+                        _e(str(item.get("claim_support_level", ""))),
+                        _e("; ".join(str(value) for value in _as_list(item.get("limitations")))),
+                    ]
+                    for item in attempts
+                ],
+            ),
+        ]
+    )
+
+
+def _render_v26_venue_artifact_integration_page(context: _DashboardContext) -> str:
+    report = _dict(context.selected_idea["venue_artifact_integration_report"])
+    return "\n".join(
+        [
+            _v26_boundary(),
+            "<h2>Venue Artifact Integration</h2>",
+            _kv_table(
+                [
+                    ("Report", report.get("id", "missing")),
+                    ("Manuscript", report.get("manuscript_id", "missing")),
+                    ("Related-work matrix", report.get("related_work_matrix_status", "missing")),
+                    ("Artifact package", report.get("artifact_package_status", "missing")),
+                    ("Real benchmark", report.get("real_benchmark_status", "missing")),
+                ]
+            ),
+            "<h2>Integrated Sections</h2>",
+            _list([str(item) for item in _as_list(report.get("integrated_sections"))]),
+            "<h2>Updated Artifact Links</h2>",
+            _list([str(item) for item in _as_list(report.get("updated_artifact_links"))]),
+            "<h2>Warnings</h2>",
+            _list([str(item) for item in _as_list(report.get("warnings"))], css_class="warning"),
+            "<h2>Blockers</h2>",
+            _list([str(item) for item in _as_list(report.get("blockers"))], css_class="warning"),
+        ]
+    )
+
+
+def _render_v26_drastic_review_rerun_page(context: _DashboardContext) -> str:
+    result = _dict(context.selected_idea["drastic_review_rerun_result"])
+    return "\n".join(
+        [
+            _v26_boundary(),
+            "<h2>Drastic Review Rerun</h2>",
+            _kv_table(
+                [
+                    ("Result", result.get("id", "missing")),
+                    ("Manuscript", result.get("manuscript_id", "missing")),
+                    ("Previous review", result.get("previous_review_id", "missing")),
+                    ("New review", result.get("new_review_id", "missing")),
+                    ("Readiness change", result.get("readiness_change", "missing")),
+                    ("Likely decision", result.get("likely_decision", "missing")),
+                ]
+            ),
+            "<h2>Resolved Blockers</h2>",
+            _list([str(item) for item in _as_list(result.get("resolved_blockers"))]),
+            "<h2>Remaining Blockers</h2>",
+            _list([str(item) for item in _as_list(result.get("remaining_blockers"))], css_class="warning"),
+        ]
+    )
+
+
+def _render_v26_venue_revision_package_page(context: _DashboardContext) -> str:
+    package = _dict(context.selected_idea["venue_revision_package"])
+    return "\n".join(
+        [
+            _v26_boundary(),
+            "<h2>Venue Revision Package</h2>",
+            _kv_table(
+                [
+                    ("Package", package.get("id", "missing")),
+                    ("Manuscript", package.get("manuscript_id", "missing")),
+                    ("Venue profile", package.get("venue_profile_id", "missing")),
+                    ("Status", package.get("status", "missing")),
+                    ("Related-work matrix", package.get("related_work_matrix_id", "missing")),
+                    ("Artifact package", package.get("artifact_package_id", "missing")),
+                    ("Drastic review", package.get("drastic_review_id", "missing")),
+                ]
+            ),
+            "<h2>Files</h2>",
+            _list([str(item) for item in _as_list(package.get("files"))]),
+            "<h2>Limitations</h2>",
+            _list([str(item) for item in _as_list(package.get("limitations"))], css_class="warning"),
+        ]
+    )
+
+
+def _render_selected_v26_release_gate_page(context: _DashboardContext) -> str:
+    result = _dict(context.selected_idea["v26_release_gate"])
+    markdown = str(context.selected_idea.get("v26_release_gate_markdown") or "")
+    if markdown:
+        body = "<pre>" + _e(markdown) + "</pre>"
+    elif result:
+        body = "<pre>" + _e(json.dumps(result, indent=2)) + "</pre>"
+    else:
+        body = "<p>No v2.6 release gate report is available.</p>"
+    return (
+        "<h2>v2.6 Release Gate</h2>"
+        '<p class="warning">The gate verifies v2.5 blocker remediation, benchmark/no-fit evidence, and review rerun honesty. '
+        "It does not claim acceptance or camera-ready readiness.</p>" + body
+    )
+
+
 def _json_table(items: list[Any]) -> str:
     rows: list[list[str]] = []
     for item in items:
@@ -4570,6 +4867,21 @@ def _empty_selected_idea_context() -> dict[str, Any]:
         "drastic_revision_plan": {},
         "v25_release_gate": {},
         "v25_release_gate_markdown": "",
+        "related_work_matrix_load_result": {},
+        "related_work_matrix_repair_record": {},
+        "artifact_package_load_result": {},
+        "artifact_package_repair_record": {},
+        "real_benchmark_search": {},
+        "real_benchmark_candidates": [],
+        "real_benchmark_no_fit_report": "",
+        "real_benchmark_adapter_assessments": [],
+        "real_benchmark_adapters": [],
+        "real_benchmark_experiment_attempts": [],
+        "venue_artifact_integration_report": {},
+        "drastic_review_rerun_result": {},
+        "venue_revision_package": {},
+        "v26_release_gate": {},
+        "v26_release_gate_markdown": "",
     }
 
 
@@ -4715,6 +5027,41 @@ def _load_selected_idea_context(project_id: str, config: GapForgeConfig) -> dict
             context["v25_release_gate_markdown"] = render_v25_release_gate_markdown(v25_result)
     except (FileNotFoundError, json.JSONDecodeError, TypeError, ValueError):
         context["v25_release_gate"] = _read_json_safely(config.data_dir / "release_gate" / "v25_release_gate_latest.json")
+    context["related_work_matrix_load_result"] = _read_json_safely(
+        benchmark_dir / "related_work_matrix_loader" / "related_work_matrix_load_result.json"
+    )
+    context["related_work_matrix_repair_record"] = _read_json_safely(
+        benchmark_dir / "related_work_matrix_loader" / "related_work_matrix_repair_record.json"
+    )
+    context["artifact_package_load_result"] = _read_json_safely(
+        benchmark_dir / "artifact_package_loader" / "artifact_package_load_result.json"
+    )
+    context["artifact_package_repair_record"] = _read_json_safely(
+        benchmark_dir / "artifact_package_loader" / "artifact_package_repair_record.json"
+    )
+    context["real_benchmark_search"] = _read_json_safely(benchmark_dir / "real_benchmark_search" / "real_benchmark_candidate_search.json")
+    context["real_benchmark_candidates"] = _read_json_list_safely(
+        benchmark_dir / "real_benchmark_search" / "real_benchmark_candidates.json"
+    )
+    context["real_benchmark_no_fit_report"] = _read_text_safely(benchmark_dir / "real_benchmark_search" / "real_benchmark_no_fit_report.md")
+    context["real_benchmark_adapter_assessments"] = _read_json_files_safely(benchmark_dir / "real_benchmark_adapters", "*.assessment.json")
+    context["real_benchmark_adapters"] = _read_json_files_safely(benchmark_dir / "real_benchmark_adapters", "*.adapter.json")
+    context["real_benchmark_experiment_attempts"] = _read_json_list_safely(
+        benchmark_dir / "real_benchmark_experiments" / "real_benchmark_experiment_attempts.json"
+    )
+    context["venue_artifact_integration_report"] = _read_json_safely(benchmark_dir / "venue_artifact_integration" / "report.json")
+    context["venue_revision_package"] = _read_json_safely(benchmark_dir / "venue_revision_package" / "latest.json")
+    if manuscript_root is not None:
+        context["drastic_review_rerun_result"] = _read_json_safely(
+            manuscript_root / "reviews" / "drastic" / "drastic_review_rerun_result.json"
+        )
+    try:
+        v26_result = V26ReleaseGateEnforcer(config).evaluate()
+        if not v26_result.project_id or v26_result.project_id == project_id:
+            context["v26_release_gate"] = v26_result.to_dict()
+            context["v26_release_gate_markdown"] = render_v26_release_gate_markdown(v26_result)
+    except (FileNotFoundError, json.JSONDecodeError, TypeError, ValueError):
+        context["v26_release_gate"] = _read_json_safely(config.data_dir / "release_gate" / "v26_release_gate_latest.json")
     for dataset_dir in sorted((benchmark_dir / "trace_datasets").glob("*")):
         if not dataset_dir.is_dir():
             continue

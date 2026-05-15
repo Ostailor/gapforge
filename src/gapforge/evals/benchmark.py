@@ -20,6 +20,7 @@ from gapforge.evals.fixtures import (
     V23_FIXTURE_NAMES,
     V24_FIXTURE_NAMES,
     V25_FIXTURE_NAMES,
+    V26_FIXTURE_NAMES,
     EvalFixture,
     load_fixtures,
     load_v2_idea_fixtures,
@@ -35,16 +36,19 @@ from gapforge.evals.fixtures import (
     load_v23_fixtures,
     load_v24_fixtures,
     load_v25_fixtures,
+    load_v26_fixtures,
 )
 from gapforge.evals.metrics import (
     EvalScores,
     RunMetrics,
     actual_run_gate_correctness,
+    adapter_assessment_honesty,
     adapter_transparency_score,
     agent_output_validation_strictness,
     anonymization_safety,
     artifact_eval_package_score,
     artifact_hygiene_score,
+    artifact_package_loader_correctness,
     baseline_calibration_quality,
     baseline_strength_quality,
     baseline_suite_completeness,
@@ -67,6 +71,7 @@ from gapforge.evals.metrics import (
     direction_maturity_gate_accuracy_from_fixture,
     docs_audit_score,
     drastic_review_quality,
+    drastic_review_rerun_quality,
     duplicate_detection_rate,
     empirical_claim_validity,
     empirical_review_quality,
@@ -98,6 +103,7 @@ from gapforge.evals.metrics import (
     manuscript_package_honesty,
     manuscript_revision_honesty,
     manuscript_traceability_score,
+    matrix_loader_correctness,
     migration_audit_score,
     mutation_quality,
     novelty_dossier_completeness_score,
@@ -117,6 +123,8 @@ from gapforge.evals.metrics import (
     publication_review_correctness,
     publication_review_quality,
     quality_review_gate_correctness,
+    readiness_status_correctness,
+    real_benchmark_search_quality,
     real_literature_refusal_quality,
     rebuttal_actionability,
     related_work_attachment_quality,
@@ -140,6 +148,7 @@ from gapforge.evals.metrics import (
     reviewer_calibration_score,
     reviewer_objection_quality_score,
     reviewer_panel_quality,
+    revision_package_completeness,
     revision_plan_actionability,
     rollback_safety,
     search_strategy_completeness,
@@ -168,6 +177,7 @@ from gapforge.evals.metrics import (
     v23_release_gate_correctness,
     v24_release_gate_correctness,
     v25_release_gate_correctness,
+    v26_release_gate_correctness,
     venue_checklist_score,
     venue_style_safety_score,
     vetted_benchmark_fit_quality,
@@ -218,6 +228,7 @@ class EvalReport:
     v23: bool = False
     v24: bool = False
     v25: bool = False
+    v26: bool = False
     report_path: Path | None = None
 
     @property
@@ -251,9 +262,10 @@ def run_evals(
     v23: bool = False,
     v24: bool = False,
     v25: bool = False,
+    v26: bool = False,
     v2_ideas: bool = False,
 ) -> EvalReport:
-    version_flag_count = sum([v2, v3, v4, v5, v6, v7, v8, v9, v21, v22, v23, v24, v25, v2_ideas])
+    version_flag_count = sum([v2, v3, v4, v5, v6, v7, v8, v9, v21, v22, v23, v24, v25, v26, v2_ideas])
     if fixture or version_flag_count <= 1:
         selected = (
             [fixture]
@@ -261,6 +273,8 @@ def run_evals(
             else (
                 V2_IDEA_FIXTURE_NAMES
                 if v2_ideas
+                else V26_FIXTURE_NAMES
+                if v26
                 else V22_FIXTURE_NAMES
                 if v22
                 else V25_FIXTURE_NAMES
@@ -306,6 +320,7 @@ def run_evals(
             v23=v23,
             v24=v24,
             v25=v25,
+            v26=v26,
             v2_ideas=v2_ideas,
         )
     else:
@@ -336,6 +351,8 @@ def run_evals(
             fixtures.extend(load_v24_fixtures(V24_FIXTURE_NAMES, fixture_root))
         if v25:
             fixtures.extend(load_v25_fixtures(V25_FIXTURE_NAMES, fixture_root))
+        if v26:
+            fixtures.extend(load_v26_fixtures(V26_FIXTURE_NAMES, fixture_root))
         if v2_ideas:
             fixtures.extend(load_v2_idea_fixtures(V2_IDEA_FIXTURE_NAMES, fixture_root))
     results = [_evaluate_fixture(item) for item in fixtures]
@@ -355,6 +372,7 @@ def run_evals(
         v23=v23 or any(item.is_v23 for item in fixtures),
         v24=v24 or any(item.is_v24 for item in fixtures),
         v25=v25 or any(item.is_v25 for item in fixtures),
+        v26=v26 or any(item.is_v26 for item in fixtures),
     )
     if write_report:
         path = (output_dir or Path.cwd()) / "eval_report.md"
@@ -380,9 +398,12 @@ def _load_eval_fixtures_for_flags(
     v23: bool,
     v24: bool,
     v25: bool,
+    v26: bool,
     v2_ideas: bool,
 ) -> list[EvalFixture]:
-    if v22:
+    if v26:
+        fixtures = load_v26_fixtures(selected, fixture_root)
+    elif v22:
         fixtures = load_v22_fixtures(selected, fixture_root)
     elif v25:
         fixtures = load_v25_fixtures(selected, fixture_root)
@@ -467,6 +488,10 @@ def render_eval_report(report: EvalReport) -> str:
         v25_scores = [score for result in report.results if (score := result.scores.v25_overall()) is not None]
         v25_overall = round(sum(v25_scores) / len(v25_scores), 3) if v25_scores else 0.0
         lines.extend([f"v2.5 Real Benchmark Grounding overall score: **{v25_overall:.3f}**", ""])
+    if report.v26:
+        v26_scores = [score for result in report.results if (score := result.scores.v26_overall()) is not None]
+        v26_overall = round(sum(v26_scores) / len(v26_scores), 3) if v26_scores else 0.0
+        lines.extend([f"v2.6 Drastic Remediation overall score: **{v26_overall:.3f}**", ""])
     if report.v2_ideas:
         v2_idea_scores = [score for result in report.results if (score := result.scores.v2_ideas_overall()) is not None]
         v2_idea_overall = round(sum(v2_idea_scores) / len(v2_idea_scores), 3) if v2_idea_scores else 0.0
@@ -724,6 +749,23 @@ def render_eval_report(report: EvalReport) -> str:
                     "",
                 ]
             )
+        if scores.v26_overall() is not None:
+            lines.extend(
+                [
+                    "### v2.6 Drastic Remediation Scores",
+                    "",
+                    f"- matrix_loader_correctness: {scores.matrix_loader_correctness:.3f}",
+                    f"- artifact_package_loader_correctness: {scores.artifact_package_loader_correctness:.3f}",
+                    f"- real_benchmark_search_quality: {scores.real_benchmark_search_quality:.3f}",
+                    f"- adapter_assessment_honesty: {scores.adapter_assessment_honesty:.3f}",
+                    f"- drastic_review_rerun_quality: {scores.drastic_review_rerun_quality:.3f}",
+                    f"- revision_package_completeness: {scores.revision_package_completeness:.3f}",
+                    f"- readiness_status_correctness: {scores.readiness_status_correctness:.3f}",
+                    f"- v26_release_gate_correctness: {scores.v26_release_gate_correctness:.3f}",
+                    f"- fixture_v26_overall: {scores.v26_overall():.3f}",
+                    "",
+                ]
+            )
         if scores.v2_ideas_overall() is not None:
             lines.extend(
                 [
@@ -936,6 +978,16 @@ def _evaluate_fixture(fixture: EvalFixture) -> FixtureEvalResult:
         scores.drastic_review_quality = drastic_review_quality(selected_benchmark_fixture)
         scores.revision_plan_actionability = revision_plan_actionability(selected_benchmark_fixture)
         scores.v25_release_gate_correctness = v25_release_gate_correctness(selected_benchmark_fixture)
+    if fixture.is_v26:
+        selected_benchmark_fixture = fixture.selected_benchmark_v26_fixture or fixture.selected_benchmark_fixture
+        scores.matrix_loader_correctness = matrix_loader_correctness(selected_benchmark_fixture)
+        scores.artifact_package_loader_correctness = artifact_package_loader_correctness(selected_benchmark_fixture)
+        scores.real_benchmark_search_quality = real_benchmark_search_quality(selected_benchmark_fixture)
+        scores.adapter_assessment_honesty = adapter_assessment_honesty(selected_benchmark_fixture)
+        scores.drastic_review_rerun_quality = drastic_review_rerun_quality(selected_benchmark_fixture)
+        scores.revision_package_completeness = revision_package_completeness(selected_benchmark_fixture)
+        scores.readiness_status_correctness = readiness_status_correctness(selected_benchmark_fixture)
+        scores.v26_release_gate_correctness = v26_release_gate_correctness(selected_benchmark_fixture)
     if fixture.is_v2_ideas:
         idea_fixture = fixture.idea_fixture
         scores.topic_portfolio_diversity = topic_portfolio_diversity(idea_fixture)
@@ -1248,6 +1300,14 @@ def _failed_checks(scores: EvalScores, result: FixtureEvalResult) -> list[tuple[
         "drastic_review_quality": 0.85,
         "revision_plan_actionability": 0.85,
         "v25_release_gate_correctness": 1.0,
+        "matrix_loader_correctness": 0.85,
+        "artifact_package_loader_correctness": 0.85,
+        "real_benchmark_search_quality": 0.85,
+        "adapter_assessment_honesty": 0.85,
+        "drastic_review_rerun_quality": 0.85,
+        "revision_package_completeness": 0.85,
+        "readiness_status_correctness": 1.0,
+        "v26_release_gate_correctness": 1.0,
     }
     suggestions = {
         "full_text_coverage_score": "Parse more full text before evaluating research quality.",
@@ -1368,6 +1428,18 @@ def _failed_checks(scores: EvalScores, result: FixtureEvalResult) -> list[tuple[
             "Convert drastic review blockers into concrete experiments, searches, rewrites, and claim softening."
         ),
         "v25_release_gate_correctness": "Require v2.5 grounding, style safety, review calibration, and blocker-aware readiness outcomes.",
+        "matrix_loader_correctness": "Load or precisely diagnose the selected manuscript related-work matrix.",
+        "artifact_package_loader_correctness": "Load or precisely diagnose the selected manuscript artifact evaluation package.",
+        "real_benchmark_search_quality": "Record real benchmark candidates or an explicit no-fit report without synthetic-only grounding.",
+        "adapter_assessment_honesty": "Assess adapters with documented mapping limits and no hidden strong-claim promotion.",
+        "drastic_review_rerun_quality": "Compare previous and new drastic blockers while preserving remaining fatal blockers.",
+        "revision_package_completeness": (
+            "Package manuscript, bibliography, matrix, artifact package, benchmark report, review, delta, limitations, and checklist."
+        ),
+        "readiness_status_correctness": "Match readiness to resolved artifacts, no-fit evidence, and remaining drastic blockers.",
+        "v26_release_gate_correctness": (
+            "Require v2.6 matrix/package remediation, benchmark/no-fit evidence, review rerun, and honest readiness."
+        ),
     }
     for name, threshold in thresholds.items():
         value = getattr(scores, name)

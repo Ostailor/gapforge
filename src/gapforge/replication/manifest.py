@@ -38,7 +38,7 @@ def build_replication_manifest(
         commands=_commands(manifests, executions),
         expected_outputs=_expected_outputs(manifests),
         result_hashes=result_hashes,
-        random_seeds=sorted({manifest.random_seed for manifest in manifests if manifest.random_seed}),
+        random_seeds=sorted({manifest.random_seed for manifest in manifests if manifest.random_seed is not None}),
         limitations=_limitations(dataset_records, artifacts),
         provenance=Provenance(
             created_by_skill="replication-manifest",

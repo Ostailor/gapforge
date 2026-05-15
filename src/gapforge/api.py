@@ -158,6 +158,7 @@ from gapforge.release_gate.v22 import V22ReleaseGateEnforcer, V22ReleaseGateResu
 from gapforge.release_gate.v23 import V23ReleaseGateEnforcer, V23ReleaseGateResult
 from gapforge.release_gate.v24 import V24ReleaseGateEnforcer, V24ReleaseGateResult
 from gapforge.release_gate.v25 import V25ReleaseGateEnforcer, V25ReleaseGateResult
+from gapforge.release_gate.v26 import V26ReleaseGateEnforcer, V26ReleaseGateResult
 from gapforge.replication import ReplicationPackageExporter, ReplicationPackageVerifier, ReproductionRunner
 from gapforge.reporting import write_final_report
 from gapforge.results import ErrorAnalysisBuilder, ResultAggregator, ResultParser, ResultStatisticsAnalyzer
@@ -171,10 +172,13 @@ from gapforge.review_training import (
     ReviewerTrainingManager,
     ReviewerTrainingRun,
 )
-from gapforge.reviewers.drastic_panel import DrasticReviewPanel, DrasticReviewPanelBuilder
+from gapforge.reviewers.drastic_panel import DrasticReviewPanel, DrasticReviewPanelBuilder, DrasticReviewRerunResult
 from gapforge.reviewers.empirical import EmpiricalReviewBuilder
 from gapforge.search_strategy import plan_search_strategy as plan_search_strategy_skill
 from gapforge.selected_benchmark import (
+    ArtifactPackageLoader,
+    ArtifactPackageLoadResult,
+    ArtifactPackageRepairRecord,
     BaselineStrengthAssessment,
     CollusiveAlternativeManager,
     GoNoGoManager,
@@ -199,10 +203,17 @@ from gapforge.selected_benchmark import (
     PilotTraceDataset,
     PositioningReport,
     PublicationReadinessReview,
+    RealBenchmarkCandidateSearch,
+    RealBenchmarkExperimentAttempt,
+    RealBenchmarkExperimentManager,
+    RealBenchmarkSearchManager,
     RelatedWorkCategoryAttachment,
     RelatedWorkCompletionManager,
     RelatedWorkCompletionStatus,
     RelatedWorkCurationManager,
+    RelatedWorkMatrixLoader,
+    RelatedWorkMatrixLoadResult,
+    RelatedWorkMatrixRepairRecord,
     RelatedWorkReadingManager,
     RelatedWorkReadingStatus,
     RequiredRelatedWorkSearchCampaign,
@@ -242,6 +253,10 @@ from gapforge.selected_benchmark import (
     SequentialSpecificityBenchmarkSpec,
     SyntheticTraceGenerator,
     TraceDataset,
+    VenueArtifactIntegrationManager,
+    VenueArtifactIntegrationReport,
+    VenueRevisionPackage,
+    VenueRevisionPackageManager,
     VettedBenchmarkExperimentPlan,
     VettedBenchmarkExperimentResult,
     VettedBenchmarkMappingReport,
@@ -258,6 +273,7 @@ from gapforge.vetted_benchmarks import (
     BenchmarkAdapterRegistry,
     BenchmarkAdapterRun,
     BenchmarkEligibilityAssessment,
+    RealBenchmarkAdapterAssessment,
     VettedBenchmarkRecord,
     VettedBenchmarkRegistry,
 )
@@ -2635,6 +2651,107 @@ def create_drastic_revision_plan(
     return DrasticRevisionManager(_config(config)).build(manuscript_id)
 
 
+def load_selected_related_work_matrix(
+    benchmark_id: str,
+    *,
+    config: GapForgeConfig | None = None,
+) -> RelatedWorkMatrixLoadResult:
+    """Load and validate the selected manuscript related-work matrix for v2.6."""
+
+    return RelatedWorkMatrixLoader(_config(config)).load(benchmark_id)
+
+
+def repair_selected_related_work_matrix(
+    benchmark_id: str,
+    *,
+    config: GapForgeConfig | None = None,
+) -> RelatedWorkMatrixRepairRecord:
+    """Repair the selected manuscript related-work matrix load path when recorded sources allow it."""
+
+    return RelatedWorkMatrixLoader(_config(config)).repair(benchmark_id)
+
+
+def load_selected_artifact_package(
+    benchmark_id: str,
+    *,
+    config: GapForgeConfig | None = None,
+) -> ArtifactPackageLoadResult:
+    """Load and validate the selected manuscript artifact evaluation package for v2.6."""
+
+    return ArtifactPackageLoader(_config(config)).load(benchmark_id)
+
+
+def repair_selected_artifact_package(
+    benchmark_id: str,
+    *,
+    config: GapForgeConfig | None = None,
+) -> ArtifactPackageRepairRecord:
+    """Repair or regenerate the selected manuscript artifact package from recorded workspace data."""
+
+    return ArtifactPackageLoader(_config(config)).repair(benchmark_id)
+
+
+def search_real_benchmark_candidates(
+    benchmark_id: str,
+    *,
+    config: GapForgeConfig | None = None,
+) -> RealBenchmarkCandidateSearch:
+    """Search public benchmark candidates or record an explicit no-fit outcome."""
+
+    return RealBenchmarkSearchManager(_config(config)).search(benchmark_id)
+
+
+def assess_real_benchmark_adapter(
+    benchmark_id: str,
+    candidate_id: str,
+    *,
+    config: GapForgeConfig | None = None,
+) -> RealBenchmarkAdapterAssessment:
+    """Assess whether a real public benchmark candidate can be adapted without overclaiming."""
+
+    return SelectedVettedBenchmarkExperimentManager(_config(config)).assess_real_candidate(benchmark_id, candidate_id)
+
+
+def run_real_benchmark_experiment(
+    benchmark_id: str,
+    *,
+    config: GapForgeConfig | None = None,
+) -> list[RealBenchmarkExperimentAttempt]:
+    """Run or preserve v2.6 real benchmark experiment attempts with claim-support labels."""
+
+    return RealBenchmarkExperimentManager(_config(config)).run(benchmark_id)
+
+
+def integrate_venue_artifacts(
+    benchmark_id: str,
+    *,
+    config: GapForgeConfig | None = None,
+) -> VenueArtifactIntegrationReport:
+    """Integrate loadable matrix/package/benchmark status into the venue-shaped manuscript."""
+
+    return VenueArtifactIntegrationManager(_config(config)).integrate(benchmark_id)
+
+
+def rerun_drastic_review(
+    manuscript_id: str,
+    *,
+    config: GapForgeConfig | None = None,
+) -> DrasticReviewRerunResult:
+    """Rerun drastic review and compare v2.5 blockers against v2.6 remediation artifacts."""
+
+    return DrasticReviewPanelBuilder(_config(config)).rerun_manuscript(manuscript_id)
+
+
+def create_venue_revision_package(
+    benchmark_id: str,
+    *,
+    config: GapForgeConfig | None = None,
+) -> VenueRevisionPackage:
+    """Create a post-rerun venue revision package with honest readiness status."""
+
+    return VenueRevisionPackageManager(_config(config)).create(benchmark_id)
+
+
 def v25_release_gate(
     *,
     write_report: bool = False,
@@ -2643,6 +2760,20 @@ def v25_release_gate(
     """Evaluate the v2.5 real benchmark grounding and reviewer calibration release gate."""
 
     enforcer = V25ReleaseGateEnforcer(_config(config))
+    result = enforcer.evaluate()
+    if write_report:
+        enforcer.write_outputs(result)
+    return result
+
+
+def v26_release_gate(
+    *,
+    write_report: bool = False,
+    config: GapForgeConfig | None = None,
+) -> V26ReleaseGateResult:
+    """Evaluate the v2.6 drastic remediation and real artifact package release gate."""
+
+    enforcer = V26ReleaseGateEnforcer(_config(config))
     result = enforcer.evaluate()
     if write_report:
         enforcer.write_outputs(result)
@@ -2789,6 +2920,7 @@ __all__ = [
     "add_idea_feedback",
     "analyze_venue_style",
     "aggregate_results",
+    "assess_real_benchmark_adapter",
     "benchmark_compare",
     "attest_agent_run",
     "anonymize_manuscript",
@@ -2813,6 +2945,7 @@ __all__ = [
     "create_review_dataset",
     "create_run",
     "create_sweep",
+    "create_venue_revision_package",
     "download_dataset",
     "draft_manuscript",
     "empirical_review",
@@ -2830,7 +2963,10 @@ __all__ = [
     "get_project",
     "get_state",
     "import_campaign_output",
+    "integrate_venue_artifacts",
     "idea_yield",
+    "load_selected_artifact_package",
+    "load_selected_related_work_matrix",
     "mature_direction",
     "mine_gaps",
     "ingest_style_corpus",
@@ -2844,6 +2980,8 @@ __all__ = [
     "prior_work_recall",
     "real_literature_review",
     "real_literature_status",
+    "repair_selected_artifact_package",
+    "repair_selected_related_work_matrix",
     "register_baseline",
     "register_benchmark",
     "register_dataset",
@@ -2854,7 +2992,9 @@ __all__ = [
     "reproduce_package",
     "review_campaign",
     "rebuttal_plan",
+    "rerun_drastic_review",
     "run_error_analysis",
+    "run_real_benchmark_experiment",
     "run_benchmark_adapter",
     "run_drastic_review",
     "run_idea_novelty",
@@ -2866,6 +3006,7 @@ __all__ = [
     "run_vetted_experiment",
     "search_papers",
     "scaffold_experiment_code",
+    "search_real_benchmark_candidates",
     "set_venue",
     "select_venue_profile",
     "submit_job",
@@ -2877,6 +3018,7 @@ __all__ = [
     "rewrite_manuscript_for_venue",
     "v2_release_gate",
     "v25_release_gate",
+    "v26_release_gate",
     "v4_release_gate",
     "v5_release_gate",
     "v6_release_gate",

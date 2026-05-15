@@ -1,0 +1,110 @@
+{
+  "topic": "v2.6 missing artifact package remains blocked",
+  "matrix_loader": {
+    "status": "loaded",
+    "matrix_id": "matrix-v26",
+    "entry_count": 8,
+    "must_cite_count": 3,
+    "closest_prior_work_count": 2,
+    "blockers": [],
+    "fallback_entries_promoted": false
+  },
+  "artifact_package_loader": {
+    "status": "missing",
+    "selected_package_id": "",
+    "required_files_present": [],
+    "expected_outputs_present": false,
+    "replication_package_present": false,
+    "hardware_requirements_present": false,
+    "run_instructions_present": false,
+    "restricted_data_excluded": true,
+    "blockers": ["missing:artifact_package"],
+    "exact_missing_commands": ["gapforge selected-artifact-package-load --benchmark-id benchmark-v26"]
+  },
+  "real_benchmark_search": {
+    "exists": true,
+    "status": "complete",
+    "search_queries": ["public sequential detection benchmark"],
+    "candidate_benchmark_ids": ["public-aux"],
+    "rejected_candidate_ids": [],
+    "source_license_terms_preserved": true,
+    "large_download_performed": false,
+    "fit_claimed_without_mapping": false,
+    "synthetic_only": false,
+    "candidates": [
+      {
+        "id": "public-aux",
+        "source_url": "https://example.org/public-aux",
+        "license": "Apache-2.0",
+        "fit_status": "auxiliary"
+      }
+    ]
+  },
+  "adapter_assessment": {
+    "exists": true,
+    "candidate_benchmark_id": "public-aux",
+    "adapter_type": "auxiliary",
+    "fit_status": "auxiliary",
+    "expected_claim_support": "auxiliary",
+    "strong_claims_allowed": false,
+    "transformation_documented": true,
+    "hides_schema_mismatches": false,
+    "hides_label_mismatches": false,
+    "sequentialization_needed": false
+  },
+  "real_benchmark_experiment": {
+    "status": "complete",
+    "claim_support_level": "auxiliary"
+  },
+  "venue_artifact_integration": {
+    "exists": true,
+    "blockers": ["missing:artifact_package"]
+  },
+  "drastic_review_rerun": {
+    "exists": true,
+    "previous_review_id": "drastic-v25",
+    "new_review_id": "drastic-v26-artifact-missing",
+    "explicit_comparison": true,
+    "resolved_blockers": ["missing:related_work_matrix"],
+    "remaining_blockers": ["missing:artifact_package"],
+    "likely_decision": "reject_likely",
+    "new_blockers_preserved": true,
+    "fatal_blockers_preserved": true
+  },
+  "revision_package": {
+    "exists": true,
+    "status": "no_go",
+    "files": [
+      "venue-shaped manuscript",
+      "bibliography",
+      "related-work matrix",
+      "real benchmark/no-fit report",
+      "drastic review",
+      "revision delta",
+      "limitations",
+      "submission checklist"
+    ],
+    "related_work_matrix_id": "matrix-v26",
+    "artifact_package_id": "",
+    "limitations": ["missing:artifact_package"],
+    "fake_citations": false,
+    "fake_results": false,
+    "copied_prose": false,
+    "synthetic_deployment_validity_claim": false
+  },
+  "safety": {
+    "copied_prose_detected": false,
+    "fake_citation_present": false,
+    "fake_result_present": false,
+    "synthetic_deployment_validity_claim": false,
+    "release_gate_blocked": true
+  },
+  "v25_release_gate": {
+    "passes": true
+  },
+  "v26_release_gate": {
+    "expected_pass": false,
+    "expected_status": "no_go",
+    "expected_blockers": ["missing:artifact_package"]
+  }
+}

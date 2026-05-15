@@ -35,6 +35,17 @@ def test_replication_package_exports_manifest_and_files(tmp_path: Path) -> None:
     assert package.safe_to_share is True
 
 
+def test_replication_package_accepts_recorded_zero_seed(tmp_path: Path) -> None:
+    config, workspace_id, _execution_id = _replication_execution(tmp_path, random_seed=0)
+
+    package = ReplicationPackageExporter(config).export_workspace(workspace_id)
+    manifest = from_dict(ReplicationManifest, json.loads(Path(package.manifest_path).read_text(encoding="utf-8")))
+
+    assert manifest.random_seeds == [0]
+    assert package.safe_to_share is True
+    assert not any("random seed" in item.lower() for item in package.missing_requirements)
+
+
 def test_restricted_dataset_is_excluded_and_instructions_included(tmp_path: Path) -> None:
     config, workspace_id, _execution_id = _replication_execution(tmp_path, dataset_type="real", license_name="restricted")
 
@@ -117,6 +128,7 @@ def _replication_execution(
     *,
     dataset_type: str = "fixture",
     license_name: str = "MIT",
+    random_seed: int = 123,
 ) -> tuple[GapForgeConfig, str, str]:
     config = GapForgeConfig.from_cwd(tmp_path)
     project_manager = ProjectMemoryManager(config)
@@ -171,7 +183,7 @@ def _replication_execution(
         run_type="smoke",
         command=f"{sys.executable} {script}",
         expected_outputs=["results/metrics.json"],
-        random_seed=123,
+        random_seed=random_seed,
     )
     manifest.environment = {"python": sys.version.split()[0]}
     _write_manifest(workspace, manifest)

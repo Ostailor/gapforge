@@ -2,6 +2,74 @@
 
 All notable project changes should be recorded here.
 
+## 2.6.0
+
+GapForge v2.6.0 is the Drastic Review Remediation and Real Artifact Package release for the locked selected benchmark `benchmark-sequential-specificity-benchmark-for-low-fpr-collusion-audits`. It starts from v2.5's honest `revise_for_reviews` outcome and resolves the two v2.5 fatal blockers without claiming acceptance, camera-ready readiness, conference readiness, real collusion benchmark validity, or deployment validity.
+
+### Related-Work Matrix and Artifact Package Remediation
+
+- Added selected-benchmark related-work matrix load, repair, and status workflows that search selected artifacts, project matrices, citation state, v2.4 related-work matrix artifacts, and dashboard/report data.
+- Added validation for real paper identifiers, must-cite coverage, closest prior work, explicit missing categories, and fallback-only records.
+- Live v2.6 verification loaded and repaired the selected manuscript's related-work matrix from v2.4 related-work state: status `repaired`, entries 8, must-cite papers 4, closest-prior-work papers 4, and no load blockers.
+- Added selected-manuscript artifact evaluation package load and repair workflows that locate manuscript artifact-eval directories, workspace replication packages, benchmark workspaces, and v0.8 artifact-eval package artifacts.
+- Live v2.6 verification initially diagnosed a missing artifact package and missing replication package; after exporting the replication package and fixing seed handling, the selected artifact package loaded as `repaired` with required files, expected outputs, replication package, hardware requirements, and run instructions present.
+- Fixed replication packaging so a recorded seed of `0` is treated as a real seed, not as a missing reproducibility field.
+
+### Real Public Benchmark Attempt
+
+- Added public benchmark candidate search, candidate reporting, no-fit reporting, adapter assessment, adapter creation/run metadata, and real benchmark experiment attempt reporting.
+- Live v2.6 search found public candidates including AgentDojo, Agent Security Bench, InjecAgent, AgentBench, NAB, MACHIAVELLI, and MLCommons AILuminate.
+- No large or restricted benchmark dataset was downloaded automatically during release verification.
+- Real benchmark outputs are separated from synthetic selected-benchmark outputs and labeled by claim support level.
+- Metadata-only and auxiliary/sanity-check attempts do not establish primary real-collusion benchmark validity or deployment validity.
+- No-fit evidence remains acceptable when benchmark mapping does not support the selected benchmark's claims.
+
+### Venue Integration and Drastic Review Rerun
+
+- Added venue artifact integration, drastic review rerun and readiness delta reporting, and venue revision package generation.
+- Venue integration links the repaired related-work matrix, repaired artifact package, and real benchmark/no-fit evidence while preserving limitations and blocking deployment-validity claims.
+- Drastic review rerun resolved the v2.5 fatal blockers `missing:related_work_matrix` and `missing:artifact_package`.
+- The rerun changed the likely decision from `reject_likely` to `borderline_reject`; it does not claim acceptance or camera-ready readiness.
+- The venue revision package status is `workshop_candidate`, not `conference_candidate`.
+
+### API, Dashboard, Evals, Docs, and Skills
+
+- Exposed v2.6 workflows through API helpers for matrix loading/repair, artifact package loading/repair, real benchmark search, adapter assessment, experiment attempts, venue artifact integration, drastic review rerun, venue revision packaging, and the v2.6 release gate.
+- Added v2.6 dashboard pages for matrix loading, artifact package loading, real benchmark search/adapters/experiments, venue integration, drastic review rerun, venue revision packages, and release-gate status.
+- Added v2.6 eval fixtures and metrics for matrix loader correctness, artifact package loader correctness, real benchmark search quality, adapter assessment honesty, drastic review rerun quality, revision package completeness, readiness status correctness, and release-gate correctness.
+- Added v2.6 docs and Codex-readable skills for matrix recovery, artifact package repair, real benchmark search, drastic review rerun, and venue revision packages.
+- The v2.6 release gate accepts v2.5 as completed when it honestly ends in `revise_for_reviews`; it does not require pretending v2.5 was a conference-candidate pass.
+
+### Release Outcome
+
+- v2.5 release gate remains completed as `revise_for_reviews`.
+- v2.6 release gate passes as `workshop_candidate`.
+- The v2.5 fatal blockers `missing:related_work_matrix` and `missing:artifact_package` are resolved by loadable/repaired artifacts for the selected manuscript.
+- Readiness is honest: no top-conference acceptance, no camera-ready claim, no conference-candidate claim, no synthetic deployment-validity claim, and no real-collusion validity claim from metadata-only or auxiliary evidence.
+
+### Validation
+
+- `make ci` passed after release fixes: ruff format, ruff check, mypy, full pytest (`1307 passed`), and default eval.
+- `make eval` passed with score `0.708`.
+- `gapforge eval --v2 --v3 --v4 --v5 --v6 --v7 --v8 --v9 --write-report` passed with score `0.746`.
+- `gapforge eval --v2-ideas --write-report` passed with score `0.754`.
+- `gapforge eval --v21 --write-report`, `gapforge eval --v22 --write-report`, and `gapforge eval --v23 --write-report` passed with score `0.776`.
+- `gapforge eval --v24 --write-report` and `gapforge eval --v26 --write-report` passed with score `0.777`.
+- `gapforge eval --v25 --write-report` passed with score `0.752`.
+- `make v2-smoke`, `make v3-smoke`, `make v4-smoke`, `make v6-smoke`, `make v7-smoke`, `make v8-smoke`, and `make v9-smoke` passed.
+- `gapforge v1-readiness --write-report --json`, `gapforge v2-release-gate --write-report --json`, `gapforge v21-release-gate --write-report --json`, `gapforge v22-release-gate --write-report --json`, `gapforge v23-release-gate --write-report --json`, and `gapforge v24-release-gate --write-report --json` passed.
+- `gapforge v25-release-gate --write-report --json` completed honestly as `revise_for_reviews`.
+- `gapforge v26-release-gate --write-report --json` passed as `workshop_candidate` after the selected manuscript remediation workflow.
+
+### Non-Claims and Limitations
+
+- v2.6.0 does not claim acceptance, camera-ready readiness, or conference-candidate readiness.
+- v2.6.0 does not hide fatal reviewer blockers; it records which v2.5 blockers were resolved and preserves any future blockers.
+- v2.6.0 does not treat the synthetic fixture benchmark as real benchmark grounding.
+- v2.6.0 does not claim deployment validity from synthetic, auxiliary, sanity-check, or metadata-only evidence.
+- v2.6.0 does not invent citations, results, reviews, or artifact files.
+- v2.6.0 does not copy prose from venue-style sources.
+
 ## 2.5.0
 
 GapForge v2.5.0 is the Real Benchmark Grounding, Venue-Style Paper, and OpenReview Reviewer Training release for the locked selected benchmark `benchmark-sequential-specificity-benchmark-for-low-fpr-collusion-audits`. It ships the v2.5 workflow upgrade while preserving an honest manuscript readiness downgrade from the drastic reviewer panel.

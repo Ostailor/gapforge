@@ -29,6 +29,8 @@ from gapforge.project_memory import ProjectMemoryManager
 from gapforge.review_training.evaluate import ReviewerEvaluationResult
 from gapforge.review_training.taxonomy import ReviewTaxonomyReport
 from gapforge.reviewers.scoring import score_from_issues
+from gapforge.selected_benchmark.artifact_package_loader import ArtifactPackageLoader
+from gapforge.selected_benchmark.related_work_matrix_loader import RelatedWorkMatrixLoader
 from gapforge.selected_benchmark.spec import SelectedBenchmarkManager, SequentialSpecificityBenchmarkSpec
 from gapforge.selected_benchmark.vetted_experiment import (
     SelectedVettedBenchmarkExperimentManager,
@@ -61,6 +63,19 @@ class DrasticReviewPanel:
     taxonomy_issue_counts: dict[str, int] = field(default_factory=dict)
     calibration_summary: dict[str, str] = field(default_factory=dict)
     provenance: Provenance = field(default_factory=lambda: Provenance(created_by_skill="drastic-review-panel"))
+
+
+@dataclass(slots=True)
+class DrasticReviewRerunResult:
+    id: str
+    manuscript_id: str
+    previous_review_id: str
+    new_review_id: str
+    resolved_blockers: list[str] = field(default_factory=list)
+    remaining_blockers: list[str] = field(default_factory=list)
+    readiness_change: str = ""
+    likely_decision: str = "unknown"
+    provenance: Provenance = field(default_factory=lambda: Provenance(created_by_skill="drastic-review-rerun"))
 
 
 class DrasticReviewPanelBuilder:
@@ -122,11 +137,50 @@ class DrasticReviewPanelBuilder:
         (output_dir / "drastic_review_panel.md").write_text(markdown, encoding="utf-8")
         return markdown
 
+    def rerun_manuscript(self, manuscript_id: str) -> DrasticReviewRerunResult:
+        previous = self._ensure_manuscript_panel(manuscript_id)
+        previous_path = self.manuscripts.manuscript_root(manuscript_id) / "reviews" / "drastic" / "previous_review_before_rerun.json"
+        previous_path.parent.mkdir(parents=True, exist_ok=True)
+        previous_path.write_text(json.dumps(to_plain(previous), indent=2) + "\n", encoding="utf-8")
+        new = self.review_manuscript(manuscript_id)
+        resolved = _resolved_blockers(previous.fatal_flaws, new.fatal_flaws)
+        result = DrasticReviewRerunResult(
+            id=f"drastic-review-rerun-{manuscript_id}",
+            manuscript_id=manuscript_id,
+            previous_review_id=previous.id,
+            new_review_id=new.id,
+            resolved_blockers=resolved,
+            remaining_blockers=list(new.fatal_flaws),
+            readiness_change=_readiness_change(previous, new, resolved),
+            likely_decision=new.likely_decision,
+            provenance=Provenance(
+                created_by_skill="drastic-review-rerun",
+                source_ids=[manuscript_id, previous.id, new.id, *resolved, *new.fatal_flaws],
+                timestamp=utc_now_iso(),
+                reasoning_summary="Reran drastic review and compared previous versus current fatal blockers without weakening standards.",
+            ),
+        )
+        self._write_rerun_result(result)
+        return result
+
+    def readiness_delta_report(self, manuscript_id: str) -> str:
+        result = self._load_latest_rerun(manuscript_id) or self.rerun_manuscript(manuscript_id)
+        markdown = render_drastic_review_rerun_result(result)
+        root = self.manuscripts.manuscript_root(manuscript_id) / "reviews" / "drastic"
+        (root / "drastic_readiness_delta.md").write_text(markdown, encoding="utf-8")
+        return markdown
+
     def _ensure_manuscript_panel(self, manuscript_id: str) -> DrasticReviewPanel:
         path = self.manuscripts.manuscript_root(manuscript_id) / "reviews" / "drastic" / "drastic_review_panel.json"
         if path.exists():
             return from_dict(DrasticReviewPanel, json.loads(path.read_text(encoding="utf-8")))
         return self.review_manuscript(manuscript_id)
+
+    def _load_latest_rerun(self, manuscript_id: str) -> DrasticReviewRerunResult | None:
+        path = self.manuscripts.manuscript_root(manuscript_id) / "reviews" / "drastic" / "drastic_review_rerun_result.json"
+        if not path.exists():
+            return None
+        return from_dict(DrasticReviewRerunResult, json.loads(path.read_text(encoding="utf-8")))
 
     def _build_panel(
         self,
@@ -190,6 +244,13 @@ class DrasticReviewPanelBuilder:
         (output_dir / "required_revision_plan.md").write_text(render_required_revision_plan(panel), encoding="utf-8")
         (output_dir / "likely_scores.json").write_text(json.dumps(panel.likely_scores, indent=2) + "\n", encoding="utf-8")
 
+    def _write_rerun_result(self, result: DrasticReviewRerunResult) -> None:
+        output_dir = self.manuscripts.manuscript_root(result.manuscript_id) / "reviews" / "drastic"
+        output_dir.mkdir(parents=True, exist_ok=True)
+        (output_dir / "drastic_review_rerun_result.json").write_text(json.dumps(to_plain(result), indent=2) + "\n", encoding="utf-8")
+        (output_dir / "drastic_review_rerun_result.md").write_text(render_drastic_review_rerun_result(result), encoding="utf-8")
+        (output_dir / "drastic_readiness_delta.md").write_text(render_drastic_review_rerun_result(result), encoding="utf-8")
+
     def _benchmark_review_dir(self, project_id: str) -> Path:
         program = self.projects.load_project(project_id)
         return Path(program.project.root_dir) / "selected_benchmark" / "reviews" / "drastic"
@@ -217,7 +278,7 @@ class _ManuscriptDrasticContext:
             program=program,
             sections=_load_section_texts(builder.manuscripts, state),
             traceability_report=ManuscriptTraceabilityAuditor(builder.config).audit(manuscript_id),
-            related_work_matrix=_related_work_matrix(builder, program, state.manuscript.direction_id),
+            related_work_matrix=_related_work_matrix(builder, program, state.manuscript.direction_id, state.manuscript.id),
             result_artifacts=_result_artifacts(builder.workspaces, state.manuscript.workspace_id),
             artifact_package=_artifact_package(builder.config, manuscript_id),
             artifact_package_error=_artifact_package_error(builder.config, manuscript_id),
@@ -351,6 +412,33 @@ def render_required_revision_plan(panel: DrasticReviewPanel) -> str:
         "",
     ]
     lines.extend([f"- {item}" for item in panel.required_revisions] or ["- none"])
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def render_drastic_review_rerun_result(result: DrasticReviewRerunResult) -> str:
+    lines = [
+        f"# Drastic Review Rerun `{result.manuscript_id}`",
+        "",
+        f"- Previous review: `{result.previous_review_id}`",
+        f"- New review: `{result.new_review_id}`",
+        f"- Likely decision: `{result.likely_decision}`",
+        f"- Readiness change: {result.readiness_change}",
+        f"- Resolved blockers: {len(result.resolved_blockers)}",
+        f"- Remaining blockers: {len(result.remaining_blockers)}",
+        "",
+        "## Resolved Blockers",
+        "",
+    ]
+    lines.extend([f"- {blocker}" for blocker in result.resolved_blockers] or ["- none"])
+    lines.extend(["", "## Remaining Blockers", ""])
+    lines.extend([f"- {blocker}" for blocker in result.remaining_blockers] or ["- none"])
+    lines.extend(["", "## Readiness Guardrails", ""])
+    if result.remaining_blockers:
+        lines.append("- Conference candidate: blocked while fatal blockers remain.")
+    else:
+        lines.append("- Conference candidate: not blocked by fatal drastic-review blockers, but still requires separate release gates.")
+    lines.append("- Workshop candidate may be considered only if remaining issues are nonfatal and limitations are explicit.")
+    lines.append("- Resolved matrix/package blockers are evidence changes, not reviewer-standard downgrades.")
     return "\n".join(lines).rstrip() + "\n"
 
 
@@ -793,6 +881,34 @@ def _decision_from_reviews(reviews: list[ReviewerReview], fatal_flaws: list[str]
     return "revise_before_submission", False
 
 
+def _resolved_blockers(previous: list[str], new: list[str]) -> list[str]:
+    return [blocker for blocker in previous if not _same_blocker_present(blocker, new)]
+
+
+def _same_blocker_present(blocker: str, blockers: list[str]) -> bool:
+    key = _blocker_key(blocker)
+    return any(_blocker_key(candidate) == key for candidate in blockers)
+
+
+def _blocker_key(blocker: str) -> str:
+    first = blocker.split(maxsplit=1)[0]
+    return first.removeprefix("fatal:")
+
+
+def _readiness_change(previous: DrasticReviewPanel, new: DrasticReviewPanel, resolved: list[str]) -> str:
+    fatal_delta = f"fatal_blockers {len(previous.fatal_flaws)} -> {len(new.fatal_flaws)}"
+    decision_delta = f"likely_decision {previous.likely_decision} -> {new.likely_decision}"
+    workshop_delta = f"workshop_candidate {str(previous.workshop_candidate).lower()} -> {str(new.workshop_candidate).lower()}"
+    resolved_note = f"resolved {len(resolved)} blocker(s)"
+    if new.fatal_flaws:
+        gate = "conference_candidate blocked"
+    elif new.required_revisions:
+        gate = "fatal blockers cleared; revise_for_reviews/workshop_candidate may be considered with explicit limitations"
+    else:
+        gate = "fatal blockers cleared; release gates still control readiness"
+    return "; ".join([fatal_delta, decision_delta, workshop_delta, resolved_note, gate])
+
+
 def _borderline_analysis(
     *,
     likely_decision: str,
@@ -834,7 +950,12 @@ def _section_text(root: Path, section: ManuscriptSection) -> str:
     return path.read_text(encoding="utf-8")
 
 
-def _related_work_matrix(builder: DrasticReviewPanelBuilder, program: ResearchProgramState, direction_id: str) -> RelatedWorkMatrix | None:
+def _related_work_matrix(
+    builder: DrasticReviewPanelBuilder,
+    program: ResearchProgramState,
+    direction_id: str,
+    manuscript_id: str,
+) -> RelatedWorkMatrix | None:
     for matrix in program.related_work_matrices:
         if matrix.direction_id == direction_id:
             return matrix
@@ -846,7 +967,28 @@ def _related_work_matrix(builder: DrasticReviewPanelBuilder, program: ResearchPr
         for matrix in run.related_work_matrices:
             if matrix.direction_id == direction_id:
                 return matrix
+    for benchmark_id in _selected_benchmark_ids_for_project(program):
+        try:
+            recovered_matrix = RelatedWorkMatrixLoader(builder.config).load_consumable_matrix(benchmark_id)
+        except (FileNotFoundError, ValueError, TypeError, json.JSONDecodeError):
+            continue
+        if recovered_matrix is not None and recovered_matrix.direction_id == direction_id:
+            return recovered_matrix
+        if recovered_matrix is not None and manuscript_id:
+            return recovered_matrix
     return None
+
+
+def _selected_benchmark_ids_for_project(program: ResearchProgramState) -> list[str]:
+    root = Path(program.project.root_dir) / "selected_benchmark" / "spec.json"
+    if not root.exists():
+        return []
+    try:
+        raw = json.loads(root.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return []
+    benchmark_id = str(raw.get("id", ""))
+    return [benchmark_id] if benchmark_id else []
 
 
 def _result_artifacts(manager: ExperimentWorkspaceManager, workspace_id: str) -> list[ExperimentResultArtifact]:
@@ -860,14 +1002,28 @@ def _artifact_package(config: GapForgeConfig, manuscript_id: str) -> ArtifactEva
     try:
         return load_artifact_evaluation_package(config, f"artifact-eval-{manuscript_id}")
     except FileNotFoundError:
-        return None
+        loader = ArtifactPackageLoader(config)
+        try:
+            return loader.load_consumable_package_for_manuscript(manuscript_id)
+        except (FileNotFoundError, ValueError, TypeError, json.JSONDecodeError):
+            return None
 
 
 def _artifact_package_error(config: GapForgeConfig, manuscript_id: str) -> str:
     try:
         load_artifact_evaluation_package(config, f"artifact-eval-{manuscript_id}")
     except FileNotFoundError as exc:
-        return str(exc)
+        direct_error = str(exc)
+        loader = ArtifactPackageLoader(config)
+        try:
+            benchmark_id = loader.benchmark_id_for_manuscript(manuscript_id)
+            if benchmark_id:
+                result = loader.load(benchmark_id, write_report=False)
+                if result.blockers:
+                    return "; ".join(result.blockers[:3])
+        except (FileNotFoundError, ValueError, TypeError, json.JSONDecodeError):
+            pass
+        return direct_error
     return ""
 
 

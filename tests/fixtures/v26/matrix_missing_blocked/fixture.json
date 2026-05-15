@@ -1,0 +1,111 @@
+{
+  "topic": "v2.6 missing related-work matrix remains blocked",
+  "matrix_loader": {
+    "status": "missing",
+    "matrix_id": "",
+    "entry_count": 0,
+    "must_cite_count": 0,
+    "closest_prior_work_count": 0,
+    "blockers": ["missing:related_work_matrix"],
+    "exact_missing_commands": ["gapforge selected-related-work-matrix-load --benchmark-id benchmark-v26"],
+    "fallback_entries_promoted": false
+  },
+  "artifact_package_loader": {
+    "status": "loaded",
+    "selected_package_id": "artifact-package-v26",
+    "required_files_present": ["README.md", "run.sh", "expected_outputs.json"],
+    "expected_outputs_present": true,
+    "replication_package_present": true,
+    "hardware_requirements_present": true,
+    "run_instructions_present": true,
+    "restricted_data_excluded": true,
+    "blockers": []
+  },
+  "real_benchmark_search": {
+    "exists": true,
+    "status": "complete",
+    "search_queries": ["public monitor-evasion benchmark"],
+    "candidate_benchmark_ids": ["public-sanity"],
+    "rejected_candidate_ids": [],
+    "source_license_terms_preserved": true,
+    "large_download_performed": false,
+    "fit_claimed_without_mapping": false,
+    "synthetic_only": false,
+    "candidates": [
+      {
+        "id": "public-sanity",
+        "source_url": "https://example.org/public-sanity",
+        "license": "MIT",
+        "fit_status": "sanity_check"
+      }
+    ]
+  },
+  "adapter_assessment": {
+    "exists": true,
+    "candidate_benchmark_id": "public-sanity",
+    "adapter_type": "sanity_check",
+    "fit_status": "sanity_check",
+    "expected_claim_support": "sanity_check",
+    "outputs_labeled_sanity_check": true,
+    "strong_claims_allowed": false,
+    "transformation_documented": true,
+    "hides_schema_mismatches": false,
+    "hides_label_mismatches": false,
+    "sequentialization_needed": false
+  },
+  "real_benchmark_experiment": {
+    "status": "complete",
+    "claim_support_level": "sanity_check"
+  },
+  "venue_artifact_integration": {
+    "exists": true,
+    "blockers": ["missing:related_work_matrix"]
+  },
+  "drastic_review_rerun": {
+    "exists": true,
+    "previous_review_id": "drastic-v25",
+    "new_review_id": "drastic-v26-matrix-missing",
+    "explicit_comparison": true,
+    "resolved_blockers": ["missing:artifact_package"],
+    "remaining_blockers": ["missing:related_work_matrix"],
+    "likely_decision": "reject_likely",
+    "new_blockers_preserved": true,
+    "fatal_blockers_preserved": true
+  },
+  "revision_package": {
+    "exists": true,
+    "status": "no_go",
+    "files": [
+      "venue-shaped manuscript",
+      "bibliography",
+      "artifact evaluation package",
+      "real benchmark/no-fit report",
+      "drastic review",
+      "revision delta",
+      "limitations",
+      "submission checklist"
+    ],
+    "related_work_matrix_id": "",
+    "artifact_package_id": "artifact-package-v26",
+    "limitations": ["missing:related_work_matrix"],
+    "fake_citations": false,
+    "fake_results": false,
+    "copied_prose": false,
+    "synthetic_deployment_validity_claim": false
+  },
+  "safety": {
+    "copied_prose_detected": false,
+    "fake_citation_present": false,
+    "fake_result_present": false,
+    "synthetic_deployment_validity_claim": false,
+    "release_gate_blocked": true
+  },
+  "v25_release_gate": {
+    "passes": true
+  },
+  "v26_release_gate": {
+    "expected_pass": false,
+    "expected_status": "no_go",
+    "expected_blockers": ["missing:related_work_matrix"]
+  }
+}

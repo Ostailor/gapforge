@@ -1,0 +1,112 @@
+{
+  "topic": "v2.6 real benchmark sanity-check only",
+  "matrix_loader": {
+    "status": "loaded",
+    "matrix_id": "matrix-v26-sanity",
+    "entry_count": 8,
+    "must_cite_count": 3,
+    "closest_prior_work_count": 2,
+    "blockers": [],
+    "fallback_entries_promoted": false
+  },
+  "artifact_package_loader": {
+    "status": "loaded",
+    "selected_package_id": "artifact-package-v26-sanity",
+    "required_files_present": ["README.md", "run.sh", "expected_outputs.json"],
+    "expected_outputs_present": true,
+    "replication_package_present": true,
+    "hardware_requirements_present": true,
+    "run_instructions_present": true,
+    "restricted_data_excluded": true,
+    "blockers": []
+  },
+  "real_benchmark_search": {
+    "exists": true,
+    "status": "complete",
+    "search_queries": ["public LLM monitor evasion benchmark"],
+    "candidate_benchmark_ids": ["public-monitor-evasion"],
+    "rejected_candidate_ids": [],
+    "source_license_terms_preserved": true,
+    "large_download_performed": false,
+    "fit_claimed_without_mapping": false,
+    "synthetic_only": false,
+    "candidates": [
+      {
+        "id": "public-monitor-evasion",
+        "source_url": "https://example.org/public-monitor-evasion",
+        "license": "MIT",
+        "fit_status": "sanity_check"
+      }
+    ]
+  },
+  "adapter_assessment": {
+    "exists": true,
+    "candidate_benchmark_id": "public-monitor-evasion",
+    "adapter_type": "sanity_check",
+    "fit_status": "sanity_check",
+    "expected_claim_support": "sanity_check",
+    "outputs_labeled_sanity_check": true,
+    "strong_claims_allowed": false,
+    "transformation_documented": true,
+    "hides_schema_mismatches": false,
+    "hides_label_mismatches": false,
+    "sequentialization_needed": true,
+    "artificial_sequentialization_warning": true
+  },
+  "real_benchmark_experiment": {
+    "status": "complete",
+    "claim_support_level": "sanity_check"
+  },
+  "venue_artifact_integration": {
+    "exists": true,
+    "blockers": []
+  },
+  "drastic_review_rerun": {
+    "exists": true,
+    "previous_review_id": "drastic-v25",
+    "new_review_id": "drastic-v26-sanity",
+    "explicit_comparison": true,
+    "resolved_blockers": ["missing:related_work_matrix", "missing:artifact_package"],
+    "remaining_blockers": [],
+    "likely_decision": "revise_before_submission",
+    "new_blockers_preserved": true,
+    "fatal_blockers_preserved": true
+  },
+  "revision_package": {
+    "exists": true,
+    "status": "workshop_candidate",
+    "files": [
+      "venue-shaped manuscript",
+      "bibliography",
+      "related-work matrix",
+      "artifact evaluation package",
+      "real benchmark/no-fit report",
+      "drastic review",
+      "revision delta",
+      "limitations",
+      "submission checklist"
+    ],
+    "related_work_matrix_id": "matrix-v26-sanity",
+    "artifact_package_id": "artifact-package-v26-sanity",
+    "limitations": ["public monitor-evasion candidate is sanity-check only"],
+    "fake_citations": false,
+    "fake_results": false,
+    "copied_prose": false,
+    "synthetic_deployment_validity_claim": false
+  },
+  "safety": {
+    "copied_prose_detected": false,
+    "fake_citation_present": false,
+    "fake_result_present": false,
+    "synthetic_deployment_validity_claim": false,
+    "release_gate_blocked": false
+  },
+  "v25_release_gate": {
+    "passes": true
+  },
+  "v26_release_gate": {
+    "expected_pass": true,
+    "expected_status": "workshop_candidate",
+    "expected_blockers": []
+  }
+}

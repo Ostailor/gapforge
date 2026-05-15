@@ -25,6 +25,7 @@ from gapforge.release_gate.v22 import V22ReleaseGateEnforcer, V22ReleaseGateResu
 from gapforge.release_gate.v23 import V23ReleaseGateEnforcer, V23ReleaseGateResult, render_v23_release_gate_markdown
 from gapforge.release_gate.v24 import V24ReleaseGateEnforcer, V24ReleaseGateResult, render_v24_release_gate_markdown
 from gapforge.release_gate.v25 import V25ReleaseGateEnforcer, V25ReleaseGateResult, render_v25_release_gate_markdown
+from gapforge.release_gate.v26 import V26ReleaseGateEnforcer, V26ReleaseGateResult, render_v26_release_gate_markdown
 
 __all__ = [
     "ReleaseGateStatus",
@@ -57,6 +58,8 @@ __all__ = [
     "V24ReleaseGateResult",
     "V25ReleaseGateEnforcer",
     "V25ReleaseGateResult",
+    "V26ReleaseGateEnforcer",
+    "V26ReleaseGateResult",
     "parse_release_gate",
     "render_v04_release_gate_markdown",
     "render_v05_release_gate_markdown",
@@ -71,4 +74,5 @@ __all__ = [
     "render_v23_release_gate_markdown",
     "render_v24_release_gate_markdown",
     "render_v25_release_gate_markdown",
+    "render_v26_release_gate_markdown",
 ]

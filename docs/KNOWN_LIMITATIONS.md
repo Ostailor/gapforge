@@ -424,6 +424,38 @@ v2.5 non-goals:
 
 If no vetted benchmark adapter, venue-style manuscript package, or OpenReview-calibrated reviewer pass exists, v2.5 must end in revise or no-go language instead of review-candidate language.
 
+## v2.6 Drastic Review Remediation and Real Artifact Package Limits
+
+v2.6 is the remediation release after the v2.5 `revise_for_reviews` outcome for `idea-sequential-specificity-benchmark-for-low-fpr-collusion-audits`. It directly addresses the v2.5 drastic-review fatal blockers: missing loadable related-work matrix and missing loadable artifact evaluation package.
+
+v2.6 must still preserve these limits:
+
+- recovering a related-work matrix does not prove exhaustive literature coverage
+- a related-work matrix is useful only when it loads, references real traceable paper records, and preserves missing or weak categories
+- related-work prose cannot substitute for an auditable matrix
+- recovering or creating an artifact package does not create new experiments, results, benchmarks, or independent reproduction
+- an artifact package is loadable only when its manifest and reviewer files resolve to recorded state or explicit blockers
+- package directories, broken manifests, and invented file references do not count as artifact package remediation
+- the v2.5 synthetic benchmark fixture remains adapter plumbing and workflow evidence, not real collusion benchmark grounding
+- a real external/public benchmark adapter can support only the scope justified by source labels, splits, access, license, and mapping rules
+- benchmark no-fit is an honest outcome, not external validity evidence
+- venue-style manuscript revision cannot hide remaining fatal blockers
+- drastic review reruns must preserve harsh standards and evidence labels
+- top-conference readiness decisions are readiness classifications, not acceptance predictions or camera-ready status
+
+v2.6 non-goals:
+
+- claiming acceptance, likely acceptance, or camera-ready readiness
+- hiding or softening v2.5 fatal reviewer blockers without loadable evidence
+- treating synthetic fixture benchmarks as real benchmark grounding
+- inventing artifact package files, commands, hashes, datasets, results, or reviewer checklists
+- inventing citations, reviewers, review outcomes, baselines, or benchmark labels
+- copying paper prose from venue-style sources
+- weakening drastic reviewer standards to obtain a better decision
+- claiming real collusion benchmark validity unless the benchmark mapping supports it
+
+If either the selected related-work matrix or artifact package remains missing or unloadable, v2.6 cannot pass publication readiness. The strongest allowed outcomes are `revise_for_reviews`, `benchmark_no_fit`, or `no_go`, depending on the remaining evidence and blockers.
+
 ## Operational Guidance
 
 Use strict mode and coverage assessment before interpreting outputs:

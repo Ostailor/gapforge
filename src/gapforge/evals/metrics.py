@@ -170,6 +170,14 @@ class EvalScores:
     drastic_review_quality: float | None = None
     revision_plan_actionability: float | None = None
     v25_release_gate_correctness: float | None = None
+    matrix_loader_correctness: float | None = None
+    artifact_package_loader_correctness: float | None = None
+    real_benchmark_search_quality: float | None = None
+    adapter_assessment_honesty: float | None = None
+    drastic_review_rerun_quality: float | None = None
+    revision_package_completeness: float | None = None
+    readiness_status_correctness: float | None = None
+    v26_release_gate_correctness: float | None = None
 
     def overall(self) -> float:
         positive = [
@@ -413,6 +421,22 @@ class EvalScores:
             self.drastic_review_quality,
             self.revision_plan_actionability,
             self.v25_release_gate_correctness,
+        ]
+        present = [value for value in values if value is not None]
+        if not present:
+            return None
+        return round(sum(present) / len(present), 3)
+
+    def v26_overall(self) -> float | None:
+        values = [
+            self.matrix_loader_correctness,
+            self.artifact_package_loader_correctness,
+            self.real_benchmark_search_quality,
+            self.adapter_assessment_honesty,
+            self.drastic_review_rerun_quality,
+            self.revision_package_completeness,
+            self.readiness_status_correctness,
+            self.v26_release_gate_correctness,
         ]
         present = [value for value in values if value is not None]
         if not present:
@@ -2831,6 +2855,267 @@ def v25_release_gate_correctness(fixture: dict[str, object]) -> float:
     if computed_status == "benchmark_no_fit":
         checks.append(bool(_dict(fixture.get("vetted_mapping")).get("no_fit_justification")))
     return round(sum(1 for item in checks if item) / len(checks), 3)
+
+
+def matrix_loader_correctness(fixture: dict[str, object]) -> float:
+    matrix = _dict(fixture.get("matrix_loader"))
+    gate = _dict(fixture.get("v26_release_gate"))
+    expected_blockers = set(str(item) for item in _list(gate.get("expected_blockers")))
+    missing_expected = "missing:related_work_matrix" in expected_blockers
+    status = str(matrix.get("status", ""))
+    if missing_expected:
+        checks = [
+            status in {"missing", "invalid"},
+            bool(_list(matrix.get("blockers"))),
+            not bool(matrix.get("matrix_id")),
+            bool(matrix.get("exact_missing_commands")),
+        ]
+    else:
+        checks = [
+            status in {"loaded", "repaired"},
+            bool(matrix.get("matrix_id")),
+            _float(matrix.get("entry_count")) > 0,
+            _float(matrix.get("must_cite_count")) > 0,
+            _float(matrix.get("closest_prior_work_count")) > 0,
+            not bool(_list(matrix.get("blockers"))),
+            not bool(matrix.get("fallback_entries_promoted")),
+        ]
+    return round(sum(1 for item in checks if item) / len(checks), 3)
+
+
+def artifact_package_loader_correctness(fixture: dict[str, object]) -> float:
+    package = _dict(fixture.get("artifact_package_loader"))
+    gate = _dict(fixture.get("v26_release_gate"))
+    expected_blockers = set(str(item) for item in _list(gate.get("expected_blockers")))
+    missing_expected = "missing:artifact_package" in expected_blockers
+    status = str(package.get("status", ""))
+    if missing_expected:
+        checks = [
+            status in {"missing", "invalid"},
+            bool(_list(package.get("blockers"))),
+            not bool(package.get("selected_package_id")),
+            bool(package.get("exact_missing_commands")),
+        ]
+    else:
+        required = set(str(item) for item in _list(package.get("required_files_present")))
+        checks = [
+            status in {"loaded", "repaired"},
+            bool(package.get("selected_package_id")),
+            {"README.md", "run.sh", "expected_outputs.json"} <= required,
+            bool(package.get("expected_outputs_present")),
+            bool(package.get("replication_package_present")),
+            bool(package.get("hardware_requirements_present")),
+            bool(package.get("run_instructions_present")),
+            bool(package.get("restricted_data_excluded", True)),
+            not bool(_list(package.get("blockers"))),
+        ]
+    return round(sum(1 for item in checks if item) / len(checks), 3)
+
+
+def real_benchmark_search_quality(fixture: dict[str, object]) -> float:
+    search = _dict(fixture.get("real_benchmark_search"))
+    candidates = _dicts(search.get("candidates"))
+    status = str(search.get("status", ""))
+    no_fit = status == "no_fit"
+    checks = [
+        bool(search.get("exists")),
+        bool(_list(search.get("search_queries"))),
+        status in {"complete", "no_fit"},
+        bool(search.get("source_license_terms_preserved", True)),
+        not bool(search.get("large_download_performed")),
+        not bool(search.get("fit_claimed_without_mapping")),
+        not bool(search.get("synthetic_only")),
+    ]
+    if no_fit:
+        checks.extend(
+            [
+                bool(search.get("no_fit_reason")),
+                bool(search.get("no_fit_report_exists")),
+                bool(_list(search.get("rejected_candidate_ids"))),
+                not bool(_list(search.get("candidate_benchmark_ids"))),
+            ]
+        )
+    else:
+        checks.extend(
+            [
+                bool(_list(search.get("candidate_benchmark_ids"))),
+                bool(candidates),
+                all(bool(item.get("source_url")) and bool(item.get("license")) for item in candidates),
+                all(str(item.get("fit_status", "")) in {"primary", "auxiliary", "sanity_check", "no_fit"} for item in candidates),
+            ]
+        )
+    return round(sum(1 for item in checks if item) / len(checks), 3)
+
+
+def adapter_assessment_honesty(fixture: dict[str, object]) -> float:
+    search = _dict(fixture.get("real_benchmark_search"))
+    assessment = _dict(fixture.get("adapter_assessment"))
+    candidate_ids = [str(item) for item in _list(search.get("candidate_benchmark_ids"))]
+    if not candidate_ids and str(search.get("status", "")) == "no_fit":
+        checks = [
+            bool(assessment.get("not_required_due_to_no_fit", True)),
+            not bool(assessment.get("strong_claims_allowed")),
+            bool(assessment.get("no_fit_preserved", True)),
+        ]
+        return round(sum(1 for item in checks if item) / len(checks), 3)
+    fit_status = str(assessment.get("fit_status", ""))
+    checks = [
+        bool(assessment.get("exists")),
+        str(assessment.get("candidate_benchmark_id", "")) in candidate_ids,
+        bool(assessment.get("adapter_type")),
+        not bool(assessment.get("strong_claims_allowed")) or fit_status == "primary",
+        bool(assessment.get("transformation_documented")),
+        not bool(assessment.get("hides_schema_mismatches")),
+        not bool(assessment.get("hides_label_mismatches")),
+    ]
+    if fit_status == "sanity_check":
+        checks.extend(
+            [
+                str(assessment.get("expected_claim_support")) == "sanity_check",
+                bool(assessment.get("outputs_labeled_sanity_check")),
+            ]
+        )
+    if bool(assessment.get("sequentialization_needed")):
+        checks.append(bool(assessment.get("artificial_sequentialization_warning")))
+    return round(sum(1 for item in checks if item) / len(checks), 3)
+
+
+def drastic_review_rerun_quality(fixture: dict[str, object]) -> float:
+    rerun = _dict(fixture.get("drastic_review_rerun"))
+    remaining = _list(rerun.get("remaining_blockers"))
+    resolved = set(str(item) for item in _list(rerun.get("resolved_blockers")))
+    checks = [
+        bool(rerun.get("exists")),
+        bool(rerun.get("previous_review_id")),
+        bool(rerun.get("new_review_id")),
+        bool(rerun.get("explicit_comparison")),
+        {"missing:related_work_matrix", "missing:artifact_package"} <= resolved or bool(remaining),
+        str(rerun.get("likely_decision", "")) in {"accept_likely", "revise_before_submission", "reject_likely"},
+        bool(rerun.get("new_blockers_preserved", True)),
+        bool(rerun.get("fatal_blockers_preserved", True)) if remaining else True,
+    ]
+    return round(sum(1 for item in checks if item) / len(checks), 3)
+
+
+def revision_package_completeness(fixture: dict[str, object]) -> float:
+    package = _dict(fixture.get("revision_package"))
+    files = set(str(item) for item in _list(package.get("files")))
+    status = str(package.get("status", ""))
+    fatal_remaining = bool(_list(_dict(fixture.get("drastic_review_rerun")).get("remaining_blockers")))
+    checks = [
+        bool(package.get("exists")),
+        status in {"conference_candidate", "workshop_candidate", "revise_for_reviews", "no_go"},
+        "venue-shaped manuscript" in files,
+        "bibliography" in files,
+        "related-work matrix" in files,
+        "artifact evaluation package" in files,
+        "real benchmark/no-fit report" in files,
+        "drastic review" in files,
+        "revision delta" in files,
+        "limitations" in files,
+        "submission checklist" in files,
+        bool(package.get("related_work_matrix_id")) or status == "no_go",
+        bool(package.get("artifact_package_id")) or status == "no_go",
+        not bool(package.get("fake_citations")),
+        not bool(package.get("fake_results")),
+        not bool(package.get("copied_prose")),
+        not bool(package.get("synthetic_deployment_validity_claim")),
+        status != "conference_candidate" or not fatal_remaining,
+    ]
+    return round(sum(1 for item in checks if item) / len(checks), 3)
+
+
+def readiness_status_correctness(fixture: dict[str, object]) -> float:
+    expected = str(_dict(fixture.get("v26_release_gate")).get("expected_status", ""))
+    computed = _v26_decision_status(fixture)
+    checks = [
+        expected in {"conference_candidate", "workshop_candidate", "revise_for_reviews", "benchmark_no_fit", "no_go"},
+        computed == expected,
+        _computed_v26_release_gate(fixture) == bool(_dict(fixture.get("v26_release_gate")).get("expected_pass")),
+    ]
+    return round(sum(1 for item in checks if item) / len(checks), 3)
+
+
+def v26_release_gate_correctness(fixture: dict[str, object]) -> float:
+    expected = _dict(fixture.get("v26_release_gate"))
+    expected_status = str(expected.get("expected_status", ""))
+    expected_pass = bool(expected.get("expected_pass"))
+    computed_status = _v26_decision_status(fixture)
+    computed_pass = computed_status in {"conference_candidate", "workshop_candidate", "benchmark_no_fit"}
+    expected_blockers = _list(expected.get("expected_blockers"))
+    safety = _dict(fixture.get("safety"))
+    copied_or_fake = any(bool(safety.get(key)) for key in ["copied_prose_detected", "fake_citation_present", "fake_result_present"])
+    checks = [
+        bool(expected),
+        computed_status == expected_status,
+        computed_pass == expected_pass,
+        matrix_loader_correctness(fixture) >= 0.85,
+        artifact_package_loader_correctness(fixture) >= 0.85,
+        real_benchmark_search_quality(fixture) >= 0.85,
+        adapter_assessment_honesty(fixture) >= 0.85,
+        drastic_review_rerun_quality(fixture) >= 0.85,
+        readiness_status_correctness(fixture) >= 0.85,
+        bool(expected_blockers) if not expected_pass else not expected_blockers,
+    ]
+    if copied_or_fake:
+        checks.append(bool(safety.get("release_gate_blocked")) and computed_status == "no_go")
+    if computed_status == "revise_for_reviews":
+        checks.append(bool(_list(_dict(fixture.get("drastic_review_rerun")).get("remaining_blockers"))))
+    if computed_status == "benchmark_no_fit":
+        checks.append(str(_dict(fixture.get("real_benchmark_search")).get("status", "")) == "no_fit")
+    return round(sum(1 for item in checks if item) / len(checks), 3)
+
+
+def _computed_v26_release_gate(fixture: dict[str, object]) -> bool:
+    status = _v26_decision_status(fixture)
+    return status in {"conference_candidate", "workshop_candidate", "benchmark_no_fit"}
+
+
+def _v26_decision_status(fixture: dict[str, object]) -> str:
+    if not bool(_dict(fixture.get("v25_release_gate")).get("passes", True)):
+        return "no_go"
+    safety = _dict(fixture.get("safety"))
+    if any(bool(safety.get(key)) for key in ["copied_prose_detected", "fake_citation_present", "fake_result_present"]):
+        return "no_go"
+    if bool(safety.get("synthetic_deployment_validity_claim")):
+        return "no_go"
+    matrix = _dict(fixture.get("matrix_loader"))
+    if str(matrix.get("status", "")) not in {"loaded", "repaired"} or _list(matrix.get("blockers")):
+        return "no_go"
+    package = _dict(fixture.get("artifact_package_loader"))
+    if str(package.get("status", "")) not in {"loaded", "repaired"} or _list(package.get("blockers")):
+        return "no_go"
+    search = _dict(fixture.get("real_benchmark_search"))
+    if not search or str(search.get("status", "")) not in {"complete", "no_fit"}:
+        return "no_go"
+    candidate_ids = _list(search.get("candidate_benchmark_ids"))
+    assessment = _dict(fixture.get("adapter_assessment"))
+    if candidate_ids and not bool(assessment.get("exists")):
+        return "no_go"
+    experiment = _dict(fixture.get("real_benchmark_experiment"))
+    if str(search.get("status", "")) != "no_fit" and str(experiment.get("status", "")) not in {"complete", "failed", "no_fit", "skipped"}:
+        return "no_go"
+    integration = _dict(fixture.get("venue_artifact_integration"))
+    if not bool(integration.get("exists")) or _list(integration.get("blockers")):
+        return "no_go"
+    rerun = _dict(fixture.get("drastic_review_rerun"))
+    if not bool(rerun.get("exists")):
+        return "no_go"
+    package_revision = _dict(fixture.get("revision_package"))
+    package_status = str(package_revision.get("status", ""))
+    if not bool(package_revision.get("exists")):
+        return "no_go"
+    remaining_fatal = _list(rerun.get("remaining_blockers"))
+    if remaining_fatal:
+        visible = set(str(item) for item in _list(package_revision.get("limitations")))
+        if package_status != "revise_for_reviews" or not all(str(item).split(maxsplit=1)[0] in visible for item in remaining_fatal):
+            return "no_go"
+        return "revise_for_reviews"
+    if str(search.get("status", "")) == "no_fit":
+        return "benchmark_no_fit"
+    if package_status in {"conference_candidate", "workshop_candidate", "revise_for_reviews", "no_go"}:
+        return package_status
+    return "no_go"
 
 
 def _tokens(text: str) -> list[str]:

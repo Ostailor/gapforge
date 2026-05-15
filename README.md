@@ -46,6 +46,11 @@ GapForge v2 planning docs:
 - [v2.5 venue-style manuscript](docs/V2_5_VENUE_STYLE_MANUSCRIPT.md)
 - [v2.5 OpenReview reviewer dataset](docs/V2_5_OPENREVIEW_REVIEWER_DATASET.md)
 - [v2.5 acceptance criteria](docs/V2_5_ACCEPTANCE_CRITERIA.md)
+- [v2.6 drastic review remediation roadmap](docs/V2_6_ROADMAP.md)
+- [v2.6 drastic review remediation](docs/V2_6_DRASTIC_REVIEW_REMEDIATION.md)
+- [v2.6 artifact package remediation](docs/V2_6_ARTIFACT_PACKAGE_REMEDIATION.md)
+- [v2.6 real benchmark upgrade](docs/V2_6_REAL_BENCHMARK_UPGRADE.md)
+- [v2.6 acceptance criteria](docs/V2_6_ACCEPTANCE_CRITERIA.md)
 
 GapForge is intentionally skeptical. It can recommend a direction only when evidence gates support one, and it can refuse when literature coverage, novelty evidence, or empirical support is insufficient. It is not an exhaustive autonomous literature reviewer, and it must not fabricate citations, experimental results, venue acceptance, publication readiness, or novelty claims. Deterministic and offline-safe paths remain the default.
 
@@ -69,6 +74,7 @@ GapForge is intentionally skeptical. It can recommend a direction only when evid
 - **v2.3.0**: Main-Scale Benchmark and Publication-Readiness Upgrade. v2.3 directly addresses v2.2 blockers by requiring a main-scale sample-size plan, an explicit `alpha=0.001` power-or-drop decision, real prior-work records for required categories, related-work matrix completion, stronger baselines, main dataset generation or no-go, main benchmark execution or no-go, publication-readiness reviewer panel, manuscript package upgrade, and a clear go/no-go recommendation.
 - **v2.4.0**: Related Work Completion and Publication-Readiness Remediation. v2.4 starts from the v2.3 `revise_benchmark` outcome: the synthetic main benchmark completed and powered `alpha=0.001`, but publication readiness remained blocked because required related-work categories had no real attached paper records. v2.4 requires real category-specific search campaigns, real paper attachment, closest-prior-work dossier refresh, novelty and benchmark positioning updates, contribution claim softening when needed, reviewer rerun, manuscript revision, and an updated go/no-go decision. It must not claim publication readiness from fallback-only related work, hide prior work, weaken synthetic/deployment limits, or invent citations.
 - **v2.5.0**: Real Benchmark Grounding, Venue-Style Paper, and OpenReview Reviewer Training. v2.5 starts from the v2.4 publication-candidate package and requires at least one vetted benchmark adapter, one venue-style manuscript package, and one OpenReview-calibrated reviewer pass. It treats known datasets as bounded grounding evidence, venue style as structure/rhetoric/format rather than copied prose, and reviewer modeling as critique calibration rather than truth generation or acceptance prediction.
+- **v2.6.0**: Drastic Review Remediation and Real Artifact Package. v2.6 starts from the v2.5 `revise_for_reviews` outcome and its `fatal_blockers`: missing loadable related-work matrix and missing loadable artifact evaluation package. It requires matrix recovery or rebuild, artifact package recovery or creation from recorded state, a real external/public benchmark adapter attempt or no-fit report, venue-style manuscript revision after repaired artifacts, drastic review rerun, drastic revision closure or downgrade, and an honest top-conference readiness decision. It must not claim acceptance, camera-ready status, or real collusion benchmark validity unless the artifacts and benchmark mapping support it.
 
 ## Why Not Just Summarization?
 
@@ -914,6 +920,38 @@ Planning docs:
 - [docs/V2_5_VENUE_STYLE_MANUSCRIPT.md](docs/V2_5_VENUE_STYLE_MANUSCRIPT.md)
 - [docs/V2_5_OPENREVIEW_REVIEWER_DATASET.md](docs/V2_5_OPENREVIEW_REVIEWER_DATASET.md)
 - [docs/V2_5_ACCEPTANCE_CRITERIA.md](docs/V2_5_ACCEPTANCE_CRITERIA.md)
+
+## v2.6 Drastic Review Remediation and Real Artifact Package
+
+v2.6 is the remediation lane after the v2.5 release gate completed as `revise_for_reviews`. It preserves the v2.5 drastic review status `fatal_blockers` and directly targets the two fatal blockers: missing loadable related-work matrix and missing loadable artifact evaluation package.
+
+The minimum v2.6 release gate requires a loadable related-work matrix, a loadable artifact package or explicit blocked status, a real external/public benchmark adapter attempt or benchmark no-fit report, venue-style manuscript revision after repaired artifacts, a rerun drastic review, and a drastic revision plan closure or downgrade. Publication readiness cannot pass unless the related-work matrix and artifact package are loadable. Synthetic fixture benchmark plumbing must not be described as real collusion benchmark grounding.
+
+The intended v2.6 path is:
+
+```bash
+gapforge selected-related-work-matrix-recover --benchmark-id <benchmark-id>
+gapforge selected-related-work-matrix-check --benchmark-id <benchmark-id>
+gapforge selected-artifact-package-recover --manuscript-id <manuscript-id>
+gapforge selected-artifact-package-check --manuscript-id <manuscript-id>
+gapforge selected-public-benchmark-inventory --benchmark-id <benchmark-id>
+gapforge selected-public-benchmark-adapter-attempt --benchmark-id <benchmark-id> --source-benchmark <source-id>
+gapforge selected-public-benchmark-no-fit-report --benchmark-id <benchmark-id>
+gapforge manuscript-revise-after-artifact-repair --manuscript-id <manuscript-id>
+gapforge drastic-review --manuscript-id <manuscript-id> --rerun
+gapforge drastic-revision-plan-close --manuscript-id <manuscript-id>
+gapforge v26-release-gate --write-report --json
+```
+
+Allowed v2.6 release outcomes are `workshop_candidate`, `conference_candidate`, `revise_for_reviews`, `benchmark_no_fit`, or `no_go`. None means acceptance or camera-ready readiness.
+
+Planning docs:
+
+- [docs/V2_6_ROADMAP.md](docs/V2_6_ROADMAP.md)
+- [docs/V2_6_DRASTIC_REVIEW_REMEDIATION.md](docs/V2_6_DRASTIC_REVIEW_REMEDIATION.md)
+- [docs/V2_6_ARTIFACT_PACKAGE_REMEDIATION.md](docs/V2_6_ARTIFACT_PACKAGE_REMEDIATION.md)
+- [docs/V2_6_REAL_BENCHMARK_UPGRADE.md](docs/V2_6_REAL_BENCHMARK_UPGRADE.md)
+- [docs/V2_6_ACCEPTANCE_CRITERIA.md](docs/V2_6_ACCEPTANCE_CRITERIA.md)
 
 ## Active v0.3 Loop
 

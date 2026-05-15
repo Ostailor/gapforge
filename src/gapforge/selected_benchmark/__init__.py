@@ -1,5 +1,12 @@
 """Formal benchmark specification for the v2.1 selected idea."""
 
+from gapforge.selected_benchmark.artifact_package_loader import (
+    ArtifactPackageLoader,
+    ArtifactPackageLoadResult,
+    ArtifactPackageRepairRecord,
+    render_artifact_package_load_result,
+    render_artifact_package_repair_record,
+)
 from gapforge.selected_benchmark.baselines import (
     REQUIRED_MAIN_BASELINE_TYPES,
     BaselineStrengthAssessment,
@@ -112,6 +119,19 @@ from gapforge.selected_benchmark.prior_work_refresh import (
     SelectedBenchmarkPriorWorkRefreshManager,
     render_selected_prior_work_dossier,
 )
+from gapforge.selected_benchmark.real_benchmark_experiment import (
+    RealBenchmarkExperimentAttempt,
+    RealBenchmarkExperimentManager,
+    render_real_benchmark_experiment_attempts,
+)
+from gapforge.selected_benchmark.real_benchmark_search import (
+    RealBenchmarkCandidate,
+    RealBenchmarkCandidateSearch,
+    RealBenchmarkSearchManager,
+    render_real_benchmark_candidates,
+    render_real_benchmark_no_fit_report,
+    render_real_benchmark_search,
+)
 from gapforge.selected_benchmark.related_work import (
     REQUIRED_RELATED_WORK_CATEGORIES,
     SelectedBenchmarkRelatedWorkManager,
@@ -141,6 +161,13 @@ from gapforge.selected_benchmark.related_work_manuscript import (
     SelectedRelatedWorkManuscriptRevision,
     render_selected_paper_package_v24,
     render_selected_related_work_manuscript_revision,
+)
+from gapforge.selected_benchmark.related_work_matrix_loader import (
+    RelatedWorkMatrixLoader,
+    RelatedWorkMatrixLoadResult,
+    RelatedWorkMatrixRepairRecord,
+    render_related_work_matrix_load_result,
+    render_related_work_matrix_repair_record,
 )
 from gapforge.selected_benchmark.related_work_matrix_v2 import (
     SelectedBenchmarkRelatedWorkMatrixV2,
@@ -185,6 +212,16 @@ from gapforge.selected_benchmark.trace_generator import (
     render_trace_dataset_report,
     render_trace_list,
 )
+from gapforge.selected_benchmark.venue_artifact_integration import (
+    VenueArtifactIntegrationManager,
+    VenueArtifactIntegrationReport,
+    render_venue_artifact_integration_report,
+)
+from gapforge.selected_benchmark.venue_revision_package import (
+    VenueRevisionPackage,
+    VenueRevisionPackageManager,
+    render_venue_revision_package,
+)
 from gapforge.selected_benchmark.vetted_experiment import (
     SelectedVettedBenchmarkExperimentManager,
     VettedBenchmarkExperimentPlan,
@@ -206,6 +243,9 @@ from gapforge.selected_benchmark.workspace import (
 
 __all__ = [
     "AgentTrace",
+    "ArtifactPackageLoader",
+    "ArtifactPackageLoadResult",
+    "ArtifactPackageRepairRecord",
     "BenchmarkTaskFamily",
     "CollusiveAlternativeManager",
     "CollusiveDistributionReport",
@@ -280,6 +320,9 @@ __all__ = [
     "RelatedWorkCurationReport",
     "RelatedWorkReadingManager",
     "RelatedWorkReadingStatus",
+    "RelatedWorkMatrixLoader",
+    "RelatedWorkMatrixLoadResult",
+    "RelatedWorkMatrixRepairRecord",
     "SelectedBenchmarkRelatedWorkMatrixV2",
     "SelectedBenchmarkRelatedWorkMatrixV2Entry",
     "SelectedBenchmarkRelatedWorkMatrixV2Manager",
@@ -289,6 +332,11 @@ __all__ = [
     "RequiredRelatedWorkCategorySearch",
     "RequiredRelatedWorkSearchCampaign",
     "RequiredRelatedWorkSearchManager",
+    "RealBenchmarkCandidate",
+    "RealBenchmarkCandidateSearch",
+    "RealBenchmarkExperimentAttempt",
+    "RealBenchmarkExperimentManager",
+    "RealBenchmarkSearchManager",
     "PublicationReadinessReview",
     "ContributionPositioning",
     "PositioningReport",
@@ -304,7 +352,13 @@ __all__ = [
     "VettedBenchmarkExperimentPlan",
     "VettedBenchmarkExperimentResult",
     "VettedBenchmarkMappingReport",
+    "VenueArtifactIntegrationManager",
+    "VenueArtifactIntegrationReport",
+    "VenueRevisionPackage",
+    "VenueRevisionPackageManager",
     "default_monitor_baselines",
+    "render_artifact_package_load_result",
+    "render_artifact_package_repair_record",
     "render_baseline_strength_assessment",
     "default_collusive_scenarios",
     "default_honest_null_scenarios",
@@ -332,11 +386,17 @@ __all__ = [
     "render_related_work_completion_status",
     "render_related_work_curation_report",
     "render_related_work_reading_report",
+    "render_related_work_matrix_load_result",
+    "render_related_work_matrix_repair_record",
     "render_must_cite_report",
     "render_related_work_matrix_v2",
     "render_selected_paper_package_v24",
     "render_selected_related_work_manuscript_revision",
     "render_required_related_work_search_report",
+    "render_real_benchmark_candidates",
+    "render_real_benchmark_experiment_attempts",
+    "render_real_benchmark_no_fit_report",
+    "render_real_benchmark_search",
     "render_selected_pilot_report",
     "render_selected_pilot_manuscript",
     "render_selected_pilot_status",
@@ -362,4 +422,6 @@ __all__ = [
     "render_vetted_benchmark_experiment_plan",
     "render_vetted_benchmark_experiment_report",
     "render_vetted_mapping_report",
+    "render_venue_artifact_integration_report",
+    "render_venue_revision_package",
 ]

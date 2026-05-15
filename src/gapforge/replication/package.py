@@ -254,7 +254,7 @@ def _missing_requirements(
         missing.append("Restricted or real dataset files were excluded; use recorded download instructions.")
     if any(not safe_to_bundle_dataset(record) for record in datasets) and not dataset_instructions:
         missing.append("Dataset download instructions are missing for excluded datasets.")
-    if any(not manifest.random_seed for manifest in manifests):
+    if any(manifest.random_seed is None for manifest in manifests):
         missing.append("One or more manifests lack a random seed.")
     return list(dict.fromkeys(missing))
 

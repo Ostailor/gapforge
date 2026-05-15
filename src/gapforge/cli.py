@@ -244,6 +244,7 @@ from gapforge.release_gate import (
     V23ReleaseGateEnforcer,
     V24ReleaseGateEnforcer,
     V25ReleaseGateEnforcer,
+    V26ReleaseGateEnforcer,
     render_v04_release_gate_markdown,
     render_v09_release_gate_markdown,
     render_v1_readiness_markdown,
@@ -253,6 +254,7 @@ from gapforge.release_gate import (
     render_v23_release_gate_markdown,
     render_v24_release_gate_markdown,
     render_v25_release_gate_markdown,
+    render_v26_release_gate_markdown,
 )
 from gapforge.release_gate.v05 import render_v05_release_gate_markdown
 from gapforge.release_gate.v06 import render_v06_release_gate_markdown
@@ -303,6 +305,7 @@ from gapforge.reviewers import (
     EmpiricalReviewBuilder,
     ReviewPanelBuilder,
     render_drastic_review_panel,
+    render_drastic_review_rerun_result,
     render_empirical_review_markdown,
     render_meta_review_markdown,
     render_rebuttal_plans_markdown,
@@ -323,6 +326,7 @@ from gapforge.search_strategy import (
     save_strategy,
 )
 from gapforge.selected_benchmark import (
+    ArtifactPackageLoader,
     CollusiveAlternativeManager,
     GoNoGoManager,
     HonestNullManager,
@@ -335,8 +339,11 @@ from gapforge.selected_benchmark import (
     PilotDatasetBuilder,
     PilotPowerManager,
     PilotRunManager,
+    RealBenchmarkExperimentManager,
+    RealBenchmarkSearchManager,
     RelatedWorkCompletionManager,
     RelatedWorkCurationManager,
+    RelatedWorkMatrixLoader,
     RelatedWorkReadingManager,
     RequiredRelatedWorkSearchManager,
     SelectedBenchmarkCodexTaskManager,
@@ -356,6 +363,10 @@ from gapforge.selected_benchmark import (
     SelectedVettedBenchmarkExperimentManager,
     SequentialMetricManager,
     SyntheticTraceGenerator,
+    VenueArtifactIntegrationManager,
+    VenueRevisionPackageManager,
+    render_artifact_package_load_result,
+    render_artifact_package_repair_record,
     render_collusive_distribution_report,
     render_honest_null_report,
     render_main_power_plan,
@@ -366,8 +377,11 @@ from gapforge.selected_benchmark import (
     render_pilot_trace_dataset_report,
     render_positioning_report,
     render_publication_readiness_review,
+    render_real_benchmark_search,
     render_related_work_completion_status,
     render_related_work_curation_report,
+    render_related_work_matrix_load_result,
+    render_related_work_matrix_repair_record,
     render_related_work_matrix_v2,
     render_related_work_reading_report,
     render_required_related_work_search_report,
@@ -377,6 +391,8 @@ from gapforge.selected_benchmark import (
     render_selected_prior_work_dossier,
     render_selected_related_work_manuscript_revision,
     render_trace_list,
+    render_venue_artifact_integration_report,
+    render_venue_revision_package,
 )
 from gapforge.sources.canonical import canonicalize_project, canonicalize_run, load_merge_report_for_run
 from gapforge.sources.coverage import refresh_source_coverage
@@ -392,7 +408,12 @@ from gapforge.sources.stopping import refresh_stopping_assessment, render_stoppi
 from gapforge.state import ResearchStateManager
 from gapforge.style_corpus import StyleCorpusManager, VenueStyleAnalyzer
 from gapforge.venues import VenueProfileManager, get_venue_profile, list_venue_profiles, render_venue_profile, render_venue_profile_list
-from gapforge.vetted_benchmarks import BenchmarkAdapterRegistry, VettedBenchmarkRegistry, render_eligibility_assessment
+from gapforge.vetted_benchmarks import (
+    BenchmarkAdapterRegistry,
+    VettedBenchmarkRegistry,
+    render_eligibility_assessment,
+    render_real_benchmark_adapter_assessment,
+)
 
 
 def _add_agent_skill_options(command_parser: argparse.ArgumentParser) -> None:
@@ -738,6 +759,7 @@ def build_parser() -> argparse.ArgumentParser:
     eval_parser.add_argument("--v23", action="store_true", help="Run v2.3 main benchmark decision evaluation fixtures.")
     eval_parser.add_argument("--v24", action="store_true", help="Run v2.4 related-work remediation evaluation fixtures.")
     eval_parser.add_argument("--v25", action="store_true", help="Run v2.5 real benchmark grounding evaluation fixtures.")
+    eval_parser.add_argument("--v26", action="store_true", help="Run v2.6 drastic remediation evaluation fixtures.")
     eval_parser.add_argument("--v2-ideas", action="store_true", help="Run v2 Idea Discovery Engine evaluation fixtures.")
     eval_parser.add_argument("--write-report", action="store_true")
 
@@ -790,6 +812,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--include-selected-v25",
         action="store_true",
         help="Include v2.5 real benchmark grounding, venue style, and reviewer calibration dashboard pages.",
+    )
+    dashboard_parser.add_argument(
+        "--include-selected-v26",
+        action="store_true",
+        help="Include v2.6 drastic remediation and artifact package dashboard pages.",
     )
 
     selected_idea_full_report_parser = subparsers.add_parser(
@@ -1442,6 +1469,12 @@ def build_parser() -> argparse.ArgumentParser:
     v25_release_gate_parser.add_argument("--write-report", action="store_true")
     v25_release_gate_parser.add_argument("--json", action="store_true")
 
+    v26_release_gate_parser = subparsers.add_parser(
+        "v26-release-gate", help="Enforce the v2.6 drastic remediation and artifact package gate."
+    )
+    v26_release_gate_parser.add_argument("--write-report", action="store_true")
+    v26_release_gate_parser.add_argument("--json", action="store_true")
+
     cli_audit_parser = subparsers.add_parser("cli-audit", help="Audit command grouping, help text, and v1 CLI discoverability.")
     cli_audit_parser.add_argument("--write-report", action="store_true")
 
@@ -1722,6 +1755,80 @@ def build_parser() -> argparse.ArgumentParser:
         "selected-vetted-benchmark-report", help="Render selected benchmark vetted-benchmark mapping report."
     )
     selected_vetted_benchmark_report_parser.add_argument("--benchmark-id", required=True)
+
+    selected_real_benchmark_search_parser = subparsers.add_parser(
+        "selected-real-benchmark-search", help="Search real public benchmark candidates for selected benchmark grounding."
+    )
+    selected_real_benchmark_search_parser.add_argument("--benchmark-id", required=True)
+
+    selected_real_benchmark_candidates_parser = subparsers.add_parser(
+        "selected-real-benchmark-candidates", help="Render real public benchmark candidates for selected benchmark grounding."
+    )
+    selected_real_benchmark_candidates_parser.add_argument("--benchmark-id", required=True)
+
+    selected_real_benchmark_no_fit_parser = subparsers.add_parser(
+        "selected-real-benchmark-no-fit", help="Render selected benchmark real-public-benchmark no-fit report."
+    )
+    selected_real_benchmark_no_fit_parser.add_argument("--benchmark-id", required=True)
+
+    selected_real_benchmark_adapter_assess_parser = subparsers.add_parser(
+        "selected-real-benchmark-adapter-assess", help="Assess adapter feasibility for a real public benchmark candidate."
+    )
+    selected_real_benchmark_adapter_assess_parser.add_argument("--benchmark-id", required=True)
+    selected_real_benchmark_adapter_assess_parser.add_argument("--candidate-id", required=True)
+
+    selected_real_benchmark_adapter_create_parser = subparsers.add_parser(
+        "selected-real-benchmark-adapter-create", help="Create an honest adapter for a real public benchmark candidate."
+    )
+    selected_real_benchmark_adapter_create_parser.add_argument("--benchmark-id", required=True)
+    selected_real_benchmark_adapter_create_parser.add_argument("--candidate-id", required=True)
+
+    selected_real_benchmark_adapter_run_parser = subparsers.add_parser(
+        "selected-real-benchmark-adapter-run", help="Run a real public benchmark candidate adapter."
+    )
+    selected_real_benchmark_adapter_run_parser.add_argument("--adapter-id", required=True)
+
+    selected_real_benchmark_experiment_plan_parser = subparsers.add_parser(
+        "selected-real-benchmark-experiment-plan",
+        help="Plan real public benchmark experiment attempts for the selected benchmark.",
+    )
+    selected_real_benchmark_experiment_plan_parser.add_argument("--benchmark-id", required=True)
+
+    selected_real_benchmark_experiment_run_parser = subparsers.add_parser(
+        "selected-real-benchmark-experiment-run",
+        help="Run planned real public benchmark experiment attempts for the selected benchmark.",
+    )
+    selected_real_benchmark_experiment_run_parser.add_argument("--benchmark-id", required=True)
+
+    selected_real_benchmark_experiment_report_parser = subparsers.add_parser(
+        "selected-real-benchmark-experiment-report",
+        help="Render real public benchmark experiment attempt report for the selected benchmark.",
+    )
+    selected_real_benchmark_experiment_report_parser.add_argument("--benchmark-id", required=True)
+
+    selected_venue_artifact_integrate_parser = subparsers.add_parser(
+        "selected-venue-artifact-integrate",
+        help="Integrate loadable v2.6 artifacts into the venue-shaped selected benchmark manuscript.",
+    )
+    selected_venue_artifact_integrate_parser.add_argument("--benchmark-id", required=True)
+
+    selected_venue_artifact_report_parser = subparsers.add_parser(
+        "selected-venue-artifact-report",
+        help="Render selected benchmark venue artifact integration report.",
+    )
+    selected_venue_artifact_report_parser.add_argument("--benchmark-id", required=True)
+
+    selected_venue_revision_package_parser = subparsers.add_parser(
+        "selected-venue-revision-package",
+        help="Create a post-review venue revision package for the selected benchmark manuscript.",
+    )
+    selected_venue_revision_package_parser.add_argument("--benchmark-id", required=True)
+
+    selected_venue_revision_status_parser = subparsers.add_parser(
+        "selected-venue-revision-status",
+        help="Print selected benchmark venue revision package status.",
+    )
+    selected_venue_revision_status_parser.add_argument("--benchmark-id", required=True)
 
     benchmark_adapter_create_parser = subparsers.add_parser(
         "benchmark-adapter-create", help="Create an adapter from a vetted benchmark to a selected benchmark."
@@ -2024,6 +2131,36 @@ def build_parser() -> argparse.ArgumentParser:
         "selected-related-work-matrix-v2", help="Build and render selected benchmark related-work matrix v2."
     )
     selected_related_work_matrix_v2_parser.add_argument("--benchmark-id", required=True)
+
+    selected_related_work_matrix_load_parser = subparsers.add_parser(
+        "selected-related-work-matrix-load", help="Load and validate the selected benchmark manuscript related-work matrix."
+    )
+    selected_related_work_matrix_load_parser.add_argument("--benchmark-id", required=True)
+
+    selected_related_work_matrix_repair_parser = subparsers.add_parser(
+        "selected-related-work-matrix-repair", help="Repair the selected benchmark manuscript related-work matrix load path."
+    )
+    selected_related_work_matrix_repair_parser.add_argument("--benchmark-id", required=True)
+
+    selected_related_work_matrix_status_parser = subparsers.add_parser(
+        "selected-related-work-matrix-status", help="Print selected benchmark manuscript related-work matrix load status."
+    )
+    selected_related_work_matrix_status_parser.add_argument("--benchmark-id", required=True)
+
+    selected_artifact_package_load_parser = subparsers.add_parser(
+        "selected-artifact-package-load", help="Load and validate the selected benchmark manuscript artifact package."
+    )
+    selected_artifact_package_load_parser.add_argument("--benchmark-id", required=True)
+
+    selected_artifact_package_repair_parser = subparsers.add_parser(
+        "selected-artifact-package-repair", help="Repair the selected benchmark manuscript artifact package load path."
+    )
+    selected_artifact_package_repair_parser.add_argument("--benchmark-id", required=True)
+
+    selected_artifact_package_status_parser = subparsers.add_parser(
+        "selected-artifact-package-status", help="Print selected benchmark manuscript artifact package load status."
+    )
+    selected_artifact_package_status_parser.add_argument("--benchmark-id", required=True)
 
     selected_must_cite_parser = subparsers.add_parser("selected-must-cite", help="Render selected benchmark must-cite paper list.")
     selected_must_cite_parser.add_argument("--benchmark-id", required=True)
@@ -2841,6 +2978,11 @@ def build_parser() -> argparse.ArgumentParser:
     drastic_review_report_parser = subparsers.add_parser("drastic-review-report", help="Print a harsh reviewer panel report.")
     drastic_review_report_parser.add_argument("--manuscript-id", required=True)
 
+    drastic_review_rerun_parser = subparsers.add_parser(
+        "drastic-review-rerun", help="Rerun drastic review and compare previous versus current blockers."
+    )
+    drastic_review_rerun_parser.add_argument("--manuscript-id", required=True)
+
     drastic_revision_plan_parser = subparsers.add_parser(
         "drastic-revision-plan", help="Convert drastic review output into concrete manuscript revision tasks."
     )
@@ -2854,6 +2996,17 @@ def build_parser() -> argparse.ArgumentParser:
 
     drastic_revision_status_parser = subparsers.add_parser("drastic-revision-status", help="Print drastic revision status.")
     drastic_revision_status_parser.add_argument("--manuscript-id", required=True)
+
+    drastic_revision_close_parser = subparsers.add_parser(
+        "drastic-revision-close", help="Close a drastic revision item after rerun evidence supports closure."
+    )
+    drastic_revision_close_parser.add_argument("--manuscript-id", required=True)
+    drastic_revision_close_parser.add_argument("--item-id", required=True)
+
+    drastic_readiness_delta_parser = subparsers.add_parser(
+        "drastic-readiness-delta", help="Print the latest drastic review readiness delta."
+    )
+    drastic_readiness_delta_parser.add_argument("--manuscript-id", required=True)
 
     revision_plan_parser = subparsers.add_parser("revision-plan", help="Create a manuscript revision plan from rebuttal items.")
     revision_plan_parser.add_argument("--manuscript-id", required=True)
@@ -3454,6 +3607,7 @@ def _dispatch(
             v23=args.v23,
             v24=args.v24,
             v25=args.v25,
+            v26=args.v26,
             v2_ideas=args.v2_ideas,
         )
         target = report.report_path or (config.root / "eval_report.md")
@@ -3481,6 +3635,7 @@ def _dispatch(
                 include_selected_main=args.include_selected_main,
                 include_selected_v24=args.include_selected_v24,
                 include_selected_v25=args.include_selected_v25,
+                include_selected_v26=args.include_selected_v26,
             )
         else:
             result = dashboard.build_run(args.run_id)
@@ -4535,6 +4690,16 @@ def _dispatch(
         else:
             print(render_v25_release_gate_markdown(v25_result), end="")
         return 0 if v25_result.passed else 1
+    if args.command == "v26-release-gate":
+        v26_gate = V26ReleaseGateEnforcer(config)
+        v26_result = v26_gate.evaluate()
+        if args.write_report:
+            v26_gate.write_outputs(v26_result)
+        if args.json:
+            print(json.dumps(v26_result.to_dict(), indent=2))
+        else:
+            print(render_v26_release_gate_markdown(v26_result), end="")
+        return 0 if v26_result.passed else 1
     if args.command == "cli-audit":
         cli_audit = CLICommandAuditor(config).audit(build_parser(), write=args.write_report)
         print(render_cli_command_audit(cli_audit), end="")
@@ -4881,6 +5046,59 @@ def _dispatch(
     if args.command == "selected-vetted-benchmark-report":
         print(SelectedBenchmarkVettedMappingManager(config).render_report(args.benchmark_id), end="")
         return 0
+    if args.command == "selected-real-benchmark-search":
+        real_benchmark_search = RealBenchmarkSearchManager(config).search(args.benchmark_id)
+        print(render_real_benchmark_search(real_benchmark_search), end="")
+        return 0 if real_benchmark_search.status in {"complete", "no_fit"} else 1
+    if args.command == "selected-real-benchmark-candidates":
+        print(RealBenchmarkSearchManager(config).render_candidates(args.benchmark_id), end="")
+        return 0
+    if args.command == "selected-real-benchmark-no-fit":
+        print(RealBenchmarkSearchManager(config).render_no_fit_report(args.benchmark_id), end="")
+        return 0
+    if args.command == "selected-real-benchmark-adapter-assess":
+        real_adapter_assessment = SelectedVettedBenchmarkExperimentManager(config).assess_real_candidate(
+            args.benchmark_id,
+            args.candidate_id,
+        )
+        print(render_real_benchmark_adapter_assessment(real_adapter_assessment), end="")
+        return 0 if real_adapter_assessment.adapter_possible else 1
+    if args.command == "selected-real-benchmark-adapter-create":
+        real_adapter = SelectedVettedBenchmarkExperimentManager(config).create_real_candidate_adapter(
+            args.benchmark_id,
+            args.candidate_id,
+        )
+        print(json.dumps(to_plain(real_adapter), indent=2))
+        return 0
+    if args.command == "selected-real-benchmark-adapter-run":
+        real_adapter_run = SelectedVettedBenchmarkExperimentManager(config).run_real_candidate_adapter(args.adapter_id)
+        print(json.dumps(to_plain(real_adapter_run), indent=2))
+        return 0 if real_adapter_run.status == "complete" else 1
+    if args.command == "selected-real-benchmark-experiment-plan":
+        real_benchmark_attempts = RealBenchmarkExperimentManager(config).plan(args.benchmark_id)
+        print(json.dumps(to_plain(real_benchmark_attempts), indent=2))
+        return 0
+    if args.command == "selected-real-benchmark-experiment-run":
+        real_benchmark_attempts = RealBenchmarkExperimentManager(config).run(args.benchmark_id)
+        print(json.dumps(to_plain(real_benchmark_attempts), indent=2))
+        return 0 if not any(attempt.status == "failed" for attempt in real_benchmark_attempts) else 1
+    if args.command == "selected-real-benchmark-experiment-report":
+        print(RealBenchmarkExperimentManager(config).report(args.benchmark_id), end="")
+        return 0
+    if args.command == "selected-venue-artifact-integrate":
+        venue_artifact_report = VenueArtifactIntegrationManager(config).integrate(args.benchmark_id)
+        print(render_venue_artifact_integration_report(venue_artifact_report), end="")
+        return 0 if not venue_artifact_report.blockers else 1
+    if args.command == "selected-venue-artifact-report":
+        print(VenueArtifactIntegrationManager(config).report(args.benchmark_id), end="")
+        return 0
+    if args.command == "selected-venue-revision-package":
+        venue_revision_package = VenueRevisionPackageManager(config).create(args.benchmark_id)
+        print(render_venue_revision_package(venue_revision_package), end="")
+        return 0 if venue_revision_package.status in {"workshop_candidate", "conference_candidate", "revise_for_reviews"} else 1
+    if args.command == "selected-venue-revision-status":
+        print(VenueRevisionPackageManager(config).status(args.benchmark_id), end="")
+        return 0
     if args.command == "benchmark-adapter-create":
         adapter = BenchmarkAdapterRegistry(config).create_adapter(
             selected_benchmark_id=args.selected_benchmark_id,
@@ -5135,6 +5353,28 @@ def _dispatch(
         print(render_related_work_matrix_v2(matrix_v2), end="")
         has_direct_solution = any(entry.relationship == "directly solves" for entry in matrix_v2.entries)
         return 0 if not matrix_v2.missing_categories and not has_direct_solution else 1
+    if args.command == "selected-related-work-matrix-load":
+        load_result = RelatedWorkMatrixLoader(config).load(args.benchmark_id)
+        print(render_related_work_matrix_load_result(load_result), end="")
+        return 0 if load_result.status in {"loaded", "repaired"} and not load_result.blockers else 1
+    if args.command == "selected-related-work-matrix-repair":
+        matrix_repair_record = RelatedWorkMatrixLoader(config).repair(args.benchmark_id)
+        print(render_related_work_matrix_repair_record(matrix_repair_record), end="")
+        return 0 if matrix_repair_record.status == "repaired" else 1
+    if args.command == "selected-related-work-matrix-status":
+        print(RelatedWorkMatrixLoader(config).status_report(args.benchmark_id), end="")
+        return 0
+    if args.command == "selected-artifact-package-load":
+        artifact_load_result = ArtifactPackageLoader(config).load(args.benchmark_id)
+        print(render_artifact_package_load_result(artifact_load_result), end="")
+        return 0 if artifact_load_result.status in {"loaded", "repaired"} and not artifact_load_result.blockers else 1
+    if args.command == "selected-artifact-package-repair":
+        artifact_repair_record = ArtifactPackageLoader(config).repair(args.benchmark_id)
+        print(render_artifact_package_repair_record(artifact_repair_record), end="")
+        return 0 if artifact_repair_record.status == "repaired" else 1
+    if args.command == "selected-artifact-package-status":
+        print(ArtifactPackageLoader(config).status_report(args.benchmark_id), end="")
+        return 0
     if args.command == "selected-must-cite":
         print(SelectedBenchmarkRelatedWorkMatrixV2Manager(config).must_cite_report(args.benchmark_id), end="")
         return 0
@@ -6035,6 +6275,10 @@ def _dispatch(
     if args.command == "drastic-review-report":
         print(DrasticReviewPanelBuilder(config).render_manuscript_report(args.manuscript_id), end="")
         return 0
+    if args.command == "drastic-review-rerun":
+        rerun_result = DrasticReviewPanelBuilder(config).rerun_manuscript(args.manuscript_id)
+        print(render_drastic_review_rerun_result(rerun_result), end="")
+        return 0 if not rerun_result.remaining_blockers else 1
     if args.command == "drastic-revision-plan":
         drastic_revision_manager = DrasticRevisionManager(config)
         drastic_revision_plan = drastic_revision_manager.build(args.manuscript_id)
@@ -6047,6 +6291,13 @@ def _dispatch(
         return 0
     if args.command == "drastic-revision-status":
         print(DrasticRevisionManager(config).status(args.manuscript_id), end="")
+        return 0
+    if args.command == "drastic-revision-close":
+        drastic_revision_plan = DrasticRevisionManager(config).close_item(args.manuscript_id, args.item_id)
+        print(render_drastic_revision_plan(drastic_revision_plan), end="")
+        return 0
+    if args.command == "drastic-readiness-delta":
+        print(DrasticRevisionManager(config).readiness_delta(args.manuscript_id), end="")
         return 0
     if args.command == "revision-plan":
         revision_manager = ManuscriptRevisionManager(config)

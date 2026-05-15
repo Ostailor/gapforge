@@ -208,6 +208,47 @@ def test_dashboard_cli_accepts_selected_v25_flag(tmp_path: Path) -> None:
     assert "Copied prose, fake citations, fake results" in (dashboard_dir / "v25_release_gate.html").read_text(encoding="utf-8")
 
 
+def test_dashboard_cli_accepts_selected_v26_flag(tmp_path: Path) -> None:
+    config = GapForgeConfig.from_cwd(tmp_path)
+    program = ProjectMemoryManager(config).create_project("Selected v2.6 Dashboard")
+    env = {**os.environ, "PYTHONPATH": str(Path(__file__).resolve().parents[1] / "src")}
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "gapforge.cli",
+            "dashboard",
+            "--project-id",
+            program.project.id,
+            "--include-selected-v26",
+        ],
+        cwd=tmp_path,
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    dashboard_dir = config.project_root / program.project.id / "dashboard"
+    expected = {
+        "matrix_loader.html",
+        "artifact_package_loader.html",
+        "real_benchmark_search.html",
+        "real_benchmark_adapter.html",
+        "real_benchmark_experiment.html",
+        "venue_artifact_integration.html",
+        "drastic_review_rerun.html",
+        "venue_revision_package.html",
+        "v26_release_gate.html",
+    }
+    for filename in expected:
+        assert (dashboard_dir / filename).exists()
+    assert "v2.6 pages expose remediation state" in (dashboard_dir / "matrix_loader.html").read_text(encoding="utf-8")
+    assert "does not claim acceptance or camera-ready readiness" in (dashboard_dir / "v26_release_gate.html").read_text(encoding="utf-8")
+
+
 def test_dashboard_cli_generates_run_dashboard(tmp_path: Path) -> None:
     config = GapForgeConfig.from_cwd(tmp_path)
     state = _dashboard_run(config)
