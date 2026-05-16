@@ -456,6 +456,30 @@ v2.6 non-goals:
 
 If either the selected related-work matrix or artifact package remains missing or unloadable, v2.6 cannot pass publication readiness. The strongest allowed outcomes are `revise_for_reviews`, `benchmark_no_fit`, or `no_go`, depending on the remaining evidence and blockers.
 
+## v2.6.1 Eval Recalibration Limits
+
+v2.6.1 recognizes that current eval is not proof of top-conference quality. Existing eval scores are useful for regression, safety, and workflow checks, but they can overstate readiness if interpreted as paper-quality evidence.
+
+v2.6.1 must still preserve these limits:
+
+- regression evals protect fixture correctness, schema/load/save behavior, release-gate behavior, and known blocker preservation
+- safety evals reject fake citations, fake results, copied prose, unsupported novelty, and hidden missing categories
+- workflow evals confirm artifact existence, matrix/package loading, reviewer reruns, and revision-package generation
+- paper-quality evals must be reported separately from workflow evals
+- a workflow pass does not imply novelty strength, baseline strength, benchmark fit, statistical adequacy, related-work completeness, manuscript persuasiveness, or top-conference readiness
+- harsh reviewer likely score remains diagnostic and uncertain, not an acceptance prediction
+- `workshop_candidate` and `borderline_reject` can coexist with passing regression, safety, and workflow checks
+
+v2.6.1 non-goals:
+
+- claiming top-conference readiness from fixture or workflow eval scores
+- hiding paper-quality blockers behind a green release gate
+- treating artifact loadability as manuscript persuasiveness
+- treating safety compliance as reviewer enthusiasm
+- weakening drastic-review signals to align with existing eval scores
+
+Future release gates should report paper-quality status separately. If paper quality remains `borderline_reject`, `reject_likely`, or `not_ready`, release notes must say so even when regression, safety, and workflow layers pass.
+
 ## Operational Guidance
 
 Use strict mode and coverage assessment before interpreting outputs:

@@ -1,0 +1,135 @@
+{
+  "topic": "copied prose blocked despite complete workflow artifacts",
+  "matrix_loader": {
+    "status": "repaired",
+    "matrix_id": "matrix-v26-conference",
+    "entry_count": 10,
+    "must_cite_count": 4,
+    "closest_prior_work_count": 3,
+    "blockers": [],
+    "fallback_entries_promoted": false
+  },
+  "artifact_package_loader": {
+    "status": "repaired",
+    "selected_package_id": "artifact-package-v26-conference",
+    "required_files_present": [
+      "README.md",
+      "run.sh",
+      "expected_outputs.json"
+    ],
+    "expected_outputs_present": true,
+    "replication_package_present": true,
+    "hardware_requirements_present": true,
+    "run_instructions_present": true,
+    "restricted_data_excluded": true,
+    "blockers": []
+  },
+  "real_benchmark_search": {
+    "exists": true,
+    "status": "complete",
+    "search_queries": [
+      "public multi-agent safety benchmark",
+      "public sequential monitoring benchmark"
+    ],
+    "candidate_benchmark_ids": [
+      "public-primary"
+    ],
+    "rejected_candidate_ids": [],
+    "source_license_terms_preserved": true,
+    "large_download_performed": false,
+    "fit_claimed_without_mapping": false,
+    "synthetic_only": false,
+    "candidates": [
+      {
+        "id": "public-primary",
+        "source_url": "https://example.org/public-primary",
+        "license": "CC-BY-4.0",
+        "fit_status": "primary"
+      }
+    ]
+  },
+  "adapter_assessment": {
+    "exists": true,
+    "candidate_benchmark_id": "public-primary",
+    "adapter_type": "primary",
+    "fit_status": "primary",
+    "expected_claim_support": "primary",
+    "strong_claims_allowed": true,
+    "transformation_documented": true,
+    "hides_schema_mismatches": false,
+    "hides_label_mismatches": false,
+    "sequentialization_needed": false
+  },
+  "real_benchmark_experiment": {
+    "status": "complete",
+    "claim_support_level": "primary"
+  },
+  "venue_artifact_integration": {
+    "exists": true,
+    "blockers": []
+  },
+  "drastic_review_rerun": {
+    "exists": true,
+    "previous_review_id": "drastic-v25",
+    "new_review_id": "drastic-v26-conference",
+    "explicit_comparison": true,
+    "resolved_blockers": [
+      "missing:related_work_matrix",
+      "missing:artifact_package"
+    ],
+    "remaining_blockers": [],
+    "likely_decision": "revise_before_submission",
+    "new_blockers_preserved": true,
+    "fatal_blockers_preserved": true
+  },
+  "revision_package": {
+    "exists": true,
+    "status": "conference_candidate",
+    "files": [
+      "venue-shaped manuscript",
+      "bibliography",
+      "related-work matrix",
+      "artifact evaluation package",
+      "real benchmark/no-fit report",
+      "drastic review",
+      "revision delta",
+      "limitations",
+      "submission checklist"
+    ],
+    "related_work_matrix_id": "matrix-v26-conference",
+    "artifact_package_id": "artifact-package-v26-conference",
+    "limitations": [
+      "no deployment-validity claim is made"
+    ],
+    "fake_citations": false,
+    "fake_results": false,
+    "copied_prose": true,
+    "synthetic_deployment_validity_claim": false,
+    "venue_profile_id": "venue-neurips-style"
+  },
+  "safety": {
+    "copied_prose_detected": true,
+    "fake_citation_present": false,
+    "fake_result_present": false,
+    "synthetic_deployment_validity_claim": false,
+    "release_gate_blocked": true
+  },
+  "v25_release_gate": {
+    "passes": true
+  },
+  "v26_release_gate": {
+    "expected_pass": false,
+    "expected_status": "no_go",
+    "expected_blockers": [
+      "safety:copied_prose"
+    ]
+  },
+  "real_benchmark_experiments": [
+    {
+      "status": "complete",
+      "claim_support_level": "primary",
+      "confidence_intervals": true,
+      "alpha_support": true
+    }
+  ]
+}

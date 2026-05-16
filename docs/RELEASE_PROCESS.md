@@ -36,8 +36,9 @@ GAPFORGE_DISABLE_NETWORK=1 gapforge report --strict
 19. For v2.4 releases, complete the related-work remediation process in `docs/V2_4_ROADMAP.md`, `docs/V2_4_RELATED_WORK_COMPLETION.md`, `docs/V2_4_PUBLICATION_REMEDIATION.md`, and `docs/V2_4_ACCEPTANCE_CRITERIA.md`.
 20. For v2.5 releases, complete the real benchmark grounding, venue-style manuscript, and OpenReview reviewer-calibration process in `docs/V2_5_ROADMAP.md`, `docs/V2_5_REAL_BENCHMARK_GROUNDING.md`, `docs/V2_5_VENUE_STYLE_MANUSCRIPT.md`, `docs/V2_5_OPENREVIEW_REVIEWER_DATASET.md`, and `docs/V2_5_ACCEPTANCE_CRITERIA.md`.
 21. For v2.6 releases, complete the drastic review remediation and real artifact package process in `docs/V2_6_ROADMAP.md`, `docs/V2_6_DRASTIC_REVIEW_REMEDIATION.md`, `docs/V2_6_ARTIFACT_PACKAGE_REMEDIATION.md`, `docs/V2_6_REAL_BENCHMARK_UPGRADE.md`, and `docs/V2_6_ACCEPTANCE_CRITERIA.md`.
-22. Commit with a message that records constraints, rejected alternatives if useful, confidence, scope risk, tested commands, and known gaps.
-23. Tag the release only after the checks pass.
+22. For v2.6.1 releases, complete the eval recalibration process in `docs/V2_6_1_EVAL_RECALIBRATION.md`, `docs/V2_6_1_PAPER_QUALITY_METRICS.md`, and `docs/V2_6_1_ACCEPTANCE_CRITERIA.md`.
+23. Commit with a message that records constraints, rejected alternatives if useful, confidence, scope risk, tested commands, and known gaps.
+24. Tag the release only after the checks pass.
 
 ## v0.3 Validation Levels
 
@@ -943,6 +944,37 @@ Release notes must distinguish:
 
 If the related-work matrix or artifact package is missing or unloadable, release notes must say `v2.6 ended without publication readiness; related-work matrix or artifact package blockers remain`. If no public benchmark fits, release notes may say `v2.6 ended in benchmark_no_fit` only when the no-fit report is complete and claims are narrowed accordingly. Do not call the paper accepted, camera-ready, or real-collusion benchmark-valid from v2.6 artifacts alone.
 
+## v2.6.1 Eval Recalibration Gate
+
+v2.6.1 is a patch lane for evaluation interpretation after v2.6 reached `workshop_candidate` while drastic review still predicted `borderline_reject`. The release process must state that current eval is not proof of top-conference quality.
+
+Before tagging v2.6.1, the release process should require:
+
+```bash
+make ci
+make eval
+gapforge v26-release-gate --write-report --json
+```
+
+The v2.6.1 release gate guidance should require future gates to report four separate layers:
+
+- regression eval: fixture correctness, schema/load/save, release gate behavior, and known blockers preserved
+- safety eval: fake citation rejection, fake result rejection, no copied prose, no unsupported novelty, and no hidden missing categories
+- workflow eval: artifacts exist, matrix/package loads, reviewer rerun happens, and revision package exists
+- paper-quality eval: novelty strength, baseline strength, benchmark fit, statistical adequacy, related-work completeness, harsh reviewer likely score, manuscript persuasiveness, and top-conference readiness
+
+Release notes must distinguish:
+
+- regression status
+- safety status
+- workflow status
+- paper-quality status
+- paper-quality blockers that remain despite workflow completion
+
+Future release gates must report paper-quality status separately from workflow status. A valid release may report `regression_status=pass`, `safety_status=pass`, and `workflow_status=pass` while reporting `paper_quality_status=borderline_reject` or `paper_quality_status=not_ready`.
+
+Do not treat paper-quality status as a derived average of the other layers. Artifact loadability, reviewer rerun completion, and safety compliance are prerequisites for serious review, not proof of top-conference readiness.
+
 ## Tagging
 
 Use semantic version tags:
@@ -1003,4 +1035,7 @@ Release notes should include:
 - For v2.6, do not treat the v2.5 synthetic fixture as real collusion benchmark grounding.
 - For v2.6, do not invent artifact package files, commands, hashes, datasets, results, reviewer checklists, citations, or benchmark labels.
 - For v2.6, allow `benchmark_no_fit` only when the public benchmark inventory and no-fit report are complete and manuscript claims are narrowed accordingly.
+- For v2.6.1 and later, do not claim current eval proves top-conference paper quality.
+- For v2.6.1 and later, report paper-quality status separately from regression, safety, and workflow status.
+- For v2.6.1 and later, do not use workflow completion, artifact loadability, or safety compliance as substitutes for novelty strength, baseline strength, benchmark fit, statistical adequacy, related-work completeness, harsh-review score, manuscript persuasiveness, or top-conference readiness.
 - Do not publish generated `runs/`, caches, or local environment artifacts as source.

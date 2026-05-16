@@ -1,0 +1,8 @@
+{
+  "expected": [
+    "workflow: artifact package missing or unloadable"
+  ],
+  "forbidden": [
+    "safety: fake citation"
+  ]
+}

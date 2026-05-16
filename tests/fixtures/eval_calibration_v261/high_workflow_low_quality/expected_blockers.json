@@ -1,0 +1,8 @@
+{
+  "expected": [
+    "release_gate: v2.6 gate does not pass"
+  ],
+  "forbidden": [
+    "safety:"
+  ]
+}

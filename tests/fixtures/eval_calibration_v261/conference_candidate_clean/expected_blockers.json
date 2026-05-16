@@ -1,0 +1,8 @@
+{
+  "expected": [],
+  "forbidden": [
+    "safety:",
+    "workflow:",
+    "release_gate:"
+  ]
+}

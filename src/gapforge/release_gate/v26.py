@@ -9,6 +9,20 @@ from pathlib import Path
 from typing import Any
 
 from gapforge.config import GapForgeConfig
+from gapforge.evals.metrics import (
+    EvalScoreGroup,
+    EvalScores,
+    adapter_assessment_honesty,
+    artifact_package_loader_correctness,
+    build_eval_score_group,
+    drastic_review_rerun_quality,
+    matrix_loader_correctness,
+    readiness_status_correctness,
+    real_benchmark_search_quality,
+    revision_package_completeness,
+    v26_release_gate_correctness,
+)
+from gapforge.evals.paper_quality import PaperQualityAssessment, assess_paper_quality_from_payload
 from gapforge.project_memory import ProjectMemoryManager
 from gapforge.release_gate.v25 import V25ReleaseGateEnforcer
 
@@ -34,6 +48,18 @@ class V26ReleaseGateResult:
     manuscript_id: str = ""
     v25_status: str = ""
     readiness_status: str = "no_go"
+    regression_score: float = 0.0
+    safety_score: float = 0.0
+    workflow_score: float = 0.0
+    paper_quality_score: float = 0.0
+    release_gate_score: float = 0.0
+    overall_score: float = 0.0
+    top_conference_readiness: bool = False
+    workshop_readiness: bool = False
+    likely_reviewer_decision: str = ""
+    paper_quality_status: str = "not_assessed"
+    score_group: EvalScoreGroup | None = None
+    paper_quality_assessment: PaperQualityAssessment | None = None
     artifact_paths: dict[str, list[str]] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
@@ -67,6 +93,7 @@ class V26ReleaseGateEnforcer:
         attempts = artifacts.real_experiment_attempts if isinstance(artifacts.real_experiment_attempts, list) else []
         remaining_fatal = _remaining_fatal_blockers(artifacts.drastic_rerun)
         package_status = str(artifacts.revision_package.get("status", ""))
+        likely_reviewer_decision = str(artifacts.drastic_rerun.get("likely_decision", ""))
 
         requirements = {
             "v25_release_gate_completed": bool(v25) and str(v25.get("status", "")) in V25_COMPLETED_STATUSES,
@@ -103,19 +130,49 @@ class V26ReleaseGateEnforcer:
             attempts=attempts,
         )
         passed = status in {"conference_candidate", "workshop_candidate", "benchmark_no_fit"}
+        paper_quality_payload = _paper_quality_payload(
+            artifacts=artifacts,
+            fake_hits=fake_hits,
+            copied_hits=copied_hits,
+            synthetic_claim_hits=synthetic_claim_hits,
+        )
+        paper_quality_assessment = assess_paper_quality_from_payload(
+            paper_quality_payload,
+            benchmark_id=benchmark_id or "selected-benchmark",
+            manuscript_id=manuscript_id or "selected-manuscript",
+            provenance={"created_by": "v26-release-gate", "release_status": status},
+        )
+        score_group = _score_group_from_artifacts(
+            paper_quality_payload,
+            paper_quality_score=paper_quality_assessment.average_score,
+        )
+        warnings = _warnings(artifacts, remaining_fatal=remaining_fatal, no_fit_explicit=no_fit_explicit)
+        warnings.extend(_paper_quality_warnings(status, paper_quality_assessment, likely_reviewer_decision))
         return V26ReleaseGateResult(
             passed=passed,
             status=status,
             recommended_next_version="v2.7" if passed else "v2.6-blocked",
             requirements=requirements,
             blockers=_unique(blockers),
-            warnings=_warnings(artifacts, remaining_fatal=remaining_fatal, no_fit_explicit=no_fit_explicit),
             project_id=project_id,
             benchmark_id=benchmark_id,
             manuscript_id=manuscript_id,
             v25_status=str(v25.get("status", "")),
             readiness_status=status,
+            regression_score=score_group.regression_score,
+            safety_score=score_group.safety_score,
+            workflow_score=score_group.workflow_score,
+            paper_quality_score=score_group.paper_quality_score,
+            release_gate_score=score_group.release_gate_score,
+            overall_score=score_group.overall_score,
+            top_conference_readiness=paper_quality_assessment.top_conference_readiness,
+            workshop_readiness=paper_quality_assessment.workshop_readiness,
+            likely_reviewer_decision=likely_reviewer_decision,
+            paper_quality_status=_paper_quality_status(status, paper_quality_assessment, likely_reviewer_decision),
+            score_group=score_group,
+            paper_quality_assessment=paper_quality_assessment,
             artifact_paths=artifacts.paths,
+            warnings=_unique(warnings),
         )
 
     def write_outputs(self, result: V26ReleaseGateResult) -> tuple[Path, Path]:
@@ -208,6 +265,22 @@ def render_v26_release_gate_markdown(result: V26ReleaseGateResult) -> str:
         f"- Manuscript: `{result.manuscript_id or 'missing'}`",
         f"- v2.5 status: `{result.v25_status or 'missing'}`",
         "",
+        "## Score Groups",
+        "",
+        f"- regression_score: {result.regression_score:.3f}",
+        f"- safety_score: {result.safety_score:.3f}",
+        f"- workflow_score: {result.workflow_score:.3f}",
+        f"- paper_quality_score: {result.paper_quality_score:.3f}",
+        f"- release_gate_score: {result.release_gate_score:.3f}",
+        f"- overall_score: {result.overall_score:.3f}",
+        "",
+        "## Paper Quality",
+        "",
+        f"- top_conference_readiness: {str(result.top_conference_readiness).lower()}",
+        f"- workshop_readiness: {str(result.workshop_readiness).lower()}",
+        f"- likely reviewer decision: `{result.likely_reviewer_decision or 'unknown'}`",
+        f"- paper_quality_status: `{result.paper_quality_status}`",
+        "",
         "## Requirements",
         "",
     ]
@@ -220,12 +293,130 @@ def render_v26_release_gate_markdown(result: V26ReleaseGateResult) -> str:
     lines.extend(
         [
             "- v2.6 directly verifies the v2.5 fatal blockers: related-work matrix and artifact package loading.",
+            "- v2.6 can pass as tooling/remediation progress without proving top-conference paper readiness.",
             "- Real benchmark no-fit is acceptable only when recorded explicitly.",
             "- Drastic review remains harsh; unresolved fatal blockers produce `revise_for_reviews`.",
             "- No fake citations/results, copied prose, hidden fatal blockers, or synthetic deployment-validity claims are allowed.",
         ]
     )
     return "\n".join(lines).rstrip() + "\n"
+
+
+def _paper_quality_payload(
+    *,
+    artifacts: _V26Artifacts,
+    fake_hits: list[str],
+    copied_hits: list[str],
+    synthetic_claim_hits: list[str],
+) -> dict[str, Any]:
+    return {
+        "matrix_loader": artifacts.related_matrix,
+        "artifact_package_loader": artifacts.artifact_package,
+        "real_benchmark_search": artifacts.real_search,
+        "adapter_assessments": artifacts.real_adapter_assessments,
+        "adapter_assessment": artifacts.real_adapter_assessments[0] if artifacts.real_adapter_assessments else {},
+        "real_benchmark_experiments": artifacts.real_experiment_attempts,
+        "real_benchmark_experiment": artifacts.real_experiment_attempts[0] if artifacts.real_experiment_attempts else {},
+        "venue_artifact_integration": artifacts.venue_artifact_integration,
+        "drastic_review_rerun": artifacts.drastic_rerun,
+        "revision_package": artifacts.revision_package,
+        "safety": {
+            "fake_citation_present": bool(fake_hits),
+            "fake_result_present": bool(fake_hits),
+            "copied_prose_detected": bool(copied_hits),
+            "synthetic_deployment_validity_claim": bool(synthetic_claim_hits),
+            "release_gate_blocked": bool(fake_hits or copied_hits or synthetic_claim_hits),
+        },
+        "v25_release_gate": {"passes": True},
+        "v26_release_gate": {
+            "expected_pass": True,
+            "expected_status": str(artifacts.revision_package.get("status", "")),
+            "expected_blockers": [],
+        },
+    }
+
+
+def _score_group_from_artifacts(payload: dict[str, Any], *, paper_quality_score: float) -> EvalScoreGroup:
+    scores = EvalScores(
+        gap_specificity_score=1.0,
+        evidence_linkage_score=paper_quality_score,
+        novelty_gate_accuracy=paper_quality_score,
+        duplicate_detection_rate=1.0,
+        unsupported_claim_rate=0.0,
+        experiment_completeness_score=1.0,
+        reviewer_objection_quality_score=1.0,
+    )
+    scores.matrix_loader_correctness = matrix_loader_correctness(payload)
+    scores.artifact_package_loader_correctness = artifact_package_loader_correctness(payload)
+    scores.real_benchmark_search_quality = real_benchmark_search_quality(payload)
+    scores.adapter_assessment_honesty = adapter_assessment_honesty(payload)
+    scores.drastic_review_rerun_quality = drastic_review_rerun_quality(payload)
+    scores.revision_package_completeness = revision_package_completeness(payload)
+    scores.readiness_status_correctness = readiness_status_correctness(payload)
+    scores.v26_release_gate_correctness = v26_release_gate_correctness(payload)
+    group = build_eval_score_group(
+        scores,
+        provenance={"source": "v26-release-gate"},
+        selected_benchmark_fixture=payload,
+    )
+    group.paper_quality_score = _capped_paper_quality_score(
+        paper_quality_score,
+        str(_dict(payload.get("drastic_review_rerun")).get("likely_decision", "")),
+    )
+    group.overall_score = _release_overall_score(group)
+    return group
+
+
+def _capped_paper_quality_score(score: float, likely_decision: str) -> float:
+    decision = likely_decision.lower()
+    if "reject" in decision and "borderline" not in decision:
+        return min(round(score, 3), 0.35)
+    if "borderline_reject" in decision or "borderline reject" in decision or decision == "borderline":
+        return min(round(score, 3), 0.5)
+    return round(score, 3)
+
+
+def _release_overall_score(group: EvalScoreGroup) -> float:
+    grouped_average = round(
+        (group.regression_score + group.safety_score + group.workflow_score + group.paper_quality_score + group.release_gate_score) / 5,
+        3,
+    )
+    if group.blocking_failures:
+        return min(grouped_average, group.safety_score, group.workflow_score, group.release_gate_score)
+    if group.paper_quality_score < 0.6:
+        return min(grouped_average, group.paper_quality_score)
+    return grouped_average
+
+
+def _paper_quality_status(status: str, assessment: PaperQualityAssessment, likely_decision: str) -> str:
+    decision = likely_decision.lower()
+    if assessment.top_conference_readiness:
+        return "top_conference_ready"
+    if "borderline" in decision:
+        return "progress_not_success_borderline_reject"
+    if "reject" in decision:
+        return "progress_not_success_reject_likely"
+    if status == "workshop_candidate" or assessment.workshop_readiness:
+        return "workshop_candidate"
+    if status in {"conference_candidate", "benchmark_no_fit"}:
+        return "tooling_pass_paper_not_ready"
+    return "not_ready"
+
+
+def _paper_quality_warnings(
+    status: str,
+    assessment: PaperQualityAssessment,
+    likely_decision: str,
+) -> list[str]:
+    warnings = []
+    decision = likely_decision.lower()
+    if status == "workshop_candidate":
+        warnings.append("v2.6 status is workshop_candidate; this is not top-conference readiness.")
+    if "borderline" in decision and not assessment.top_conference_readiness:
+        warnings.append("Drastic review predicts borderline reject; top_conference_readiness is false.")
+    if status in {"workshop_candidate", "conference_candidate"} and not assessment.top_conference_readiness:
+        warnings.append("Artifact and matrix blockers improved, but paper quality remains progress, not success.")
+    return warnings
 
 
 def _decision_status(
@@ -447,6 +638,10 @@ def _paths(benchmark_dir: Path | None, manuscript_root: Path | None) -> dict[str
         if drastic.exists():
             paths["drastic_review"] = [str(item) for item in sorted(drastic.rglob("*")) if item.is_file()]
     return paths
+
+
+def _dict(value: object) -> dict[str, Any]:
+    return value if isinstance(value, dict) else {}
 
 
 def _unique(items: list[str]) -> list[str]:

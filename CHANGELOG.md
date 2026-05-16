@@ -2,6 +2,48 @@
 
 All notable project changes should be recorded here.
 
+## 2.6.1
+
+GapForge v2.6.1 is an eval calibration patch. It does not add broad new research features; it recalibrates evaluation and release reporting so workflow completeness cannot be mistaken for top-conference paper readiness.
+
+### Eval Calibration
+
+- Added grouped eval scoring for regression, safety, workflow, paper quality, release gate behavior, and blocker-aware overall score.
+- Added paper-quality assessment metrics for novelty, related work, benchmark fit, baselines, statistical strength, artifact strength, writing, reviewer likelihood, claim honesty, top-conference readiness, and workshop readiness.
+- Added v2.6.1 calibration fixtures for misleading-pass scenarios, including high-workflow/low-paper-quality, fake citations, copied prose, missing artifacts, honest workshop candidates, clean conference candidates, and synthetic deployment overclaims.
+- Added CLI support for `gapforge eval --score-groups`, `gapforge eval --calibration`, `gapforge eval-report --latest --score-groups`, `gapforge paper-quality`, and `gapforge paper-quality-report`.
+
+### Release Gate Reporting
+
+- Updated the v2.6 release gate to report `regression_score`, `safety_score`, `workflow_score`, `paper_quality_score`, `top_conference_readiness`, `workshop_readiness`, and likely reviewer decision.
+- v2.6 can still pass as a tooling/remediation release, but paper success is now reported separately from artifact/workflow success.
+- No paper-readiness claim changed unless the paper-quality assessment supports it.
+- Current v2.6 release status remains `workshop_candidate`, not top-conference ready: the live v2.6 gate reports `top_conference_readiness=false`, `workshop_readiness=true`, and likely reviewer decision `borderline_reject`.
+- If artifact and matrix blockers are resolved but review remains weak, the report labels this as progress, not success.
+
+### Validation
+
+- `make ci` passed: ruff format check, ruff check, mypy, full pytest (`1332 passed`), and default eval.
+- `make eval` passed with score `0.677`.
+- `gapforge eval --v2 --v3 --v4 --v5 --v6 --v7 --v8 --v9 --write-report` passed with score `0.860`.
+- `gapforge eval --v2-ideas --write-report` passed with score `0.810`.
+- `gapforge eval --v21 --write-report` passed with score `0.853`.
+- `gapforge eval --v22 --write-report` passed with score `0.851`.
+- `gapforge eval --v23 --write-report` passed with score `0.862`.
+- `gapforge eval --v24 --write-report` passed with score `0.904`.
+- `gapforge eval --v25 --write-report` passed with score `0.724`.
+- `gapforge eval --v26 --write-report` passed with score `0.465`.
+- `gapforge eval --calibration --write-report` passed with grouped overall score `0.295`, intentionally exposing blocker-heavy calibration cases.
+- `make v6-smoke`, `make v7-smoke`, `make v8-smoke`, and `make v9-smoke` passed.
+- `gapforge v26-release-gate --paper-quality --write-report --json` passed as `workshop_candidate` with `top_conference_readiness=false`, `workshop_readiness=true`, likely reviewer decision `borderline_reject`, and `paper_quality_status=progress_not_success_borderline_reject`.
+
+### Non-Claims and Limitations
+
+- v2.6.1 is not a new paper-readiness claim.
+- v2.6.1 does not claim top-conference readiness for the selected benchmark manuscript.
+- v2.6.1 does not claim that eval scores prove real scientific quality.
+- v2.6.1 creates calibrated metrics that future v2.7 work can use to target novelty, benchmark fit, reviewer-likelihood, and manuscript-persuasiveness gaps.
+
 ## 2.6.0
 
 GapForge v2.6.0 is the Drastic Review Remediation and Real Artifact Package release for the locked selected benchmark `benchmark-sequential-specificity-benchmark-for-low-fpr-collusion-audits`. It starts from v2.5's honest `revise_for_reviews` outcome and resolves the two v2.5 fatal blockers without claiming acceptance, camera-ready readiness, conference readiness, real collusion benchmark validity, or deployment validity.

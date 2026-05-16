@@ -21,7 +21,9 @@ from gapforge.evals.fixtures import (
     V24_FIXTURE_NAMES,
     V25_FIXTURE_NAMES,
     V26_FIXTURE_NAMES,
+    V261_CALIBRATION_FIXTURE_NAMES,
     EvalFixture,
+    load_calibration_fixtures,
     load_fixtures,
     load_v2_idea_fixtures,
     load_v3_fixtures,
@@ -39,12 +41,14 @@ from gapforge.evals.fixtures import (
     load_v26_fixtures,
 )
 from gapforge.evals.metrics import (
+    EvalScoreGroup,
     EvalScores,
     RunMetrics,
     actual_run_gate_correctness,
     adapter_assessment_honesty,
     adapter_transparency_score,
     agent_output_validation_strictness,
+    aggregate_eval_score_groups,
     anonymization_safety,
     artifact_eval_package_score,
     artifact_hygiene_score,
@@ -56,6 +60,7 @@ from gapforge.evals.metrics import (
     benchmark_execution_integrity,
     benchmark_failure_path_preservation,
     benchmark_spec_completeness,
+    build_eval_score_group,
     campaign_decision_quality,
     campaign_report_honesty,
     canonicalization_quality,
@@ -182,6 +187,7 @@ from gapforge.evals.metrics import (
     venue_style_safety_score,
     vetted_benchmark_fit_quality,
 )
+from gapforge.evals.reports import render_fixture_score_group, render_score_group_summary
 from gapforge.experiments.protocol import build_protocol_from_state
 from gapforge.export.manuscript import render_expected_results
 from gapforge.models import Claim, Evidence, ExperimentPlan, Gap, HumanReviewRecord, Provenance, ResearchRunState, ResearchTopic
@@ -203,6 +209,12 @@ class FixtureEvalResult:
     fixture_name: str
     topic: str
     scores: EvalScores
+    score_group: EvalScoreGroup
+    path: Path
+    selected_benchmark_v26_fixture: dict[str, object] = field(default_factory=dict)
+    expected_score_groups: dict[str, object] = field(default_factory=dict)
+    expected_blockers: dict[str, object] = field(default_factory=dict)
+    expected_release_behavior: dict[str, object] = field(default_factory=dict)
     unsupported_claims: list[str] = field(default_factory=list)
     accepted_gaps: list[str] = field(default_factory=list)
     rejected_gaps: list[str] = field(default_factory=list)
@@ -229,13 +241,18 @@ class EvalReport:
     v24: bool = False
     v25: bool = False
     v26: bool = False
+    calibration: bool = False
+    score_groups: bool = False
     report_path: Path | None = None
 
     @property
     def overall_score(self) -> float:
         if not self.results:
             return 0.0
-        return round(sum(result.scores.overall() for result in self.results) / len(self.results), 3)
+        return self.aggregate_score_group().overall_score
+
+    def aggregate_score_group(self) -> EvalScoreGroup:
+        return aggregate_eval_score_groups([result.score_group for result in self.results])
 
 
 def evaluate_run(state: ResearchRunState) -> BenchmarkResult:
@@ -263,9 +280,11 @@ def run_evals(
     v24: bool = False,
     v25: bool = False,
     v26: bool = False,
+    calibration: bool = False,
     v2_ideas: bool = False,
+    score_groups: bool = False,
 ) -> EvalReport:
-    version_flag_count = sum([v2, v3, v4, v5, v6, v7, v8, v9, v21, v22, v23, v24, v25, v26, v2_ideas])
+    version_flag_count = sum([v2, v3, v4, v5, v6, v7, v8, v9, v21, v22, v23, v24, v25, v26, calibration, v2_ideas])
     if fixture or version_flag_count <= 1:
         selected = (
             [fixture]
@@ -273,6 +292,8 @@ def run_evals(
             else (
                 V2_IDEA_FIXTURE_NAMES
                 if v2_ideas
+                else V261_CALIBRATION_FIXTURE_NAMES
+                if calibration
                 else V26_FIXTURE_NAMES
                 if v26
                 else V22_FIXTURE_NAMES
@@ -321,6 +342,7 @@ def run_evals(
             v24=v24,
             v25=v25,
             v26=v26,
+            calibration=calibration,
             v2_ideas=v2_ideas,
         )
     else:
@@ -353,6 +375,8 @@ def run_evals(
             fixtures.extend(load_v25_fixtures(V25_FIXTURE_NAMES, fixture_root))
         if v26:
             fixtures.extend(load_v26_fixtures(V26_FIXTURE_NAMES, fixture_root))
+        if calibration:
+            fixtures.extend(load_calibration_fixtures(V261_CALIBRATION_FIXTURE_NAMES, fixture_root))
         if v2_ideas:
             fixtures.extend(load_v2_idea_fixtures(V2_IDEA_FIXTURE_NAMES, fixture_root))
     results = [_evaluate_fixture(item) for item in fixtures]
@@ -372,7 +396,9 @@ def run_evals(
         v23=v23 or any(item.is_v23 for item in fixtures),
         v24=v24 or any(item.is_v24 for item in fixtures),
         v25=v25 or any(item.is_v25 for item in fixtures),
-        v26=v26 or any(item.is_v26 for item in fixtures),
+        v26=v26 or any(item.is_v26 and not item.is_calibration for item in fixtures),
+        calibration=calibration or any(item.is_calibration for item in fixtures),
+        score_groups=score_groups,
     )
     if write_report:
         path = (output_dir or Path.cwd()) / "eval_report.md"
@@ -399,9 +425,12 @@ def _load_eval_fixtures_for_flags(
     v24: bool,
     v25: bool,
     v26: bool,
+    calibration: bool,
     v2_ideas: bool,
 ) -> list[EvalFixture]:
-    if v26:
+    if calibration:
+        fixtures = load_calibration_fixtures(selected, fixture_root)
+    elif v26:
         fixtures = load_v26_fixtures(selected, fixture_root)
     elif v22:
         fixtures = load_v22_fixtures(selected, fixture_root)
@@ -436,6 +465,7 @@ def _load_eval_fixtures_for_flags(
 
 def render_eval_report(report: EvalReport) -> str:
     lines = ["# GapForge Evaluation Report", "", f"Overall score: **{report.overall_score:.3f}**", ""]
+    lines.extend(render_score_group_summary(report))
     if report.v2:
         v2_scores = [score for result in report.results if (score := result.scores.v2_overall()) is not None]
         v2_overall = round(sum(v2_scores) / len(v2_scores), 3) if v2_scores else 0.0
@@ -492,6 +522,10 @@ def render_eval_report(report: EvalReport) -> str:
         v26_scores = [score for result in report.results if (score := result.scores.v26_overall()) is not None]
         v26_overall = round(sum(v26_scores) / len(v26_scores), 3) if v26_scores else 0.0
         lines.extend([f"v2.6 Drastic Remediation overall score: **{v26_overall:.3f}**", ""])
+    if report.calibration:
+        calibration_scores = [result.score_group.overall_score for result in report.results if result.score_group.provenance.get("fixture")]
+        calibration_overall = round(sum(calibration_scores) / len(calibration_scores), 3) if calibration_scores else 0.0
+        lines.extend([f"v2.6.1 Eval Calibration grouped overall score: **{calibration_overall:.3f}**", ""])
     if report.v2_ideas:
         v2_idea_scores = [score for result in report.results if (score := result.scores.v2_ideas_overall()) is not None]
         v2_idea_overall = round(sum(v2_idea_scores) / len(v2_idea_scores), 3) if v2_idea_scores else 0.0
@@ -517,6 +551,7 @@ def render_eval_report(report: EvalReport) -> str:
                 "",
             ]
         )
+        lines.extend(render_fixture_score_group(result.score_group))
         if scores.v2_overall() is not None:
             lines.extend(
                 [
@@ -1000,6 +1035,19 @@ def _evaluate_fixture(fixture: EvalFixture) -> FixtureEvalResult:
         scores.human_feedback_integration = human_feedback_integration(idea_fixture)
         scores.research_agenda_quality = research_agenda_quality(idea_fixture)
         scores.idea_yield_gate_correctness = idea_yield_gate_correctness(idea_fixture)
+    score_group_fixture = (
+        fixture.selected_benchmark_v26_fixture
+        or fixture.selected_benchmark_v25_fixture
+        or fixture.selected_benchmark_v24_fixture
+        or fixture.selected_benchmark_v23_fixture
+        or fixture.selected_benchmark_v22_fixture
+        or fixture.selected_benchmark_fixture
+    )
+    score_group = build_eval_score_group(
+        scores,
+        provenance={"fixture": fixture.name, "topic": fixture.topic},
+        selected_benchmark_fixture=score_group_fixture,
+    )
     unsupported = [
         claim.id
         for claim in state.claims
@@ -1020,6 +1068,12 @@ def _evaluate_fixture(fixture: EvalFixture) -> FixtureEvalResult:
         fixture_name=fixture.name,
         topic=fixture.topic,
         scores=scores,
+        score_group=score_group,
+        path=fixture.path,
+        selected_benchmark_v26_fixture=fixture.selected_benchmark_v26_fixture,
+        expected_score_groups=fixture.expected_score_groups,
+        expected_blockers=fixture.expected_blockers,
+        expected_release_behavior=fixture.expected_release_behavior,
         unsupported_claims=unsupported,
         accepted_gaps=accepted,
         rejected_gaps=rejected,

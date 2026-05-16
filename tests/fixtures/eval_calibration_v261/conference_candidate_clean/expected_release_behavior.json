@@ -1,0 +1,6 @@
+{
+  "expected_pass": true,
+  "expected_status": "conference_candidate",
+  "top_conference_ready": true,
+  "workshop_ready": true
+}

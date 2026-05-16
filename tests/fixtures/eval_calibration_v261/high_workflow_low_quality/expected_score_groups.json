@@ -1,0 +1,6 @@
+{
+  "paper_quality_score_max": 0.35,
+  "workflow_score_min": 0.8,
+  "overall_score_max": 0.35,
+  "safety_score_min": 0.8
+}

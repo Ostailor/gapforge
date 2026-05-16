@@ -43,13 +43,13 @@ def test_v26_missing_benchmark_search_or_no_fit_fails(tmp_path: Path) -> None:
 
 
 def test_v26_resolved_blockers_can_be_conference_candidate_and_cli_json(tmp_path: Path) -> None:
-    config = _v26_fixture(tmp_path, package_status="conference_candidate")
+    config = _v26_fixture(tmp_path, package_status="conference_candidate", likely_decision="accept_likely", adapter_support="primary")
     env = {**os.environ, "PYTHONPATH": str(Path(__file__).resolve().parents[1] / "src")}
 
     result = V26ReleaseGateEnforcer(config).evaluate()
     rendered = render_v26_release_gate_markdown(result)
     cli = subprocess.run(
-        [sys.executable, "-m", "gapforge.cli", "v26-release-gate", "--write-report", "--json"],
+        [sys.executable, "-m", "gapforge.cli", "v26-release-gate", "--paper-quality", "--write-report", "--json"],
         cwd=tmp_path,
         env=env,
         text=True,
@@ -59,10 +59,43 @@ def test_v26_resolved_blockers_can_be_conference_candidate_and_cli_json(tmp_path
 
     assert result.passed is True
     assert result.status == "conference_candidate"
+    assert result.top_conference_readiness is True
+    assert result.paper_quality_score >= 0.7
     assert "GapForge v2.6 Release Gate" in rendered
+    assert "paper_quality_score" in rendered
     assert cli.returncode == 0, cli.stderr
-    assert json.loads(cli.stdout)["status"] == "conference_candidate"
+    cli_payload = json.loads(cli.stdout)
+    assert cli_payload["status"] == "conference_candidate"
+    assert cli_payload["top_conference_readiness"] is True
     assert (tmp_path / "data" / "release_gate" / "v26_release_gate_latest.json").exists()
+
+
+def test_v26_workshop_candidate_passes_but_not_top_conference_ready(tmp_path: Path) -> None:
+    config = _v26_fixture(tmp_path)
+
+    result = V26ReleaseGateEnforcer(config).evaluate()
+    rendered = render_v26_release_gate_markdown(result)
+
+    assert result.passed is True
+    assert result.status == "workshop_candidate"
+    assert result.top_conference_readiness is False
+    assert result.workshop_readiness is True
+    assert result.paper_quality_status == "workshop_candidate"
+    assert "workshop_candidate" in rendered
+    assert "not top-conference readiness" in rendered
+
+
+def test_v26_borderline_reject_caps_readiness_as_progress_not_success(tmp_path: Path) -> None:
+    config = _v26_fixture(tmp_path, likely_decision="borderline_reject")
+
+    result = V26ReleaseGateEnforcer(config).evaluate()
+
+    assert result.passed is True
+    assert result.status == "workshop_candidate"
+    assert result.top_conference_readiness is False
+    assert result.paper_quality_score <= 0.5
+    assert "progress" in result.paper_quality_status
+    assert any("borderline reject" in warning for warning in result.warnings)
 
 
 def test_v26_accepts_v25_revise_record_and_negative_safety_statements(tmp_path: Path) -> None:
@@ -114,6 +147,8 @@ def test_v26_fake_citation_fails(tmp_path: Path) -> None:
     assert result.passed is False
     assert result.status == "no_go"
     assert result.requirements["fake_citations_results_blocked"] is False
+    assert result.safety_score == 0.0
+    assert result.top_conference_readiness is False
 
 
 def _v26_fixture(
@@ -126,6 +161,8 @@ def _v26_fixture(
     remaining_fatal: bool = False,
     fake_citation: bool = False,
     package_status: str = "workshop_candidate",
+    likely_decision: str = "revise_before_submission",
+    adapter_support: str = "auxiliary",
 ) -> GapForgeConfig:
     config = GapForgeConfig.from_cwd(tmp_path)
     program = ProjectMemoryManager(config).create_project("V26 Gate Project")
@@ -157,9 +194,10 @@ def _v26_fixture(
                 "manuscript_id": manuscript_id,
                 "status": "loaded",
                 "matrix_id": "related-work-matrix-v26",
-                "entry_count": 3,
-                "must_cite_count": 1,
+                "entry_count": 8,
+                "must_cite_count": 3,
                 "closest_prior_work_count": 1,
+                "fallback_entries_promoted": False,
                 "warnings": [],
                 "blockers": [],
             },
@@ -184,7 +222,7 @@ def _v26_fixture(
             },
         )
     if benchmark_search:
-        _write_benchmark_search_fixture(benchmark_dir, benchmark_id, no_fit=no_fit)
+        _write_benchmark_search_fixture(benchmark_dir, benchmark_id, no_fit=no_fit, adapter_support=adapter_support)
 
     _write_json(
         benchmark_dir / "venue_artifact_integration" / "report.json",
@@ -212,7 +250,7 @@ def _v26_fixture(
             "resolved_blockers": ["missing:related_work_matrix", "missing:artifact_package"],
             "remaining_blockers": remaining,
             "readiness_change": "fatal_blockers_resolved" if not remaining else "fatal_blockers_remain",
-            "likely_decision": "revise_before_submission" if not remaining else "reject_likely",
+            "likely_decision": likely_decision if not remaining else "reject_likely",
         },
     )
     _write_json(
@@ -235,7 +273,13 @@ def _v26_fixture(
     return config
 
 
-def _write_benchmark_search_fixture(benchmark_dir: Path, benchmark_id: str, *, no_fit: bool) -> None:
+def _write_benchmark_search_fixture(
+    benchmark_dir: Path,
+    benchmark_id: str,
+    *,
+    no_fit: bool,
+    adapter_support: str,
+) -> None:
     search_dir = benchmark_dir / "real_benchmark_search"
     if no_fit:
         _write_json(
@@ -280,12 +324,12 @@ def _write_benchmark_search_fixture(benchmark_dir: Path, benchmark_id: str, *, n
             "candidate_benchmark_id": candidate_id,
             "selected_benchmark_id": benchmark_id,
             "adapter_possible": True,
-            "adapter_type": "auxiliary",
+            "adapter_type": adapter_support,
             "schema_mismatches": [],
             "label_mismatches": [],
             "sequentialization_needed": False,
             "observability_mapping": "Monitor observations are mapped only as auxiliary evidence.",
-            "expected_claim_support": "auxiliary",
+            "expected_claim_support": adapter_support,
             "blockers": [],
         },
     )
@@ -300,8 +344,8 @@ def _write_benchmark_search_fixture(benchmark_dir: Path, benchmark_id: str, *, n
                 "status": "complete",
                 "run_type": "fixture",
                 "metric_results": {"accuracy": 0.5},
-                "claim_support_level": "auxiliary",
-                "limitations": ["Auxiliary evidence only."],
+                "claim_support_level": adapter_support,
+                "limitations": [f"{adapter_support.title()} evidence only."],
             }
         ],
     )

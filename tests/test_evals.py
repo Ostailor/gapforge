@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import sys
@@ -23,7 +24,9 @@ from gapforge.evals.fixtures import (
     V24_FIXTURE_NAMES,
     V25_FIXTURE_NAMES,
     V26_FIXTURE_NAMES,
+    V261_CALIBRATION_FIXTURE_NAMES,
     list_fixtures,
+    load_calibration_fixture,
     load_fixture,
     load_v2_idea_fixture,
     load_v3_fixture,
@@ -133,6 +136,7 @@ from gapforge.evals.metrics import (
     venue_style_safety_score,
     vetted_benchmark_fit_quality,
 )
+from gapforge.evals.paper_quality import assess_paper_quality_from_payload
 from gapforge.models import Claim, ResearchRunState, ResearchTopic, SourceCoverageReport
 
 
@@ -1187,6 +1191,262 @@ def test_v26_run_evals_supports_single_fixture_flag() -> None:
     assert result.scores.drastic_review_rerun_quality == 1.0
     assert result.scores.v26_release_gate_correctness == 1.0
     assert result.scores.v26_overall() is not None
+
+
+def test_score_groups_show_high_workflow_with_low_paper_quality() -> None:
+    report = run_evals(fixture="fatal_reviewers_remain_revise", v26=True, write_report=False, score_groups=True)
+    group = report.results[0].score_group
+
+    assert group.workflow_score >= 0.8
+    assert group.paper_quality_score <= 0.35
+    assert "paper quality" in " ".join(group.warnings).lower()
+    assert group.overall_score <= group.paper_quality_score
+
+
+def test_score_groups_blocking_safety_failure_caps_overall() -> None:
+    report = run_evals(fixture="copied_prose_blocked", v26=True, write_report=False, score_groups=True)
+    group = report.results[0].score_group
+
+    assert group.safety_score == 0.0
+    assert group.release_gate_score == 0.0
+    assert group.overall_score == 0.0
+    assert any("safety" in item for item in group.blocking_failures)
+
+
+def test_score_groups_drastic_review_reject_caps_paper_quality() -> None:
+    report = run_evals(fixture="artifact_package_missing_blocked", v26=True, write_report=False, score_groups=True)
+    group = report.results[0].score_group
+
+    assert group.paper_quality_score <= 0.35
+    assert any("drastic review" in item for item in group.warnings)
+
+
+def test_eval_report_renders_grouped_scores(tmp_path: Path) -> None:
+    report = run_evals(
+        fixture="matrix_package_resolved_workshop_candidate",
+        v26=True,
+        output_dir=tmp_path,
+        write_report=True,
+        score_groups=True,
+    )
+
+    text = (tmp_path / "eval_report.md").read_text(encoding="utf-8")
+    assert report.score_groups
+    assert "## Grouped Scores" in text
+    assert "paper_quality_score" in text
+    assert "workflow_score" in text
+
+
+def test_eval_cli_and_latest_report_support_score_groups(tmp_path: Path) -> None:
+    env = {**os.environ, "GAPFORGE_DISABLE_NETWORK": "1"}
+    env["PYTHONPATH"] = str(Path.cwd() / "src")
+    env["GAPFORGE_ROOT"] = str(tmp_path)
+
+    eval_result = subprocess.run(
+        [sys.executable, "-m", "gapforge.cli", "eval", "--v26", "--score-groups"],
+        cwd=Path.cwd(),
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    latest_result = subprocess.run(
+        [sys.executable, "-m", "gapforge.cli", "eval-report", "--latest", "--score-groups"],
+        cwd=Path.cwd(),
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert eval_result.returncode == 0, eval_result.stderr
+    assert "Grouped overall score" in eval_result.stdout
+    assert latest_result.returncode == 0, latest_result.stderr
+    assert "paper_quality_score" in latest_result.stdout
+
+
+def test_v261_calibration_fixtures_are_complete() -> None:
+    for name in V261_CALIBRATION_FIXTURE_NAMES:
+        fixture = load_calibration_fixture(name)
+        assert fixture.is_calibration
+        assert fixture.is_v26
+        assert fixture.selected_benchmark_v26_fixture
+        for filename in [
+            "eval_input.json",
+            "expected_score_groups.json",
+            "expected_blockers.json",
+            "expected_release_behavior.json",
+        ]:
+            assert (fixture.path / filename).exists()
+
+
+def test_calibration_high_workflow_low_quality_does_not_look_good_overall() -> None:
+    result = run_evals(
+        fixture="high_workflow_low_quality",
+        calibration=True,
+        write_report=False,
+        score_groups=True,
+    ).results[0]
+    expected = result.expected_score_groups
+    group = result.score_group
+
+    assert group.workflow_score >= expected["workflow_score_min"]
+    assert group.paper_quality_score <= expected["paper_quality_score_max"]
+    assert group.overall_score <= expected["overall_score_max"]
+    assert any("paper quality" in warning for warning in group.warnings)
+
+
+def test_calibration_expected_score_group_files_match_runtime_scores() -> None:
+    for name in V261_CALIBRATION_FIXTURE_NAMES:
+        result = run_evals(fixture=name, calibration=True, write_report=False, score_groups=True).results[0]
+        _assert_score_group_expectations(result)
+        expected_release = json.loads((result.path / "expected_release_behavior.json").read_text(encoding="utf-8"))
+        assert result.selected_benchmark_v26_fixture["v26_release_gate"]["expected_status"] == expected_release["expected_status"]
+        assert bool(result.score_group.release_gate_score) is expected_release["expected_pass"]
+
+
+def test_calibration_fake_citation_forces_safety_fail() -> None:
+    result = run_evals(
+        fixture="fake_citation_high_workflow",
+        calibration=True,
+        write_report=False,
+        score_groups=True,
+    ).results[0]
+
+    assert result.score_group.safety_score == result.expected_score_groups["safety_score"]
+    assert result.score_group.release_gate_score == 0.0
+    assert result.score_group.overall_score == result.expected_score_groups["overall_score"]
+    _assert_expected_blockers(result)
+
+
+def test_calibration_copied_prose_forces_safety_fail() -> None:
+    result = run_evals(
+        fixture="copied_prose_blocked",
+        calibration=True,
+        write_report=False,
+        score_groups=True,
+    ).results[0]
+
+    assert result.score_group.safety_score == result.expected_score_groups["safety_score"]
+    assert result.score_group.overall_score == result.expected_score_groups["overall_score"]
+    _assert_expected_blockers(result)
+
+
+def test_calibration_workshop_candidate_is_not_conference_ready() -> None:
+    result = run_evals(
+        fixture="workshop_candidate_honest",
+        calibration=True,
+        write_report=False,
+        score_groups=True,
+    ).results[0]
+    assessment = assess_paper_quality_from_payload(
+        result.selected_benchmark_v26_fixture,
+        benchmark_id="calibration-workshop",
+        manuscript_id="calibration-workshop-manuscript",
+    )
+
+    assert result.expected_release_behavior["expected_status"] == "workshop_candidate"
+    assert assessment.workshop_readiness is True
+    assert assessment.top_conference_readiness is False
+
+
+def test_calibration_conference_candidate_requires_no_fatal_blockers() -> None:
+    result = run_evals(
+        fixture="conference_candidate_clean",
+        calibration=True,
+        write_report=False,
+        score_groups=True,
+    ).results[0]
+    assessment = assess_paper_quality_from_payload(
+        result.selected_benchmark_v26_fixture,
+        benchmark_id="calibration-conference",
+        manuscript_id="calibration-conference-manuscript",
+    )
+
+    assert result.score_group.blocking_failures == []
+    assert assessment.top_conference_readiness is True
+    assert assessment.blockers == []
+    assert result.score_group.paper_quality_score >= result.expected_score_groups["paper_quality_score_min"]
+
+
+def test_calibration_synthetic_deployment_overclaim_blocks() -> None:
+    result = run_evals(
+        fixture="synthetic_deployment_overclaim",
+        calibration=True,
+        write_report=False,
+        score_groups=True,
+    ).results[0]
+    assessment = assess_paper_quality_from_payload(
+        result.selected_benchmark_v26_fixture,
+        benchmark_id="calibration-synthetic-overclaim",
+        manuscript_id="calibration-synthetic-overclaim-manuscript",
+    )
+
+    assert result.score_group.safety_score == 0.0
+    assert result.score_group.release_gate_score == 0.0
+    assert assessment.top_conference_readiness is False
+    assert any("deployment-validity" in blocker for blocker in assessment.blockers)
+    _assert_expected_blockers(result)
+
+
+def test_eval_cli_calibration_mode_and_single_fixture(tmp_path: Path) -> None:
+    env = {**os.environ, "GAPFORGE_DISABLE_NETWORK": "1"}
+    env["PYTHONPATH"] = str(Path.cwd() / "src")
+    env["GAPFORGE_ROOT"] = str(tmp_path)
+
+    all_result = subprocess.run(
+        [sys.executable, "-m", "gapforge.cli", "eval", "--calibration"],
+        cwd=Path.cwd(),
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    single_result = subprocess.run(
+        [sys.executable, "-m", "gapforge.cli", "eval", "--fixture", "high_workflow_low_quality", "--calibration"],
+        cwd=Path.cwd(),
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert all_result.returncode == 0, all_result.stderr
+    assert single_result.returncode == 0, single_result.stderr
+    assert "Grouped overall score" in all_result.stdout
+    text = (tmp_path / "eval_report.md").read_text(encoding="utf-8")
+    assert "high_workflow_low_quality" in text
+    assert "paper_quality_score" in text
+
+
+def _assert_expected_blockers(result) -> None:
+    joined = "\n".join(result.score_group.blocking_failures)
+    expected = json.loads((result.path / "expected_blockers.json").read_text(encoding="utf-8"))
+    for item in expected.get("expected", []):
+        assert item in joined
+    for item in expected.get("forbidden", []):
+        assert item not in joined
+
+
+def _assert_score_group_expectations(result) -> None:
+    expected = json.loads((result.path / "expected_score_groups.json").read_text(encoding="utf-8"))
+    values = {
+        "regression_score": result.score_group.regression_score,
+        "safety_score": result.score_group.safety_score,
+        "workflow_score": result.score_group.workflow_score,
+        "paper_quality_score": result.score_group.paper_quality_score,
+        "release_gate_score": result.score_group.release_gate_score,
+        "overall_score": result.score_group.overall_score,
+    }
+    for key, expected_value in expected.items():
+        if key.endswith("_min"):
+            metric = key.removesuffix("_min")
+            assert values[metric] >= expected_value, (result.fixture_name, key, values[metric], expected_value)
+        elif key.endswith("_max"):
+            metric = key.removesuffix("_max")
+            assert values[metric] <= expected_value, (result.fixture_name, key, values[metric], expected_value)
+        else:
+            assert values[key] == expected_value, (result.fixture_name, key, values[key], expected_value)
 
 
 def test_v2_duplicate_ideas_are_rejected_by_dossier_aware_novelty_gate() -> None:

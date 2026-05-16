@@ -99,6 +99,7 @@ from gapforge.diagnostics import (
 from gapforge.directions.maturation import DirectionMaturationManager
 from gapforge.docs_audit import DocsAuditor, render_docs_audit
 from gapforge.evals.benchmark import run_evals
+from gapforge.evals.paper_quality import PaperQualityEvaluator, render_paper_quality_report
 from gapforge.experiment_code import (
     ExperimentCodeScaffolderV2,
     ExperimentCodeTaskGenerator,
@@ -760,8 +761,14 @@ def build_parser() -> argparse.ArgumentParser:
     eval_parser.add_argument("--v24", action="store_true", help="Run v2.4 related-work remediation evaluation fixtures.")
     eval_parser.add_argument("--v25", action="store_true", help="Run v2.5 real benchmark grounding evaluation fixtures.")
     eval_parser.add_argument("--v26", action="store_true", help="Run v2.6 drastic remediation evaluation fixtures.")
+    eval_parser.add_argument("--calibration", action="store_true", help="Run v2.6.1 misleading-pass calibration fixtures.")
     eval_parser.add_argument("--v2-ideas", action="store_true", help="Run v2 Idea Discovery Engine evaluation fixtures.")
     eval_parser.add_argument("--write-report", action="store_true")
+    eval_parser.add_argument("--score-groups", action="store_true", help="Render grouped eval scores.")
+
+    eval_report_parser = subparsers.add_parser("eval-report", help="Print the latest eval report.")
+    eval_report_parser.add_argument("--latest", action="store_true", help="Print the latest eval_report.md.")
+    eval_report_parser.add_argument("--score-groups", action="store_true", help="Require grouped score output in the report.")
 
     report_parser = subparsers.add_parser("report", help="Write final_report.md or final_report.json.")
     report_parser.add_argument("--run-id", default="latest", help="Run ID to report on, or 'latest' (default).")
@@ -1474,6 +1481,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     v26_release_gate_parser.add_argument("--write-report", action="store_true")
     v26_release_gate_parser.add_argument("--json", action="store_true")
+    v26_release_gate_parser.add_argument("--paper-quality", action="store_true", help="Include paper-quality status in output.")
 
     cli_audit_parser = subparsers.add_parser("cli-audit", help="Audit command grouping, help text, and v1 CLI discoverability.")
     cli_audit_parser.add_argument("--write-report", action="store_true")
@@ -2161,6 +2169,14 @@ def build_parser() -> argparse.ArgumentParser:
         "selected-artifact-package-status", help="Print selected benchmark manuscript artifact package load status."
     )
     selected_artifact_package_status_parser.add_argument("--benchmark-id", required=True)
+
+    paper_quality_parser = subparsers.add_parser("paper-quality", help="Assess selected benchmark paper quality.")
+    paper_quality_scope = paper_quality_parser.add_mutually_exclusive_group(required=True)
+    paper_quality_scope.add_argument("--benchmark-id")
+    paper_quality_scope.add_argument("--manuscript-id")
+
+    paper_quality_report_parser = subparsers.add_parser("paper-quality-report", help="Render selected benchmark paper-quality assessment.")
+    paper_quality_report_parser.add_argument("--benchmark-id", required=True)
 
     selected_must_cite_parser = subparsers.add_parser("selected-must-cite", help="Render selected benchmark must-cite paper list.")
     selected_must_cite_parser.add_argument("--benchmark-id", required=True)
@@ -3608,11 +3624,29 @@ def _dispatch(
             v24=args.v24,
             v25=args.v25,
             v26=args.v26,
+            calibration=args.calibration,
             v2_ideas=args.v2_ideas,
+            score_groups=args.score_groups or args.calibration,
         )
         target = report.report_path or (config.root / "eval_report.md")
         print(f"Wrote evaluation report to {target}")
         print(f"Overall score: {report.overall_score:.3f}")
+        if args.score_groups or args.calibration:
+            print(f"Grouped overall score: {report.aggregate_score_group().overall_score:.3f}")
+        return 0
+    if args.command == "eval-report":
+        if not args.latest:
+            print("Only --latest is supported for eval-report.", file=sys.stderr)
+            return 2
+        path = config.root / "eval_report.md"
+        if not path.exists():
+            print(f"No eval report found at {path}", file=sys.stderr)
+            return 1
+        text = path.read_text(encoding="utf-8")
+        if args.score_groups and "## Grouped Scores" not in text:
+            print(f"Latest eval report at {path} does not include grouped scores.", file=sys.stderr)
+            return 1
+        print(text, end="")
         return 0
     if args.command == "report":
         state = _load_report_state(config, args.run_id)
@@ -5375,6 +5409,17 @@ def _dispatch(
     if args.command == "selected-artifact-package-status":
         print(ArtifactPackageLoader(config).status_report(args.benchmark_id), end="")
         return 0
+    if args.command == "paper-quality":
+        paper_assessment = PaperQualityEvaluator(config).assess(
+            benchmark_id=args.benchmark_id or "",
+            manuscript_id=args.manuscript_id or "",
+        )
+        print(json.dumps(paper_assessment.to_dict(), indent=2))
+        return 0 if not paper_assessment.blockers else 1
+    if args.command == "paper-quality-report":
+        paper_assessment = PaperQualityEvaluator(config).assess(benchmark_id=args.benchmark_id)
+        print(render_paper_quality_report(paper_assessment), end="")
+        return 0 if paper_assessment.workshop_readiness or paper_assessment.top_conference_readiness else 1
     if args.command == "selected-must-cite":
         print(SelectedBenchmarkRelatedWorkMatrixV2Manager(config).must_cite_report(args.benchmark_id), end="")
         return 0

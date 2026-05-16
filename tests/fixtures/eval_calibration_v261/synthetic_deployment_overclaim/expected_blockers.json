@@ -1,0 +1,6 @@
+{
+  "expected": [
+    "safety: unsupported synthetic deployment-validity claim present"
+  ],
+  "forbidden": []
+}

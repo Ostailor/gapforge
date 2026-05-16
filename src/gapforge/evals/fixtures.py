@@ -149,6 +149,16 @@ V26_FIXTURE_NAMES = [
     "fatal_reviewers_remain_revise",
     "conference_candidate_no_fatal_blockers",
 ]
+V261_CALIBRATION_FIXTURE_NAMES = [
+    "high_workflow_low_quality",
+    "fake_citation_high_workflow",
+    "artifact_complete_but_bad_novelty",
+    "strong_related_work_missing_artifact",
+    "workshop_candidate_honest",
+    "conference_candidate_clean",
+    "copied_prose_blocked",
+    "synthetic_deployment_overclaim",
+]
 V2_IDEA_FIXTURE_NAMES = [
     "accepted_benchmark_idea",
     "accepted_measurement_idea",
@@ -195,6 +205,7 @@ class EvalFixture:
     is_v24: bool = False
     is_v25: bool = False
     is_v26: bool = False
+    is_calibration: bool = False
     is_v2_ideas: bool = False
     campaign_fixture: dict[str, Any] = field(default_factory=dict)
     real_literature_fixture: dict[str, Any] = field(default_factory=dict)
@@ -208,6 +219,9 @@ class EvalFixture:
     selected_benchmark_v24_fixture: dict[str, Any] = field(default_factory=dict)
     selected_benchmark_v25_fixture: dict[str, Any] = field(default_factory=dict)
     selected_benchmark_v26_fixture: dict[str, Any] = field(default_factory=dict)
+    expected_score_groups: dict[str, Any] = field(default_factory=dict)
+    expected_blockers: dict[str, Any] = field(default_factory=dict)
+    expected_release_behavior: dict[str, Any] = field(default_factory=dict)
     idea_fixture: dict[str, Any] = field(default_factory=dict)
 
     @property
@@ -277,6 +291,10 @@ def default_v26_fixture_root() -> Path:
     return Path.cwd() / "tests" / "fixtures" / "v26"
 
 
+def default_v261_calibration_fixture_root() -> Path:
+    return Path.cwd() / "tests" / "fixtures" / "eval_calibration_v261"
+
+
 def default_v2_idea_fixture_root() -> Path:
     return Path.cwd() / "tests" / "fixtures" / "ideas_v2"
 
@@ -328,6 +346,9 @@ def load_fixture(name: str, root: Path | None = None) -> EvalFixture:
         v26_path = default_v26_fixture_root() / name
         if v26_path.exists():
             return load_v26_fixture(name, default_v26_fixture_root())
+        calibration_path = default_v261_calibration_fixture_root() / name
+        if calibration_path.exists():
+            return load_calibration_fixture(name, default_v261_calibration_fixture_root())
         v2_idea_path = default_v2_idea_fixture_root() / name
         if v2_idea_path.exists():
             return load_v2_idea_fixture(name, default_v2_idea_fixture_root())
@@ -965,6 +986,61 @@ def load_v26_fixture(name: str, root: Path | None = None) -> EvalFixture:
         selected_benchmark_fixture=raw,
         selected_benchmark_v26_fixture=raw,
     )
+
+
+def load_calibration_fixture(name: str, root: Path | None = None) -> EvalFixture:
+    fixture_root = root or default_v261_calibration_fixture_root()
+    path = fixture_root / name
+    if not path.exists():
+        raise FileNotFoundError(f"Unknown v2.6.1 calibration eval fixture: {name}")
+    raw = _read_json(path / "eval_input.json")
+    topic = str(raw.get("topic", name.replace("_", " ")))
+    papers = [
+        Paper(
+            id=f"paper-{name}",
+            title=f"v2.6.1 calibration fixture paper for {topic}",
+            authors=["GapForge fixture"],
+            abstract="Synthetic offline fixture metadata for v2.6.1 eval calibration behavior.",
+            year=2026,
+            source="fixture",
+        )
+    ]
+    return EvalFixture(
+        name=name,
+        topic=topic,
+        path=path,
+        papers=papers,
+        paper_notes=[],
+        known_good_gaps=[
+            Gap(
+                id=f"gap-{name}",
+                title=topic,
+                description="Offline v2.6.1 calibration fixture for blocker-aware grouped eval scoring.",
+                supporting_paper_ids=[papers[0].id],
+                why_existing_work_does_not_solve_it=(
+                    "Fixture encodes workflow completeness, safety blockers, and paper-quality readiness separately."
+                ),
+                minimum_experiment_needed="Use fixture calibration records and grouped score expectations.",
+                risk_that_gap_is_fake="This is synthetic fixture data and is not a real paper-quality judgement.",
+                confidence="medium",
+            )
+        ],
+        known_bad_gaps=[],
+        duplicate_ideas=[],
+        expected_reviewer_objections=[],
+        is_v26=True,
+        is_calibration=True,
+        selected_benchmark_fixture=raw,
+        selected_benchmark_v26_fixture=raw,
+        expected_score_groups=_read_json(path / "expected_score_groups.json"),
+        expected_blockers=_read_json(path / "expected_blockers.json"),
+        expected_release_behavior=_read_json(path / "expected_release_behavior.json"),
+    )
+
+
+def load_calibration_fixtures(names: list[str] | None = None, root: Path | None = None) -> list[EvalFixture]:
+    selected = names or V261_CALIBRATION_FIXTURE_NAMES
+    return [load_calibration_fixture(name, root) for name in selected]
 
 
 def load_v2_idea_fixture(name: str, root: Path | None = None) -> EvalFixture:

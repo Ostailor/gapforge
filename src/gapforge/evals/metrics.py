@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from gapforge.models import (
     Claim,
@@ -34,6 +34,19 @@ class RunMetrics:
             gap_count=len(state.gaps),
             experiment_count=len(state.experiments),
         )
+
+
+@dataclass(slots=True)
+class EvalScoreGroup:
+    regression_score: float
+    safety_score: float
+    workflow_score: float
+    paper_quality_score: float
+    release_gate_score: float
+    overall_score: float
+    blocking_failures: list[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
+    provenance: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass(slots=True)
@@ -442,6 +455,222 @@ class EvalScores:
         if not present:
             return None
         return round(sum(present) / len(present), 3)
+
+
+def build_eval_score_group(
+    scores: EvalScores,
+    *,
+    provenance: dict[str, str] | None = None,
+    selected_benchmark_fixture: dict[str, object] | None = None,
+) -> EvalScoreGroup:
+    """Build conservative grouped scores so blockers cannot be averaged away."""
+
+    fixture = selected_benchmark_fixture or {}
+    blocking_failures: list[str] = []
+    warnings: list[str] = []
+    regression_score = _average_present([scores.overall(), _version_overall(scores)], default=scores.overall())
+    safety_score = _safety_group_score(scores, fixture, blocking_failures)
+    workflow_score = _workflow_group_score(scores, fixture, blocking_failures)
+    paper_quality_score = _paper_quality_group_score(scores, fixture, warnings)
+    release_gate_score = _release_gate_group_score(scores, fixture, blocking_failures)
+    if workflow_score >= 0.8 and paper_quality_score < 0.6:
+        warnings.append("paper quality remains low despite high workflow completeness; artifact readiness is not paper readiness")
+    grouped_average = _average_present(
+        [regression_score, safety_score, workflow_score, paper_quality_score, release_gate_score],
+        default=0.0,
+    )
+    if blocking_failures:
+        grouped_average = min(grouped_average, safety_score, workflow_score, release_gate_score)
+    elif paper_quality_score < 0.6:
+        grouped_average = min(grouped_average, paper_quality_score)
+    return EvalScoreGroup(
+        regression_score=regression_score,
+        safety_score=safety_score,
+        workflow_score=workflow_score,
+        paper_quality_score=paper_quality_score,
+        release_gate_score=release_gate_score,
+        overall_score=round(grouped_average, 3),
+        blocking_failures=blocking_failures,
+        warnings=warnings,
+        provenance={"schema": "v2.6.1-score-groups", **(provenance or {})},
+    )
+
+
+def aggregate_eval_score_groups(groups: list[EvalScoreGroup]) -> EvalScoreGroup:
+    if not groups:
+        return EvalScoreGroup(
+            regression_score=0.0,
+            safety_score=0.0,
+            workflow_score=0.0,
+            paper_quality_score=0.0,
+            release_gate_score=0.0,
+            overall_score=0.0,
+            provenance={"schema": "v2.6.1-score-groups", "source": "aggregate", "fixture_count": "0"},
+        )
+    return EvalScoreGroup(
+        regression_score=_average_present([group.regression_score for group in groups], default=0.0),
+        safety_score=_average_present([group.safety_score for group in groups], default=0.0),
+        workflow_score=_average_present([group.workflow_score for group in groups], default=0.0),
+        paper_quality_score=_average_present([group.paper_quality_score for group in groups], default=0.0),
+        release_gate_score=_average_present([group.release_gate_score for group in groups], default=0.0),
+        overall_score=_average_present([group.overall_score for group in groups], default=0.0),
+        blocking_failures=[failure for group in groups for failure in group.blocking_failures],
+        warnings=[warning for group in groups for warning in group.warnings],
+        provenance={
+            "schema": "v2.6.1-score-groups",
+            "source": "aggregate",
+            "fixture_count": str(len(groups)),
+        },
+    )
+
+
+def _safety_group_score(scores: EvalScores, fixture: dict[str, object], blocking_failures: list[str]) -> float:
+    safety = _dict(fixture.get("safety"))
+    copied_or_fake = any(bool(safety.get(key)) for key in ["copied_prose_detected", "fake_citation_present", "fake_result_present"])
+    if copied_or_fake:
+        blocking_failures.append("safety: fake citation, fake result, or copied prose present")
+        return 0.0
+    if bool(safety.get("synthetic_deployment_validity_claim")):
+        blocking_failures.append("safety: unsupported synthetic deployment-validity claim present")
+        return 0.0
+    return _average_present(
+        [
+            1.0 - scores.unsupported_claim_rate,
+            scores.citation_validity_score,
+            scores.result_claim_honesty_score,
+            scores.fake_result_rejection,
+            scores.citation_plagiarism_safety,
+            scores.venue_style_safety_score,
+            scores.positioning_safety,
+            scores.manuscript_revision_honesty,
+            scores.adapter_assessment_honesty,
+        ],
+        default=1.0 - scores.unsupported_claim_rate,
+    )
+
+
+def _workflow_group_score(scores: EvalScores, fixture: dict[str, object], blocking_failures: list[str]) -> float:
+    matrix = _dict(fixture.get("matrix_loader"))
+    package = _dict(fixture.get("artifact_package_loader"))
+    if matrix and (str(matrix.get("status", "")) not in {"loaded", "repaired"} or _list(matrix.get("blockers"))):
+        blocking_failures.append("workflow: related-work matrix missing or unloadable")
+        return 0.0
+    if package and (str(package.get("status", "")) not in {"loaded", "repaired"} or _list(package.get("blockers"))):
+        blocking_failures.append("workflow: artifact package missing or unloadable")
+        return 0.0
+    return _average_present(
+        [
+            scores.experiment_completeness_score,
+            scores.experiment_execution_integrity,
+            scores.benchmark_execution_integrity,
+            scores.manuscript_traceability_score,
+            scores.artifact_eval_package_score,
+            scores.submission_package_completeness,
+            scores.matrix_loader_correctness,
+            scores.artifact_package_loader_correctness,
+            scores.real_benchmark_search_quality,
+            scores.drastic_review_rerun_quality,
+            scores.revision_package_completeness,
+        ],
+        default=scores.experiment_completeness_score,
+    )
+
+
+def _paper_quality_group_score(scores: EvalScores, fixture: dict[str, object], warnings: list[str]) -> float:
+    paper_quality = _average_present(
+        [
+            scores.novelty_gate_accuracy,
+            scores.evidence_linkage_score,
+            1.0 - scores.unsupported_claim_rate,
+            scores.related_work_matrix_quality,
+            scores.protocol_completeness,
+            scores.reviewer_panel_quality,
+            scores.statistical_caution_score,
+            scores.low_fpr_underpowered_warning_score,
+            scores.baseline_suite_completeness,
+            scores.baseline_strength_quality,
+            scores.vetted_benchmark_fit_quality,
+            scores.real_benchmark_search_quality,
+            scores.adapter_assessment_honesty,
+            scores.related_work_completion_quality,
+            scores.selected_related_work_matrix_quality,
+            scores.drastic_review_quality,
+            scores.drastic_review_rerun_quality,
+            scores.manuscript_maturity_honesty,
+            scores.manuscript_revision_honesty,
+            scores.readiness_status_correctness,
+        ],
+        default=scores.overall(),
+    )
+    likely_decision = str(_dict(fixture.get("drastic_review_rerun")).get("likely_decision", "")).lower()
+    if not likely_decision:
+        likely_decision = str(_dict(fixture.get("drastic_review")).get("likely_decision", "")).lower()
+    if "reject" in likely_decision and "borderline" not in likely_decision:
+        paper_quality = min(paper_quality, 0.35)
+        warnings.append("drastic review predicts reject; paper_quality_score capped at 0.350")
+    elif "borderline_reject" in likely_decision or "borderline reject" in likely_decision or likely_decision == "borderline":
+        paper_quality = min(paper_quality, 0.5)
+        warnings.append("drastic review predicts borderline reject; paper_quality_score capped at 0.500")
+    return round(paper_quality, 3)
+
+
+def _release_gate_group_score(scores: EvalScores, fixture: dict[str, object], blocking_failures: list[str]) -> float:
+    gate = _dict(fixture.get("v26_release_gate"))
+    if gate:
+        release_gate_score = 1.0 if _computed_v26_release_gate(fixture) else 0.0
+        if release_gate_score == 0.0:
+            blocking_failures.append("release_gate: v2.6 gate does not pass")
+        return release_gate_score
+    return _average_present(
+        [
+            scores.actual_run_gate_correctness,
+            scores.v5_release_gate_correctness,
+            scores.v6_release_gate_correctness,
+            scores.v7_release_gate_correctness,
+            scores.v8_release_gate_correctness,
+            scores.v9_release_gate_correctness,
+            scores.v1_readiness_gate_correctness,
+            scores.idea_yield_gate_correctness,
+            scores.selected_benchmark_release_gate_correctness,
+            scores.v22_release_gate_correctness,
+            scores.v23_release_gate_correctness,
+            scores.v24_release_gate_correctness,
+            scores.v25_release_gate_correctness,
+            scores.v26_release_gate_correctness,
+        ],
+        default=1.0,
+    )
+
+
+def _version_overall(scores: EvalScores) -> float | None:
+    values = [
+        scores.v2_overall(),
+        scores.v3_overall(),
+        scores.v4_overall(),
+        scores.v5_overall(),
+        scores.v6_overall(),
+        scores.v7_overall(),
+        scores.v8_overall(),
+        scores.v9_overall(),
+        scores.v2_ideas_overall(),
+        scores.v21_overall(),
+        scores.v22_overall(),
+        scores.v23_overall(),
+        scores.v24_overall(),
+        scores.v25_overall(),
+        scores.v26_overall(),
+    ]
+    present = [value for value in values if value is not None]
+    if not present:
+        return None
+    return round(sum(present) / len(present), 3)
+
+
+def _average_present(values: list[float | None], *, default: float) -> float:
+    present = [float(value) for value in values if value is not None]
+    if not present:
+        return round(default, 3)
+    return round(sum(present) / len(present), 3)
 
 
 def gap_specificity_score(gaps: list[Gap]) -> float:
