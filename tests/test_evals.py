@@ -24,6 +24,7 @@ from gapforge.evals.fixtures import (
     V24_FIXTURE_NAMES,
     V25_FIXTURE_NAMES,
     V26_FIXTURE_NAMES,
+    V27_FIXTURE_NAMES,
     V261_CALIBRATION_FIXTURE_NAMES,
     list_fixtures,
     load_calibration_fixture,
@@ -42,8 +43,10 @@ from gapforge.evals.fixtures import (
     load_v24_fixture,
     load_v25_fixture,
     load_v26_fixture,
+    load_v27_fixture,
 )
 from gapforge.evals.metrics import (
+    ablation_hardening_quality,
     actual_run_gate_correctness,
     adapter_assessment_honesty,
     adapter_transparency_score,
@@ -56,11 +59,13 @@ from gapforge.evals.metrics import (
     baseline_suite_completeness,
     benchmark_execution_integrity,
     benchmark_failure_path_preservation,
+    benchmark_fit_hardening_quality,
     benchmark_spec_completeness,
     canonicalization_quality,
     citation_plagiarism_safety,
     citation_validity_score,
     collusive_distribution_quality,
+    conference_readiness_correctness,
     direction_maturity_accuracy,
     direction_maturity_gate_accuracy_from_fixture,
     drastic_review_quality,
@@ -68,6 +73,7 @@ from gapforge.evals.metrics import (
     empirical_claim_validity,
     empirical_review_quality,
     error_analysis_quality,
+    external_review_gate_correctness,
     fake_result_rejection,
     gap_evidence_matrix_score,
     go_no_go_decision_quality,
@@ -104,6 +110,7 @@ from gapforge.evals.metrics import (
     result_claim_honesty_score,
     retrieval_relevance_at_k,
     review_dataset_integrity,
+    review_issue_closure_correctness,
     review_taxonomy_quality,
     reviewer_blocker_quality,
     reviewer_calibration_score,
@@ -119,6 +126,7 @@ from gapforge.evals.metrics import (
     stop_reason_correctness,
     submission_package_completeness,
     threat_model_quality,
+    top_conference_revision_quality,
     topic_portfolio_diversity,
     trace_generator_validity,
     underpowered_claim_rejection,
@@ -132,6 +140,7 @@ from gapforge.evals.metrics import (
     v24_release_gate_correctness,
     v25_release_gate_correctness,
     v26_release_gate_correctness,
+    v27_release_gate_correctness,
     venue_checklist_score,
     venue_style_safety_score,
     vetted_benchmark_fit_quality,
@@ -1191,6 +1200,83 @@ def test_v26_run_evals_supports_single_fixture_flag() -> None:
     assert result.scores.drastic_review_rerun_quality == 1.0
     assert result.scores.v26_release_gate_correctness == 1.0
     assert result.scores.v26_overall() is not None
+
+
+def test_v27_eval_fixtures_are_complete_and_offline() -> None:
+    for name in V27_FIXTURE_NAMES:
+        fixture = load_v27_fixture(name)
+        assert fixture.is_v27
+        assert fixture.is_v26
+        assert fixture.topic
+        assert fixture.papers
+        payload = fixture.selected_benchmark_v27_fixture
+        assert payload["paper_quality_assessment"]
+        assert payload["review_issue_tracker"]
+        assert payload["benchmark_fit_hardening"]
+        assert payload["ablations"]
+        assert payload["top_conference_revision"]
+        assert payload["traceability"]
+        assert payload["external_review"]
+        assert payload["v27_release_gate"]
+
+
+def test_v27_fixture_metrics_cover_conference_revise_workshop_and_no_go() -> None:
+    conference = load_v27_fixture("conference_candidate_clean").selected_benchmark_v27_fixture
+    workshop = load_v27_fixture("workshop_candidate_remaining_major").selected_benchmark_v27_fixture
+    fatal = load_v27_fixture("revise_due_to_open_fatal_review").selected_benchmark_v27_fixture
+    no_fit = load_v27_fixture("no_fit_argument_success").selected_benchmark_v27_fixture
+    missing_ablation = load_v27_fixture("missing_ablation_blocked").selected_benchmark_v27_fixture
+    copied = load_v27_fixture("copied_prose_blocked").selected_benchmark_v27_fixture
+    external_reject = load_v27_fixture("external_review_reject_blocks").selected_benchmark_v27_fixture
+
+    assert conference_readiness_correctness(conference) == 1.0
+    assert review_issue_closure_correctness(fatal) == 1.0
+    assert benchmark_fit_hardening_quality(no_fit) == 1.0
+    assert ablation_hardening_quality(conference) == 1.0
+    assert ablation_hardening_quality(missing_ablation) < 0.85
+    assert top_conference_revision_quality(conference) == 1.0
+    assert external_review_gate_correctness(external_reject) == 1.0
+    assert v27_release_gate_correctness(conference) == 1.0
+    assert v27_release_gate_correctness(workshop) == 1.0
+    assert v27_release_gate_correctness(fatal) == 1.0
+    assert v27_release_gate_correctness(no_fit) == 1.0
+    assert v27_release_gate_correctness(missing_ablation) == 1.0
+    assert v27_release_gate_correctness(copied) == 1.0
+    assert v27_release_gate_correctness(external_reject) == 1.0
+    assert conference["v27_release_gate"]["expected_status"] == "conference_candidate"
+    assert workshop["v27_release_gate"]["expected_status"] == "workshop_candidate"
+    assert fatal["v27_release_gate"]["expected_status"] == "revise_for_reviews"
+    assert copied["v27_release_gate"]["expected_status"] == "no_go"
+
+
+def test_v27_run_evals_and_cli_support_fixture_set(tmp_path: Path) -> None:
+    report = run_evals(fixture="external_review_reject_blocks", v27=True, write_report=False)
+    result = report.results[0]
+
+    assert report.v27
+    assert result.fixture_name == "external_review_reject_blocks"
+    assert result.scores.external_review_gate_correctness == 1.0
+    assert result.scores.v27_release_gate_correctness == 1.0
+    assert result.scores.v27_overall() is not None
+
+    env = {**os.environ, "GAPFORGE_DISABLE_NETWORK": "1"}
+    env["PYTHONPATH"] = str(Path.cwd() / "src")
+    env["GAPFORGE_ROOT"] = str(tmp_path)
+    cli_result = subprocess.run(
+        [sys.executable, "-m", "gapforge.cli", "eval", "--v27"],
+        cwd=Path.cwd(),
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert cli_result.returncode == 0, cli_result.stderr
+    assert "Overall score" in cli_result.stdout
+    text = (tmp_path / "eval_report.md").read_text(encoding="utf-8")
+    assert "v2.7 Conference-Candidate Hardening" in text
+    assert "conference_candidate_clean" in text
+    assert "external_review_reject_blocks" in text
 
 
 def test_score_groups_show_high_workflow_with_low_paper_quality() -> None:

@@ -18,6 +18,18 @@ from gapforge.models import (
     ReviewerObjection,
 )
 
+V27_PAPER_QUALITY_THRESHOLD = 0.72
+V27_REQUIRED_ABLATIONS = {
+    "threshold_calibration",
+    "observability_mode",
+    "hard_negative_subset",
+    "collusion_type_subset",
+    "monitor_family_comparison",
+    "sequential_vs_non_sequential",
+    "sample_size_sensitivity",
+    "alpha_sensitivity",
+}
+
 
 @dataclass(slots=True)
 class RunMetrics:
@@ -191,6 +203,13 @@ class EvalScores:
     revision_package_completeness: float | None = None
     readiness_status_correctness: float | None = None
     v26_release_gate_correctness: float | None = None
+    conference_readiness_correctness: float | None = None
+    review_issue_closure_correctness: float | None = None
+    benchmark_fit_hardening_quality: float | None = None
+    ablation_hardening_quality: float | None = None
+    top_conference_revision_quality: float | None = None
+    external_review_gate_correctness: float | None = None
+    v27_release_gate_correctness: float | None = None
 
     def overall(self) -> float:
         positive = [
@@ -456,6 +475,21 @@ class EvalScores:
             return None
         return round(sum(present) / len(present), 3)
 
+    def v27_overall(self) -> float | None:
+        values = [
+            self.conference_readiness_correctness,
+            self.review_issue_closure_correctness,
+            self.benchmark_fit_hardening_quality,
+            self.ablation_hardening_quality,
+            self.top_conference_revision_quality,
+            self.external_review_gate_correctness,
+            self.v27_release_gate_correctness,
+        ]
+        present = [value for value in values if value is not None]
+        if not present:
+            return None
+        return round(sum(present) / len(present), 3)
+
 
 def build_eval_score_group(
     scores: EvalScores,
@@ -571,6 +605,8 @@ def _workflow_group_score(scores: EvalScores, fixture: dict[str, object], blocki
             scores.real_benchmark_search_quality,
             scores.drastic_review_rerun_quality,
             scores.revision_package_completeness,
+            scores.ablation_hardening_quality,
+            scores.top_conference_revision_quality,
         ],
         default=scores.experiment_completeness_score,
     )
@@ -599,6 +635,11 @@ def _paper_quality_group_score(scores: EvalScores, fixture: dict[str, object], w
             scores.manuscript_maturity_honesty,
             scores.manuscript_revision_honesty,
             scores.readiness_status_correctness,
+            scores.conference_readiness_correctness,
+            scores.benchmark_fit_hardening_quality,
+            scores.ablation_hardening_quality,
+            scores.top_conference_revision_quality,
+            scores.external_review_gate_correctness,
         ],
         default=scores.overall(),
     )
@@ -615,6 +656,12 @@ def _paper_quality_group_score(scores: EvalScores, fixture: dict[str, object], w
 
 
 def _release_gate_group_score(scores: EvalScores, fixture: dict[str, object], blocking_failures: list[str]) -> float:
+    v27_gate = _dict(fixture.get("v27_release_gate"))
+    if v27_gate:
+        release_gate_score = 1.0 if _computed_v27_release_gate(fixture) else 0.0
+        if release_gate_score == 0.0:
+            blocking_failures.append("release_gate: v2.7 conference-candidate gate does not pass")
+        return release_gate_score
     gate = _dict(fixture.get("v26_release_gate"))
     if gate:
         release_gate_score = 1.0 if _computed_v26_release_gate(fixture) else 0.0
@@ -637,6 +684,7 @@ def _release_gate_group_score(scores: EvalScores, fixture: dict[str, object], bl
             scores.v24_release_gate_correctness,
             scores.v25_release_gate_correctness,
             scores.v26_release_gate_correctness,
+            scores.v27_release_gate_correctness,
         ],
         default=1.0,
     )
@@ -659,6 +707,7 @@ def _version_overall(scores: EvalScores) -> float | None:
         scores.v24_overall(),
         scores.v25_overall(),
         scores.v26_overall(),
+        scores.v27_overall(),
     ]
     present = [value for value in values if value is not None]
     if not present:
@@ -3295,9 +3344,267 @@ def v26_release_gate_correctness(fixture: dict[str, object]) -> float:
     return round(sum(1 for item in checks if item) / len(checks), 3)
 
 
+def conference_readiness_correctness(fixture: dict[str, object]) -> float:
+    quality = _dict(fixture.get("paper_quality_assessment"))
+    expected_status = str(_dict(fixture.get("v27_release_gate")).get("expected_status", ""))
+    quality_score = _float(quality.get("score"))
+    top_ready = bool(quality.get("top_conference_readiness"))
+    computed_status = _v27_decision_status(fixture)
+    checks = [
+        "score" in quality,
+        top_ready == (quality_score >= V27_PAPER_QUALITY_THRESHOLD),
+        computed_status == expected_status,
+    ]
+    if expected_status == "conference_candidate":
+        checks.extend([quality_score >= V27_PAPER_QUALITY_THRESHOLD, top_ready])
+    else:
+        checks.append(computed_status != "conference_candidate")
+    return round(sum(1 for item in checks if item) / len(checks), 3)
+
+
+def review_issue_closure_correctness(fixture: dict[str, object]) -> float:
+    tracker = _dict(fixture.get("review_issue_tracker"))
+    issues = _dicts(tracker.get("issues"))
+    open_fatal = _v27_open_fatal_review_issue_ids(fixture)
+    computed_status = _v27_decision_status(fixture)
+    expected_status = str(_dict(fixture.get("v27_release_gate")).get("expected_status", ""))
+    checks = [
+        bool(tracker),
+        bool(tracker.get("checklist_created", issues)),
+        computed_status == expected_status,
+        not open_fatal if expected_status == "conference_candidate" else True,
+    ]
+    if open_fatal:
+        checks.extend(
+            [
+                computed_status in {"revise_for_reviews", "no_go"},
+                any("fatal" in str(blocker).lower() for blocker in _list(_dict(fixture.get("v27_release_gate")).get("expected_blockers"))),
+            ]
+        )
+    return round(sum(1 for item in checks if item) / len(checks), 3)
+
+
+def benchmark_fit_hardening_quality(fixture: dict[str, object]) -> float:
+    hardening = _dict(fixture.get("benchmark_fit_hardening"))
+    candidates = _dicts(hardening.get("mapped_benchmarks"))
+    no_fit_rows = _dicts(hardening.get("no_fit_table"))
+    partial = [candidate for candidate in candidates if str(candidate.get("fit_status", "")) in {"partial", "sanity_check"}]
+    present = bool(hardening.get("report_present") or hardening.get("no_fit_argument_present"))
+    checks = [
+        present,
+        len(candidates) >= 2,
+        not bool(hardening.get("reviewer_objection_unaddressed")),
+        bool(hardening.get("manuscript_insertion_text")),
+    ]
+    if bool(hardening.get("no_fit_argument_present")):
+        checks.extend(
+            [
+                len(no_fit_rows) >= 2,
+                all(bool(row.get("benchmark_id")) and bool(row.get("lacks")) for row in no_fit_rows),
+            ]
+        )
+    if partial:
+        checks.append(bool(hardening.get("auxiliary_sanity_check_used")))
+    return round(sum(1 for item in checks if item) / len(checks), 3)
+
+
+def ablation_hardening_quality(fixture: dict[str, object]) -> float:
+    ablations = _dict(fixture.get("ablations"))
+    completed = {str(item) for item in _list(ablations.get("completed"))}
+    justified = {str(item) for item in _list(ablations.get("justified_missing"))}
+    missing = V27_REQUIRED_ABLATIONS - completed - justified
+    checks = [
+        bool(ablations),
+        set(str(item) for item in _list(ablations.get("required"))) == V27_REQUIRED_ABLATIONS,
+        not missing,
+        bool(ablations.get("artifact_backed")),
+        not _list(ablations.get("reviewer_blockers")),
+        bool(ablations.get("synthetic_labeled")) if bool(ablations.get("synthetic")) else True,
+    ]
+    return round(sum(1 for item in checks if item) / len(checks), 3)
+
+
+def top_conference_revision_quality(fixture: dict[str, object]) -> float:
+    revision = _dict(fixture.get("top_conference_revision"))
+    checks = [
+        str(revision.get("status", "")) == "revision_ready",
+        bool(revision.get("abstract_sharpened")),
+        bool(revision.get("contribution_bullets_clear")),
+        bool(revision.get("problem_motivation_strengthened")),
+        bool(revision.get("related_work_contrast")),
+        bool(revision.get("benchmark_validity_argument")),
+        bool(revision.get("limitations_preserved")),
+        bool(revision.get("reviewer_objection_aware")),
+        bool(revision.get("claim_traceability_passed")),
+        not bool(revision.get("unsupported_claims_added")),
+        not bool(revision.get("copied_prose_detected")),
+        not bool(revision.get("claims_acceptance")),
+        not _list(revision.get("blockers")),
+    ]
+    return round(sum(1 for item in checks if item) / len(checks), 3)
+
+
+def external_review_gate_correctness(fixture: dict[str, object]) -> float:
+    external = _dict(fixture.get("external_review"))
+    reviews = _dicts(external.get("reviews"))
+    fatal = _v27_external_fatal_review_ids(fixture)
+    computed_status = _v27_decision_status(fixture)
+    expected_status = str(_dict(fixture.get("v27_release_gate")).get("expected_status", ""))
+    has_review_or_unavailable = bool(reviews) or str(external.get("status", "")) == "unavailable"
+    checks = [
+        bool(external),
+        has_review_or_unavailable,
+        computed_status == expected_status,
+        not fatal if expected_status == "conference_candidate" else True,
+        bool(external.get("human_and_simulated_distinguished", True)),
+    ]
+    if fatal:
+        checks.extend(
+            [
+                computed_status in {"revise_for_reviews", "no_go"},
+                any(
+                    "external" in str(blocker).lower() for blocker in _list(_dict(fixture.get("v27_release_gate")).get("expected_blockers"))
+                ),
+            ]
+        )
+    return round(sum(1 for item in checks if item) / len(checks), 3)
+
+
+def v27_release_gate_correctness(fixture: dict[str, object]) -> float:
+    expected = _dict(fixture.get("v27_release_gate"))
+    expected_status = str(expected.get("expected_status", ""))
+    expected_pass = bool(expected.get("expected_pass"))
+    computed_status = _v27_decision_status(fixture)
+    computed_pass = computed_status in {"conference_candidate", "workshop_candidate"}
+    expected_blockers = _list(expected.get("expected_blockers"))
+    checks = [
+        bool(expected),
+        expected_status in {"conference_candidate", "workshop_candidate", "revise_for_reviews", "no_go"},
+        computed_status == expected_status,
+        computed_pass == expected_pass,
+        conference_readiness_correctness(fixture) >= 0.8,
+        review_issue_closure_correctness(fixture) >= 0.8,
+        benchmark_fit_hardening_quality(fixture) >= 0.8,
+        top_conference_revision_quality(fixture) >= 0.8 or computed_status != "conference_candidate",
+        external_review_gate_correctness(fixture) >= 0.8,
+        not expected_blockers if expected_status == "conference_candidate" else bool(expected_blockers),
+    ]
+    if computed_status == "revise_for_reviews":
+        checks.append(bool(_v27_review_or_revision_blockers(fixture)))
+    if computed_status == "no_go":
+        checks.append(bool(_v27_hard_no_go_blockers(fixture)))
+    if computed_status == "conference_candidate":
+        checks.extend([ablation_hardening_quality(fixture) >= 0.85, not _v27_any_fatal_blockers(fixture)])
+    return round(sum(1 for item in checks if item) / len(checks), 3)
+
+
 def _computed_v26_release_gate(fixture: dict[str, object]) -> bool:
     status = _v26_decision_status(fixture)
     return status in {"conference_candidate", "workshop_candidate", "benchmark_no_fit"}
+
+
+def _computed_v27_release_gate(fixture: dict[str, object]) -> bool:
+    status = _v27_decision_status(fixture)
+    return status in {"conference_candidate", "workshop_candidate"}
+
+
+def _v27_decision_status(fixture: dict[str, object]) -> str:
+    if _v27_hard_no_go_blockers(fixture):
+        return "no_go"
+    requirements = _v27_requirements(fixture)
+    if all(requirements.values()) and not _v27_review_or_revision_blockers(fixture):
+        return "conference_candidate"
+    if requirements["v26_gate_passes"] and _v26_decision_status(fixture) == "workshop_candidate" and not _v27_any_fatal_blockers(fixture):
+        return "workshop_candidate"
+    return "revise_for_reviews"
+
+
+def _v27_requirements(fixture: dict[str, object]) -> dict[str, bool]:
+    quality = _dict(fixture.get("paper_quality_assessment"))
+    safety = _dict(fixture.get("safety"))
+    package = _dict(fixture.get("artifact_package_loader"))
+    traceability = _dict(fixture.get("traceability"))
+    external = _dict(fixture.get("external_review"))
+    return {
+        "v26_gate_passes": _computed_v26_release_gate(fixture),
+        "paper_quality_above_threshold": bool(quality.get("top_conference_readiness"))
+        and _float(quality.get("score")) >= V27_PAPER_QUALITY_THRESHOLD,
+        "drastic_review_no_fatal_blockers": not _list(_dict(fixture.get("drastic_review_rerun")).get("remaining_blockers")),
+        "review_issue_tracker_has_no_open_fatal_issues": not _v27_open_fatal_review_issue_ids(fixture),
+        "benchmark_fit_or_no_fit_argument_present": bool(
+            _dict(fixture.get("benchmark_fit_hardening")).get("report_present")
+            or _dict(fixture.get("benchmark_fit_hardening")).get("no_fit_argument_present")
+        ),
+        "required_ablations_complete_or_justified": not (
+            V27_REQUIRED_ABLATIONS
+            - {str(item) for item in _list(_dict(fixture.get("ablations")).get("completed"))}
+            - {str(item) for item in _list(_dict(fixture.get("ablations")).get("justified_missing"))}
+        )
+        and bool(_dict(fixture.get("ablations")).get("artifact_backed")),
+        "manuscript_top_conference_revision_complete": top_conference_revision_quality(fixture) >= 0.85,
+        "artifact_package_loadable": str(package.get("status", "")) in {"loaded", "repaired"} and not _list(package.get("blockers")),
+        "claim_traceability_passes": bool(traceability.get("passes")) and not _list(traceability.get("blocking_issues")),
+        "no_fake_citations_results_copied_prose": not any(
+            bool(safety.get(key)) for key in ["copied_prose_detected", "fake_citation_present", "fake_result_present"]
+        ),
+        "no_synthetic_deployment_overclaim": not bool(safety.get("synthetic_deployment_validity_claim")),
+        "external_review_captured_or_explicitly_unavailable": (
+            bool(_dicts(external.get("reviews"))) or str(external.get("status", "")) == "unavailable"
+        )
+        and not _v27_external_fatal_review_ids(fixture),
+    }
+
+
+def _v27_hard_no_go_blockers(fixture: dict[str, object]) -> list[str]:
+    requirements = _v27_requirements(fixture)
+    hard = [
+        "artifact_package_loadable",
+        "claim_traceability_passes",
+        "no_fake_citations_results_copied_prose",
+        "no_synthetic_deployment_overclaim",
+    ]
+    return [name for name in hard if not requirements[name]]
+
+
+def _v27_review_or_revision_blockers(fixture: dict[str, object]) -> list[str]:
+    requirements = _v27_requirements(fixture)
+    return [name for name, passed in requirements.items() if not passed and name not in _v27_hard_no_go_blockers(fixture)]
+
+
+def _v27_any_fatal_blockers(fixture: dict[str, object]) -> bool:
+    return bool(
+        _list(_dict(fixture.get("drastic_review_rerun")).get("remaining_blockers"))
+        or _v27_open_fatal_review_issue_ids(fixture)
+        or _v27_external_fatal_review_ids(fixture)
+    )
+
+
+def _v27_open_fatal_review_issue_ids(fixture: dict[str, object]) -> list[str]:
+    issues = _dicts(_dict(fixture.get("review_issue_tracker")).get("issues"))
+    return [
+        str(issue.get("id"))
+        for issue in issues
+        if str(issue.get("severity", "")) == "fatal" and str(issue.get("status", "")) in {"open", "in_progress", "impossible"}
+    ]
+
+
+def _v27_external_fatal_review_ids(fixture: dict[str, object]) -> list[str]:
+    reviews = _dicts(_dict(fixture.get("external_review")).get("reviews"))
+    fatal_ids = []
+    for review in reviews:
+        source = str(review.get("source", "human"))
+        if source != "human":
+            continue
+        recommendation = str(review.get("overall_recommendation", ""))
+        unresolved = bool(review.get("unresolved_fatal")) or (
+            recommendation in {"weak_reject", "reject"}
+            and bool(
+                _list(review.get("required_revisions")) or _list(review.get("missing_experiments")) or _list(review.get("claim_overreach"))
+            )
+        )
+        if unresolved:
+            fatal_ids.append(str(review.get("id", "external-review")))
+    return fatal_ids
 
 
 def _v26_decision_status(fixture: dict[str, object]) -> str:

@@ -25,6 +25,7 @@ from gapforge.evals.metrics import (
 from gapforge.evals.paper_quality import PaperQualityAssessment, assess_paper_quality_from_payload
 from gapforge.project_memory import ProjectMemoryManager
 from gapforge.release_gate.v25 import V25ReleaseGateEnforcer
+from gapforge.reviewers.issue_tracker import ReviewIssue, review_issue_status
 
 V26_STATUSES = {"conference_candidate", "workshop_candidate", "revise_for_reviews", "benchmark_no_fit", "no_go"}
 V25_COMPLETED_STATUSES = {"conference_candidate", "workshop_candidate", "revise_for_reviews", "benchmark_no_fit", "no_go", "pass"}
@@ -94,6 +95,7 @@ class V26ReleaseGateEnforcer:
         remaining_fatal = _remaining_fatal_blockers(artifacts.drastic_rerun)
         package_status = str(artifacts.revision_package.get("status", ""))
         likely_reviewer_decision = str(artifacts.drastic_rerun.get("likely_decision", ""))
+        issue_status = _review_issue_gate_status(manuscript_root)
 
         requirements = {
             "v25_release_gate_completed": bool(v25) and str(v25.get("status", "")) in V25_COMPLETED_STATUSES,
@@ -114,6 +116,7 @@ class V26ReleaseGateEnforcer:
             "no_copied_paper_prose": not copied_hits,
             "no_hidden_fatal_blockers": _fatal_blockers_not_hidden(remaining_fatal, package_status, artifacts.revision_package),
             "no_synthetic_deployment_validity_claim": not synthetic_claim_hits,
+            "review_issue_level_closure": package_status != "conference_candidate" or bool(issue_status.get("conference_ready_allowed")),
         }
         blockers = _requirement_blockers(requirements)
         blockers.extend(f"Fake citation/result signal: {hit}" for hit in fake_hits)
@@ -121,6 +124,7 @@ class V26ReleaseGateEnforcer:
         blockers.extend(f"Synthetic deployment-validity claim signal: {hit}" for hit in synthetic_claim_hits)
         blockers.extend(_artifact_blockers(artifacts.related_matrix, "related-work matrix"))
         blockers.extend(_artifact_blockers(artifacts.artifact_package, "artifact package"))
+        blockers.extend(_review_issue_blockers(issue_status, package_status))
         status = _decision_status(
             requirements=requirements,
             hard_blockers=_hard_blockers(blockers),
@@ -469,6 +473,58 @@ def _has_attempt_or_no_fit(attempts: list[dict[str, Any]], no_fit_explicit: bool
 
 def _remaining_fatal_blockers(rerun: dict[str, Any]) -> list[str]:
     return [str(item) for item in rerun.get("remaining_blockers", []) if item]
+
+
+def _review_issue_gate_status(manuscript_root: Path | None) -> dict[str, Any]:
+    manuscript_id = manuscript_root.name if manuscript_root else ""
+    empty = {
+        "manuscript_id": manuscript_id,
+        "total_issues": 0,
+        "open_issue_ids": [],
+        "open_fatal_issue_ids": [],
+        "impossible_issue_ids": [],
+        "impossible_fatal_issue_ids": [],
+        "waived_fatal_issue_ids": [],
+        "unjustified_waived_fatal_issue_ids": [],
+        "closed_issue_ids": [],
+        "conference_ready_allowed": False,
+    }
+    if manuscript_root is None:
+        return empty
+    path = manuscript_root / "reviews" / "drastic" / "review_issues.json"
+    if not path.exists():
+        return empty
+    payload = _read_json(path)
+    issues = []
+    for item in payload.get("issues", []):
+        issue_payload = dict(item)
+        issue_payload.pop("provenance", None)
+        issues.append(ReviewIssue(**issue_payload))
+    return review_issue_status(manuscript_id or str(payload.get("manuscript_id", "")), issues)
+
+
+def _review_issue_blockers(issue_status: dict[str, Any], package_status: str) -> list[str]:
+    if package_status != "conference_candidate":
+        return []
+    if not issue_status.get("total_issues"):
+        return ["Conference candidate requires a review issue checklist."]
+    blockers = []
+    open_issues = issue_status.get("open_issue_ids", [])
+    open_fatal = issue_status.get("open_fatal_issue_ids", [])
+    impossible_issues = issue_status.get("impossible_issue_ids", [])
+    impossible_fatal = issue_status.get("impossible_fatal_issue_ids", [])
+    unjustified_waived = issue_status.get("unjustified_waived_fatal_issue_ids", [])
+    if open_issues:
+        blockers.append(f"Conference candidate blocked by open review issues: {', '.join(open_issues)}")
+    if open_fatal:
+        blockers.append(f"Conference candidate blocked by open fatal review issues: {', '.join(open_fatal)}")
+    if impossible_issues:
+        blockers.append(f"Conference candidate blocked by impossible review issues: {', '.join(impossible_issues)}")
+    if impossible_fatal:
+        blockers.append(f"Conference candidate blocked by impossible fatal review issues: {', '.join(impossible_fatal)}")
+    if unjustified_waived:
+        blockers.append("Conference candidate blocked by fatal waivers without human review evidence: " + ", ".join(unjustified_waived))
+    return blockers
 
 
 def _fatal_blockers_not_hidden(remaining_fatal: list[str], package_status: str, revision_package: dict[str, Any]) -> bool:

@@ -21,6 +21,7 @@ from gapforge.evals.fixtures import (
     V24_FIXTURE_NAMES,
     V25_FIXTURE_NAMES,
     V26_FIXTURE_NAMES,
+    V27_FIXTURE_NAMES,
     V261_CALIBRATION_FIXTURE_NAMES,
     EvalFixture,
     load_calibration_fixtures,
@@ -39,11 +40,13 @@ from gapforge.evals.fixtures import (
     load_v24_fixtures,
     load_v25_fixtures,
     load_v26_fixtures,
+    load_v27_fixtures,
 )
 from gapforge.evals.metrics import (
     EvalScoreGroup,
     EvalScores,
     RunMetrics,
+    ablation_hardening_quality,
     actual_run_gate_correctness,
     adapter_assessment_honesty,
     adapter_transparency_score,
@@ -59,6 +62,7 @@ from gapforge.evals.metrics import (
     benchmark_comparison_honesty,
     benchmark_execution_integrity,
     benchmark_failure_path_preservation,
+    benchmark_fit_hardening_quality,
     benchmark_spec_completeness,
     build_eval_score_group,
     campaign_decision_quality,
@@ -69,6 +73,7 @@ from gapforge.evals.metrics import (
     citation_validity_score,
     cli_audit_score,
     collusive_distribution_quality,
+    conference_readiness_correctness,
     constructive_gap_quality,
     contradiction_detection_score,
     cross_domain_transfer_quality,
@@ -87,6 +92,7 @@ from gapforge.evals.metrics import (
     experiment_completeness_score,
     experiment_execution_integrity,
     external_review_completeness,
+    external_review_gate_correctness,
     fake_result_rejection,
     full_text_coverage_score,
     gap_evidence_matrix_score,
@@ -147,6 +153,7 @@ from gapforge.evals.metrics import (
     result_claim_honesty_score,
     retrieval_relevance_at_k,
     review_dataset_integrity,
+    review_issue_closure_correctness,
     review_queue_quality,
     review_taxonomy_quality,
     reviewer_blocker_quality,
@@ -167,6 +174,7 @@ from gapforge.evals.metrics import (
     stop_reason_correctness,
     submission_package_completeness,
     threat_model_quality,
+    top_conference_revision_quality,
     topic_portfolio_diversity,
     tournament_selection_quality,
     trace_generator_validity,
@@ -183,6 +191,7 @@ from gapforge.evals.metrics import (
     v24_release_gate_correctness,
     v25_release_gate_correctness,
     v26_release_gate_correctness,
+    v27_release_gate_correctness,
     venue_checklist_score,
     venue_style_safety_score,
     vetted_benchmark_fit_quality,
@@ -212,6 +221,7 @@ class FixtureEvalResult:
     score_group: EvalScoreGroup
     path: Path
     selected_benchmark_v26_fixture: dict[str, object] = field(default_factory=dict)
+    selected_benchmark_v27_fixture: dict[str, object] = field(default_factory=dict)
     expected_score_groups: dict[str, object] = field(default_factory=dict)
     expected_blockers: dict[str, object] = field(default_factory=dict)
     expected_release_behavior: dict[str, object] = field(default_factory=dict)
@@ -241,6 +251,7 @@ class EvalReport:
     v24: bool = False
     v25: bool = False
     v26: bool = False
+    v27: bool = False
     calibration: bool = False
     score_groups: bool = False
     report_path: Path | None = None
@@ -280,11 +291,12 @@ def run_evals(
     v24: bool = False,
     v25: bool = False,
     v26: bool = False,
+    v27: bool = False,
     calibration: bool = False,
     v2_ideas: bool = False,
     score_groups: bool = False,
 ) -> EvalReport:
-    version_flag_count = sum([v2, v3, v4, v5, v6, v7, v8, v9, v21, v22, v23, v24, v25, v26, calibration, v2_ideas])
+    version_flag_count = sum([v2, v3, v4, v5, v6, v7, v8, v9, v21, v22, v23, v24, v25, v26, v27, calibration, v2_ideas])
     if fixture or version_flag_count <= 1:
         selected = (
             [fixture]
@@ -294,6 +306,8 @@ def run_evals(
                 if v2_ideas
                 else V261_CALIBRATION_FIXTURE_NAMES
                 if calibration
+                else V27_FIXTURE_NAMES
+                if v27
                 else V26_FIXTURE_NAMES
                 if v26
                 else V22_FIXTURE_NAMES
@@ -342,6 +356,7 @@ def run_evals(
             v24=v24,
             v25=v25,
             v26=v26,
+            v27=v27,
             calibration=calibration,
             v2_ideas=v2_ideas,
         )
@@ -375,6 +390,8 @@ def run_evals(
             fixtures.extend(load_v25_fixtures(V25_FIXTURE_NAMES, fixture_root))
         if v26:
             fixtures.extend(load_v26_fixtures(V26_FIXTURE_NAMES, fixture_root))
+        if v27:
+            fixtures.extend(load_v27_fixtures(V27_FIXTURE_NAMES, fixture_root))
         if calibration:
             fixtures.extend(load_calibration_fixtures(V261_CALIBRATION_FIXTURE_NAMES, fixture_root))
         if v2_ideas:
@@ -397,6 +414,7 @@ def run_evals(
         v24=v24 or any(item.is_v24 for item in fixtures),
         v25=v25 or any(item.is_v25 for item in fixtures),
         v26=v26 or any(item.is_v26 and not item.is_calibration for item in fixtures),
+        v27=v27 or any(item.is_v27 for item in fixtures),
         calibration=calibration or any(item.is_calibration for item in fixtures),
         score_groups=score_groups,
     )
@@ -425,11 +443,14 @@ def _load_eval_fixtures_for_flags(
     v24: bool,
     v25: bool,
     v26: bool,
+    v27: bool,
     calibration: bool,
     v2_ideas: bool,
 ) -> list[EvalFixture]:
     if calibration:
         fixtures = load_calibration_fixtures(selected, fixture_root)
+    elif v27:
+        fixtures = load_v27_fixtures(selected, fixture_root)
     elif v26:
         fixtures = load_v26_fixtures(selected, fixture_root)
     elif v22:
@@ -522,6 +543,10 @@ def render_eval_report(report: EvalReport) -> str:
         v26_scores = [score for result in report.results if (score := result.scores.v26_overall()) is not None]
         v26_overall = round(sum(v26_scores) / len(v26_scores), 3) if v26_scores else 0.0
         lines.extend([f"v2.6 Drastic Remediation overall score: **{v26_overall:.3f}**", ""])
+    if report.v27:
+        v27_scores = [score for result in report.results if (score := result.scores.v27_overall()) is not None]
+        v27_overall = round(sum(v27_scores) / len(v27_scores), 3) if v27_scores else 0.0
+        lines.extend([f"v2.7 Conference-Candidate Hardening overall score: **{v27_overall:.3f}**", ""])
     if report.calibration:
         calibration_scores = [result.score_group.overall_score for result in report.results if result.score_group.provenance.get("fixture")]
         calibration_overall = round(sum(calibration_scores) / len(calibration_scores), 3) if calibration_scores else 0.0
@@ -801,6 +826,22 @@ def render_eval_report(report: EvalReport) -> str:
                     "",
                 ]
             )
+        if scores.v27_overall() is not None:
+            lines.extend(
+                [
+                    "### v2.7 Conference-Candidate Hardening Scores",
+                    "",
+                    f"- conference_readiness_correctness: {scores.conference_readiness_correctness:.3f}",
+                    f"- review_issue_closure_correctness: {scores.review_issue_closure_correctness:.3f}",
+                    f"- benchmark_fit_hardening_quality: {scores.benchmark_fit_hardening_quality:.3f}",
+                    f"- ablation_hardening_quality: {scores.ablation_hardening_quality:.3f}",
+                    f"- top_conference_revision_quality: {scores.top_conference_revision_quality:.3f}",
+                    f"- external_review_gate_correctness: {scores.external_review_gate_correctness:.3f}",
+                    f"- v27_release_gate_correctness: {scores.v27_release_gate_correctness:.3f}",
+                    f"- fixture_v27_overall: {scores.v27_overall():.3f}",
+                    "",
+                ]
+            )
         if scores.v2_ideas_overall() is not None:
             lines.extend(
                 [
@@ -1023,6 +1064,15 @@ def _evaluate_fixture(fixture: EvalFixture) -> FixtureEvalResult:
         scores.revision_package_completeness = revision_package_completeness(selected_benchmark_fixture)
         scores.readiness_status_correctness = readiness_status_correctness(selected_benchmark_fixture)
         scores.v26_release_gate_correctness = v26_release_gate_correctness(selected_benchmark_fixture)
+    if fixture.is_v27:
+        selected_benchmark_fixture = fixture.selected_benchmark_v27_fixture or fixture.selected_benchmark_fixture
+        scores.conference_readiness_correctness = conference_readiness_correctness(selected_benchmark_fixture)
+        scores.review_issue_closure_correctness = review_issue_closure_correctness(selected_benchmark_fixture)
+        scores.benchmark_fit_hardening_quality = benchmark_fit_hardening_quality(selected_benchmark_fixture)
+        scores.ablation_hardening_quality = ablation_hardening_quality(selected_benchmark_fixture)
+        scores.top_conference_revision_quality = top_conference_revision_quality(selected_benchmark_fixture)
+        scores.external_review_gate_correctness = external_review_gate_correctness(selected_benchmark_fixture)
+        scores.v27_release_gate_correctness = v27_release_gate_correctness(selected_benchmark_fixture)
     if fixture.is_v2_ideas:
         idea_fixture = fixture.idea_fixture
         scores.topic_portfolio_diversity = topic_portfolio_diversity(idea_fixture)
@@ -1036,7 +1086,8 @@ def _evaluate_fixture(fixture: EvalFixture) -> FixtureEvalResult:
         scores.research_agenda_quality = research_agenda_quality(idea_fixture)
         scores.idea_yield_gate_correctness = idea_yield_gate_correctness(idea_fixture)
     score_group_fixture = (
-        fixture.selected_benchmark_v26_fixture
+        fixture.selected_benchmark_v27_fixture
+        or fixture.selected_benchmark_v26_fixture
         or fixture.selected_benchmark_v25_fixture
         or fixture.selected_benchmark_v24_fixture
         or fixture.selected_benchmark_v23_fixture
@@ -1071,6 +1122,7 @@ def _evaluate_fixture(fixture: EvalFixture) -> FixtureEvalResult:
         score_group=score_group,
         path=fixture.path,
         selected_benchmark_v26_fixture=fixture.selected_benchmark_v26_fixture,
+        selected_benchmark_v27_fixture=fixture.selected_benchmark_v27_fixture,
         expected_score_groups=fixture.expected_score_groups,
         expected_blockers=fixture.expected_blockers,
         expected_release_behavior=fixture.expected_release_behavior,
@@ -1362,6 +1414,13 @@ def _failed_checks(scores: EvalScores, result: FixtureEvalResult) -> list[tuple[
         "revision_package_completeness": 0.85,
         "readiness_status_correctness": 1.0,
         "v26_release_gate_correctness": 1.0,
+        "conference_readiness_correctness": 1.0,
+        "review_issue_closure_correctness": 1.0,
+        "benchmark_fit_hardening_quality": 0.85,
+        "ablation_hardening_quality": 0.85,
+        "top_conference_revision_quality": 0.85,
+        "external_review_gate_correctness": 1.0,
+        "v27_release_gate_correctness": 1.0,
     }
     suggestions = {
         "full_text_coverage_score": "Parse more full text before evaluating research quality.",
@@ -1493,6 +1552,19 @@ def _failed_checks(scores: EvalScores, result: FixtureEvalResult) -> list[tuple[
         "readiness_status_correctness": "Match readiness to resolved artifacts, no-fit evidence, and remaining drastic blockers.",
         "v26_release_gate_correctness": (
             "Require v2.6 matrix/package remediation, benchmark/no-fit evidence, review rerun, and honest readiness."
+        ),
+        "conference_readiness_correctness": "Require paper-quality score and top-conference readiness before conference_candidate.",
+        "review_issue_closure_correctness": "Convert fatal drastic-review findings into issue-level closure or visible no-go decisions.",
+        "benchmark_fit_hardening_quality": "Map multiple real benchmarks or provide a rigorous no-fit table and insertion text.",
+        "ablation_hardening_quality": "Complete or explicitly justify all required v2.7 ablations with artifact-backed evidence.",
+        "top_conference_revision_quality": (
+            "Revise abstract, contributions, motivation, related work, validity, and limitations without overclaiming."
+        ),
+        "external_review_gate_correctness": (
+            "Capture external expert review or explicitly mark it unavailable; block unresolved fatal human critique."
+        ),
+        "v27_release_gate_correctness": (
+            "Keep conference_candidate hard and route remaining blockers to workshop, revise_for_reviews, or no_go."
         ),
     }
     for name, threshold in thresholds.items():

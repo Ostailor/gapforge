@@ -12,6 +12,7 @@ from gapforge.reviewers.drastic_panel import (
     validate_review_text_no_fake_citations,
 )
 from gapforge.reviewers.empirical import EmpiricalReviewBuilder, render_empirical_review_markdown
+from gapforge.reviewers.issue_tracker import ReviewIssue, ReviewIssueTracker, render_review_issue_status, render_review_issues
 from gapforge.reviewers.panel import ReviewPanelBuilder, render_review_panel_markdown
 from gapforge.reviewers.rebuttal import render_meta_review_markdown, render_rebuttal_plans_markdown
 
@@ -20,6 +21,8 @@ __all__ = [
     "DrasticReviewPanelBuilder",
     "DrasticReviewRerunResult",
     "EmpiricalReviewBuilder",
+    "ReviewIssue",
+    "ReviewIssueTracker",
     "ReviewPanelBuilder",
     "render_borderline_decision_analysis",
     "render_drastic_review_panel",
@@ -29,6 +32,8 @@ __all__ = [
     "render_meta_review_markdown",
     "render_required_revision_plan",
     "render_rebuttal_plans_markdown",
+    "render_review_issue_status",
+    "render_review_issues",
     "render_review_panel_markdown",
     "validate_review_text_no_fake_citations",
 ]

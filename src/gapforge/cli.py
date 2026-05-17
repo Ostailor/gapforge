@@ -123,6 +123,7 @@ from gapforge.experiments.sweeps import (
 from gapforge.experiments.workspace import ExperimentWorkspaceManager
 from gapforge.export.bibliography import render_bibtex
 from gapforge.export.paper_package import PaperPackageExporter
+from gapforge.external_review import EXTERNAL_REVIEW_RECOMMENDATIONS, ExternalExpertReviewManager
 from gapforge.fulltext.downloader import PdfDownloader
 from gapforge.fulltext.pdf_parser import FullTextParser
 from gapforge.fulltext.structure import FullTextStructureParser
@@ -163,6 +164,10 @@ from gapforge.manuscript.revisions import ManuscriptRevisionManager
 from gapforge.manuscript.submission import SubmissionPackageExporter
 from gapforge.manuscript.submission_checklist import SubmissionChecklistManager
 from gapforge.manuscript.tables import ManuscriptTableGenerator
+from gapforge.manuscript.top_conference_revision import (
+    TopConferenceRevisionManager,
+    render_top_conference_readiness,
+)
 from gapforge.manuscript.traceability import ManuscriptTraceabilityAuditor
 from gapforge.manuscript.venue_rewriter import VenueManuscriptRewriter, rewrite_result_json
 from gapforge.manuscript.venues import ManuscriptVenueManager, venue_templates_json
@@ -246,6 +251,7 @@ from gapforge.release_gate import (
     V24ReleaseGateEnforcer,
     V25ReleaseGateEnforcer,
     V26ReleaseGateEnforcer,
+    V27ReleaseGateEnforcer,
     render_v04_release_gate_markdown,
     render_v09_release_gate_markdown,
     render_v1_readiness_markdown,
@@ -256,6 +262,7 @@ from gapforge.release_gate import (
     render_v24_release_gate_markdown,
     render_v25_release_gate_markdown,
     render_v26_release_gate_markdown,
+    render_v27_release_gate_markdown,
 )
 from gapforge.release_gate.v05 import render_v05_release_gate_markdown
 from gapforge.release_gate.v06 import render_v06_release_gate_markdown
@@ -312,6 +319,7 @@ from gapforge.reviewers import (
     render_rebuttal_plans_markdown,
     render_review_panel_markdown,
 )
+from gapforge.reviewers.issue_tracker import ReviewIssueTracker, render_review_issue_status, render_review_issues
 from gapforge.safety import (
     audit_project_artifacts,
     audit_run_artifacts,
@@ -328,6 +336,7 @@ from gapforge.search_strategy import (
 )
 from gapforge.selected_benchmark import (
     ArtifactPackageLoader,
+    BenchmarkFitHardeningManager,
     CollusiveAlternativeManager,
     GoNoGoManager,
     HonestNullManager,
@@ -347,6 +356,7 @@ from gapforge.selected_benchmark import (
     RelatedWorkMatrixLoader,
     RelatedWorkReadingManager,
     RequiredRelatedWorkSearchManager,
+    SelectedAblationManager,
     SelectedBenchmarkCodexTaskManager,
     SelectedBenchmarkExperimentRunner,
     SelectedBenchmarkManager,
@@ -368,11 +378,13 @@ from gapforge.selected_benchmark import (
     VenueRevisionPackageManager,
     render_artifact_package_load_result,
     render_artifact_package_repair_record,
+    render_benchmark_fit_hardening_report,
     render_collusive_distribution_report,
     render_honest_null_report,
     render_main_power_plan,
     render_main_power_report,
     render_metric_plan,
+    render_no_fit_argument,
     render_pilot_power_assessment,
     render_pilot_power_plan,
     render_pilot_trace_dataset_report,
@@ -386,6 +398,7 @@ from gapforge.selected_benchmark import (
     render_related_work_matrix_v2,
     render_related_work_reading_report,
     render_required_related_work_search_report,
+    render_selected_ablation_plan,
     render_selected_main_analysis,
     render_selected_main_status,
     render_selected_paper_package_v24,
@@ -761,6 +774,7 @@ def build_parser() -> argparse.ArgumentParser:
     eval_parser.add_argument("--v24", action="store_true", help="Run v2.4 related-work remediation evaluation fixtures.")
     eval_parser.add_argument("--v25", action="store_true", help="Run v2.5 real benchmark grounding evaluation fixtures.")
     eval_parser.add_argument("--v26", action="store_true", help="Run v2.6 drastic remediation evaluation fixtures.")
+    eval_parser.add_argument("--v27", action="store_true", help="Run v2.7 conference-candidate hardening evaluation fixtures.")
     eval_parser.add_argument("--calibration", action="store_true", help="Run v2.6.1 misleading-pass calibration fixtures.")
     eval_parser.add_argument("--v2-ideas", action="store_true", help="Run v2 Idea Discovery Engine evaluation fixtures.")
     eval_parser.add_argument("--write-report", action="store_true")
@@ -1483,6 +1497,10 @@ def build_parser() -> argparse.ArgumentParser:
     v26_release_gate_parser.add_argument("--json", action="store_true")
     v26_release_gate_parser.add_argument("--paper-quality", action="store_true", help="Include paper-quality status in output.")
 
+    v27_release_gate_parser = subparsers.add_parser("v27-release-gate", help="Enforce the v2.7 conference-candidate hardening gate.")
+    v27_release_gate_parser.add_argument("--write-report", action="store_true")
+    v27_release_gate_parser.add_argument("--json", action="store_true")
+
     cli_audit_parser = subparsers.add_parser("cli-audit", help="Audit command grouping, help text, and v1 CLI discoverability.")
     cli_audit_parser.add_argument("--write-report", action="store_true")
 
@@ -1779,6 +1797,16 @@ def build_parser() -> argparse.ArgumentParser:
     )
     selected_real_benchmark_no_fit_parser.add_argument("--benchmark-id", required=True)
 
+    benchmark_fit_harden_parser = subparsers.add_parser(
+        "benchmark-fit-harden", help="Harden real benchmark fit mapping and reviewer-facing no-fit arguments."
+    )
+    benchmark_fit_harden_parser.add_argument("--benchmark-id", required=True)
+
+    benchmark_no_fit_argument_parser = subparsers.add_parser(
+        "benchmark-no-fit-argument", help="Render the rigorous no-fit argument for real benchmark candidates."
+    )
+    benchmark_no_fit_argument_parser.add_argument("--benchmark-id", required=True)
+
     selected_real_benchmark_adapter_assess_parser = subparsers.add_parser(
         "selected-real-benchmark-adapter-assess", help="Assess adapter feasibility for a real public benchmark candidate."
     )
@@ -2016,6 +2044,19 @@ def build_parser() -> argparse.ArgumentParser:
         "selected-baseline-strength-report", help="Print selected benchmark baseline strength report."
     )
     selected_baseline_strength_report_parser.add_argument("--benchmark-id", required=True)
+
+    selected_ablation_plan_parser = subparsers.add_parser(
+        "selected-ablation-plan", help="Plan required selected-benchmark ablations for conference-candidate hardening."
+    )
+    selected_ablation_plan_parser.add_argument("--benchmark-id", required=True)
+
+    selected_ablation_run_parser = subparsers.add_parser("selected-ablation-run", help="Run artifact-backed selected-benchmark ablations.")
+    selected_ablation_run_parser.add_argument("--benchmark-id", required=True)
+
+    selected_ablation_report_parser = subparsers.add_parser(
+        "selected-ablation-report", help="Render selected-benchmark ablation hardening status."
+    )
+    selected_ablation_report_parser.add_argument("--benchmark-id", required=True)
 
     selected_benchmark_workspace_parser = subparsers.add_parser(
         "selected-benchmark-workspace", help="Create a runnable selected benchmark experiment workspace."
@@ -2885,6 +2926,37 @@ def build_parser() -> argparse.ArgumentParser:
     manuscript_soften_parser.add_argument("--manuscript-id", required=True)
     manuscript_soften_parser.add_argument("--dry-run", action="store_true")
 
+    top_conference_revise_parser = subparsers.add_parser(
+        "top-conference-revise", help="Revise manuscript framing for top-conference clarity without adding unsupported claims."
+    )
+    top_conference_revise_parser.add_argument("--manuscript-id", required=True)
+
+    top_conference_readiness_parser = subparsers.add_parser(
+        "top-conference-readiness", help="Check top-conference framing readiness and remaining evidence blockers."
+    )
+    top_conference_readiness_parser.add_argument("--manuscript-id", required=True)
+
+    external_review_add_parser = subparsers.add_parser("external-review-add", help="Capture a human or simulated external expert review.")
+    external_review_add_parser.add_argument("--manuscript-id", required=True)
+    external_review_add_parser.add_argument("--reviewer-role", default="external expert")
+    external_review_add_parser.add_argument("--expertise-area", default="unspecified")
+    external_review_add_parser.add_argument(
+        "--overall-recommendation",
+        choices=sorted(EXTERNAL_REVIEW_RECOMMENDATIONS),
+        default="borderline",
+    )
+    external_review_add_parser.add_argument("--key-strength", action="append", dest="key_strengths", default=[])
+    external_review_add_parser.add_argument("--key-weakness", action="append", dest="key_weaknesses", default=[])
+    external_review_add_parser.add_argument("--missing-related-work", action="append", dest="missing_related_work", default=[])
+    external_review_add_parser.add_argument("--missing-experiment", action="append", dest="missing_experiments", default=[])
+    external_review_add_parser.add_argument("--claim-overreach", action="append", dest="claim_overreach", default=[])
+    external_review_add_parser.add_argument("--required-revision", action="append", dest="required_revisions", default=[])
+    external_review_add_parser.add_argument("--note", action="append", dest="notes", default=[])
+    external_review_add_parser.add_argument("--source", choices=["human", "simulated"], default="human")
+
+    external_review_report_parser = subparsers.add_parser("external-review-report", help="Render external expert review status.")
+    external_review_report_parser.add_argument("--manuscript-id", required=True)
+
     manuscript_table_parser = subparsers.add_parser("manuscript-table", help="Generate an artifact-backed manuscript table.")
     manuscript_table_parser.add_argument("--manuscript-id", required=True)
     manuscript_table_parser.add_argument(
@@ -2998,6 +3070,22 @@ def build_parser() -> argparse.ArgumentParser:
         "drastic-review-rerun", help="Rerun drastic review and compare previous versus current blockers."
     )
     drastic_review_rerun_parser.add_argument("--manuscript-id", required=True)
+
+    review_issues_parser = subparsers.add_parser("review-issues", help="Convert harsh review blockers into an issue checklist.")
+    review_issues_parser.add_argument("--manuscript-id", required=True)
+
+    resolve_review_issue_parser = subparsers.add_parser("resolve-review-issue", help="Resolve or waive one review issue with evidence.")
+    resolve_review_issue_parser.add_argument("--issue-id", required=True)
+    resolve_review_issue_parser.add_argument("--evidence", required=True)
+    resolve_review_issue_parser.add_argument(
+        "--status",
+        choices=["in_progress", "resolved", "waived", "impossible"],
+        default="resolved",
+        help="Resolution status to record. Fatal waivers require human_review:<id> evidence.",
+    )
+
+    review_issue_status_parser = subparsers.add_parser("review-issue-status", help="Print issue-level closure status for a manuscript.")
+    review_issue_status_parser.add_argument("--manuscript-id", required=True)
 
     drastic_revision_plan_parser = subparsers.add_parser(
         "drastic-revision-plan", help="Convert drastic review output into concrete manuscript revision tasks."
@@ -3624,6 +3712,7 @@ def _dispatch(
             v24=args.v24,
             v25=args.v25,
             v26=args.v26,
+            v27=args.v27,
             calibration=args.calibration,
             v2_ideas=args.v2_ideas,
             score_groups=args.score_groups or args.calibration,
@@ -4734,6 +4823,16 @@ def _dispatch(
         else:
             print(render_v26_release_gate_markdown(v26_result), end="")
         return 0 if v26_result.passed else 1
+    if args.command == "v27-release-gate":
+        v27_gate = V27ReleaseGateEnforcer(config)
+        v27_result = v27_gate.evaluate()
+        if args.write_report:
+            v27_gate.write_outputs(v27_result)
+        if args.json:
+            print(json.dumps(v27_result.to_dict(), indent=2))
+        else:
+            print(render_v27_release_gate_markdown(v27_result), end="")
+        return 0 if v27_result.passed else 1
     if args.command == "cli-audit":
         cli_audit = CLICommandAuditor(config).audit(build_parser(), write=args.write_report)
         print(render_cli_command_audit(cli_audit), end="")
@@ -5090,6 +5189,14 @@ def _dispatch(
     if args.command == "selected-real-benchmark-no-fit":
         print(RealBenchmarkSearchManager(config).render_no_fit_report(args.benchmark_id), end="")
         return 0
+    if args.command == "benchmark-fit-harden":
+        hardening_report = BenchmarkFitHardeningManager(config).harden(args.benchmark_id)
+        print(render_benchmark_fit_hardening_report(hardening_report), end="")
+        return 0
+    if args.command == "benchmark-no-fit-argument":
+        hardening_report = BenchmarkFitHardeningManager(config).no_fit_argument(args.benchmark_id)
+        print(render_no_fit_argument(hardening_report), end="")
+        return 0
     if args.command == "selected-real-benchmark-adapter-assess":
         real_adapter_assessment = SelectedVettedBenchmarkExperimentManager(config).assess_real_candidate(
             args.benchmark_id,
@@ -5283,6 +5390,17 @@ def _dispatch(
         return 0
     if args.command == "selected-baseline-strength-report":
         print(MonitorBaselineManager(config).render_baseline_strength_report(args.benchmark_id), end="")
+        return 0
+    if args.command == "selected-ablation-plan":
+        selected_ablation_plan = SelectedAblationManager(config).create_plan(args.benchmark_id)
+        print(render_selected_ablation_plan(selected_ablation_plan), end="")
+        return 0
+    if args.command == "selected-ablation-run":
+        ablation_run = SelectedAblationManager(config).run(args.benchmark_id)
+        print(json.dumps(to_plain(ablation_run), indent=2))
+        return 0 if ablation_run.strong_claim_allowed else 1
+    if args.command == "selected-ablation-report":
+        print(SelectedAblationManager(config).report(args.benchmark_id), end="")
         return 0
     if args.command == "selected-benchmark-workspace":
         workspace = SelectedBenchmarkWorkspaceManager(config).create_workspace(args.benchmark_id)
@@ -6201,6 +6319,34 @@ def _dispatch(
     if args.command == "manuscript-soften-claims":
         print(ManuscriptTraceabilityAuditor(config).soften_claims(args.manuscript_id, dry_run=args.dry_run), end="")
         return 0
+    if args.command == "top-conference-revise":
+        top_conference_revision = TopConferenceRevisionManager(config).revise(args.manuscript_id)
+        print(json.dumps(to_plain(top_conference_revision), indent=2))
+        return 0 if top_conference_revision.claim_traceability_passed else 1
+    if args.command == "top-conference-readiness":
+        top_conference_readiness = TopConferenceRevisionManager(config).readiness(args.manuscript_id)
+        print(render_top_conference_readiness(top_conference_readiness), end="")
+        return 0 if top_conference_readiness.conference_candidate_allowed else 1
+    if args.command == "external-review-add":
+        external_review = ExternalExpertReviewManager(config).add_review(
+            args.manuscript_id,
+            reviewer_role=args.reviewer_role,
+            expertise_area=args.expertise_area,
+            overall_recommendation=args.overall_recommendation,
+            key_strengths=args.key_strengths,
+            key_weaknesses=args.key_weaknesses,
+            missing_related_work=args.missing_related_work,
+            missing_experiments=args.missing_experiments,
+            claim_overreach=args.claim_overreach,
+            required_revisions=args.required_revisions,
+            notes=args.notes,
+            source=args.source,
+        )
+        print(json.dumps(to_plain(external_review), indent=2))
+        return 0
+    if args.command == "external-review-report":
+        print(ExternalExpertReviewManager(config).report(args.manuscript_id), end="")
+        return 0
     if args.command == "manuscript-table":
         table = ManuscriptTableGenerator(config).generate(args.manuscript_id, args.type)
         print(json.dumps(to_plain(table), indent=2))
@@ -6324,6 +6470,19 @@ def _dispatch(
         rerun_result = DrasticReviewPanelBuilder(config).rerun_manuscript(args.manuscript_id)
         print(render_drastic_review_rerun_result(rerun_result), end="")
         return 0 if not rerun_result.remaining_blockers else 1
+    if args.command == "review-issues":
+        tracker = ReviewIssueTracker(config)
+        issues = tracker.build_from_drastic_review(args.manuscript_id)
+        print(render_review_issues(args.manuscript_id, issues), end="")
+        return 0 if issues else 1
+    if args.command == "resolve-review-issue":
+        review_issue = ReviewIssueTracker(config).resolve_issue(args.issue_id, evidence=args.evidence, status=args.status)
+        print(json.dumps(to_plain(review_issue), indent=2))
+        return 0
+    if args.command == "review-issue-status":
+        review_issue_summary = ReviewIssueTracker(config).status(args.manuscript_id)
+        print(render_review_issue_status(review_issue_summary), end="")
+        return 0 if review_issue_summary["conference_ready_allowed"] else 1
     if args.command == "drastic-revision-plan":
         drastic_revision_manager = DrasticRevisionManager(config)
         drastic_revision_plan = drastic_revision_manager.build(args.manuscript_id)

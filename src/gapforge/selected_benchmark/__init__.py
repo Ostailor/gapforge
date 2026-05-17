@@ -1,5 +1,16 @@
 """Formal benchmark specification for the v2.1 selected idea."""
 
+from gapforge.selected_benchmark.ablations import (
+    REQUIRED_SELECTED_ABLATION_TYPES,
+    SelectedAblationManager,
+    SelectedAblationPlan,
+    SelectedAblationResult,
+    SelectedAblationRun,
+    SelectedAblationSpec,
+    render_selected_ablation_plan,
+    render_selected_ablation_report,
+    render_selected_ablation_run,
+)
 from gapforge.selected_benchmark.artifact_package_loader import (
     ArtifactPackageLoader,
     ArtifactPackageLoadResult,
@@ -17,6 +28,13 @@ from gapforge.selected_benchmark.baselines import (
     render_baseline_strength_assessment,
     render_monitor_baseline_report,
     render_pilot_baseline_report,
+)
+from gapforge.selected_benchmark.benchmark_fit_hardening import (
+    BenchmarkFitCandidateRow,
+    BenchmarkFitHardeningManager,
+    BenchmarkFitHardeningReport,
+    render_benchmark_fit_hardening_report,
+    render_no_fit_argument,
 )
 from gapforge.selected_benchmark.codex_tasks import (
     SelectedBenchmarkCodexImportResult,
@@ -246,6 +264,9 @@ __all__ = [
     "ArtifactPackageLoader",
     "ArtifactPackageLoadResult",
     "ArtifactPackageRepairRecord",
+    "BenchmarkFitCandidateRow",
+    "BenchmarkFitHardeningManager",
+    "BenchmarkFitHardeningReport",
     "BenchmarkTaskFamily",
     "CollusiveAlternativeManager",
     "CollusiveDistributionReport",
@@ -266,6 +287,7 @@ __all__ = [
     "MonitorBaselineRun",
     "MonitorCalibrationRecord",
     "REQUIRED_MAIN_BASELINE_TYPES",
+    "REQUIRED_SELECTED_ABLATION_TYPES",
     "MainPowerDecision",
     "MainPowerManager",
     "MainPowerPlan",
@@ -289,6 +311,11 @@ __all__ = [
     "SelectedPilotManuscriptManager",
     "SelectedPilotPaperPackage",
     "SelectedPilotRunManifest",
+    "SelectedAblationManager",
+    "SelectedAblationPlan",
+    "SelectedAblationResult",
+    "SelectedAblationRun",
+    "SelectedAblationSpec",
     "ScenarioDefinition",
     "SequentialAuditMetricPlan",
     "SequentialMetricManager",
@@ -359,6 +386,10 @@ __all__ = [
     "default_monitor_baselines",
     "render_artifact_package_load_result",
     "render_artifact_package_repair_record",
+    "render_selected_ablation_plan",
+    "render_selected_ablation_report",
+    "render_selected_ablation_run",
+    "render_benchmark_fit_hardening_report",
     "render_baseline_strength_assessment",
     "default_collusive_scenarios",
     "default_honest_null_scenarios",
@@ -413,6 +444,7 @@ __all__ = [
     "render_selected_benchmark_codex_import_result",
     "REQUIRED_RELATED_WORK_CATEGORIES",
     "render_novelty_positioning",
+    "render_no_fit_argument",
     "render_prior_work_recall",
     "render_related_work_matrix",
     "render_selected_workspace_readme",

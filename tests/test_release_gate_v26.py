@@ -253,6 +253,27 @@ def _v26_fixture(
             "likely_decision": likely_decision if not remaining else "reject_likely",
         },
     )
+    if package_status == "conference_candidate" and not remaining:
+        _write_json(
+            manuscript_root / "reviews" / "drastic" / "review_issues.json",
+            {
+                "manuscript_id": manuscript_id,
+                "issues": [
+                    {
+                        "id": "review-issue-v26-resolved",
+                        "source_review_id": "drastic-review-v26:R2",
+                        "issue_type": "baseline_or_empirical",
+                        "severity": "fatal",
+                        "text": "baseline and empirical blockers were resolved before conference candidacy.",
+                        "affected_sections": ["experiments"],
+                        "required_fix": "experiment: add reviewer-expected baseline evidence.",
+                        "status": "resolved",
+                        "resolution_evidence": ["experiment:baseline-strength-report supports bounded conference candidacy."],
+                        "provenance": {"created_by_skill": "test-fixture"},
+                    }
+                ],
+            },
+        )
     _write_json(
         benchmark_dir / "venue_revision_package" / "latest.json",
         {
